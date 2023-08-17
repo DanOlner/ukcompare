@@ -1,8 +1,10 @@
 #Regional GVA per sector explore
 library(tidyverse)
+library(zoo)
 library(sf)
 library(tmap)
 library(plotly)
+
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #LOAD AND INITIAL PROCESS----
@@ -43,24 +45,21 @@ table(itl2.geo$ITL221CD %in% itl2$`ITL region code`)
 #Note 2 from the excel sheet: "Components will not sum to totals since chain-linking produces non-additive volume estimates."
 
 #Ones to remove from "SIC07 code" (looking/checking in orig excel sheet)
+#These are all categories with duplicate values in other rows (which takes some spotting, the colour coding is not very helpful!)
 #Note: "real estate activities" is a single category, but there are two subcats that break it down into
 #With and without imputed rental. So just need those two to avoid double counting.
 SICremoves = c(
   'Total',
   'A-E',
   'A (1-3)',
-  'B (5-9)',
   'C (10-33)',
   'CA (10-12)',
   'CB (13-15)',
   'CC (16-18)',
-  'CD-CE (19-20)',
-  'CF (21)',
   'CG (22-23)',
   'CH (24-25)',
   'CL (29-30)',
   'CM (31-33)',
-  'E (36-39)',
   'F (41-43)',
   'G-T',
   'G (45-47)',
@@ -73,8 +72,7 @@ SICremoves = c(
   'N (77-82)',
   'Q (86-88)',
   'R (90-93)',
-  'S (94-96)',
-  'T (97-98)'
+  'S (94-96)'
 )
 
 #~~~~~~~~~~~~~~~~~~~~~~~~
@@ -95,6 +93,14 @@ sectorsizes <- itl1.hluk %>%
   group_by(`SIC07 code`) %>% 
   summarise(av = mean(value)) %>% 
   mutate(group = as.integer(cut_number(av, n = 5)))
+
+#Or size of sector for most recent value, which might make more sense than average for viewing
+sectorsizes <- itl1.hluk %>% 
+  filter(year == 2021) %>% 
+  mutate(group = as.integer(cut_number(value, n = 5)))
+
+#While we're here... what are proportions?
+sectorsizes$percent <- (sectorsizes$value / sum(sectorsizes$value))*100
 
 #Add group labels to data
 itl1.hluk <- itl1.hluk %>% 
@@ -117,6 +123,25 @@ plot_ly(data = itl1.hluk %>% filter(group==5), x = ~year, y = ~value, color = ~`
         type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
   layout(title = "Yearly values by SIC", 
          xaxis = list(title = "Year"), 
+         yaxis = list(title = "Value", type='log'),
+         # yaxis = list(title = "Value"),
+         showlegend = TRUE)
+
+
+
+#MOVING AVERAGE
+#https://stackoverflow.com/questions/26198551/rolling-mean-moving-average-by-group-id-with-dplyr
+itl1.hluk <- itl1.hluk %>% 
+  group_by(`SIC07 code`) %>% 
+  mutate(movingav = rollapply(value,5,mean,align='right',fill=NA))
+
+plot_ly(data = itl1.hluk %>% filter(group==5), x = ~year, y = ~movingav, color = ~`SIC07 code`, 
+        text = ~paste("Sector:", `SIC07 description`),  # Add this line for hover text
+        hoverinfo = 'text+y+x',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly values by SIC", 
+         xaxis = list(title = "Year"), 
+         # yaxis = list(title = "Value", type='log'),
          yaxis = list(title = "Value"),
          showlegend = TRUE)
 
@@ -127,8 +152,6 @@ plot_ly(data = itl1.hluk %>% filter(group==5), x = ~year, y = ~value, color = ~`
 #~~~~~~~~
 #ITL2----
 #~~~~~~~~
-
-
 
 #filter those out
 itl2.h <- itl2 %>% 
@@ -141,6 +164,13 @@ itl2.h <- itl2 %>%
 itl2.hl <- itl2.h %>% 
   pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'value')
 
+#MOVING AVERAGE
+#https://stackoverflow.com/questions/26198551/rolling-mean-moving-average-by-group-id-with-dplyr
+itl2.hl <- itl2.hl %>% 
+  group_by(`ITL region name`,`SIC07 code`) %>% 
+  mutate(movingav = rollapply(value,5,mean,align='right',fill=NA))
+
+
 #test plot on smaller group of places
 ggplot(
   itl2.hl %>% filter(`ITL region name` %in% unique(itl2.hl$`ITL region name`)[1:5]),
@@ -152,14 +182,13 @@ ggplot(
   guides(colour = "none")
 
 
-#Look at larger sectors
 
+
+#Look at larger sectors
 sectors.byavsize <- itl2.hl %>% 
   group_by(`ITL region name`, `SIC07 code`) %>% 
   summarise(av = mean(value), sectorname = max(`SIC07 description`)) %>% 
   arrange(-av)
-
-
 
 ggplot(
   itl2.hl %>% filter(
@@ -174,28 +203,69 @@ ggplot(
 
 
 
-
 #PLOTLY VERSION
 #For hovering to easily see the sector names
-plot_ly(data = itl2.hl %>% filter(`ITL region name`=="South Yorkshire"), x = ~year, y = ~value, color = ~`SIC07 code`, 
-# plot_ly(data = itl2.hl %>% filter(`ITL region name`=="Greater Manchester"), x = ~year, y = ~value, color = ~`SIC07 code`, 
+plot_ly(data = itl2.hl %>% filter(`ITL region name`=="South Yorkshire"), x = ~year, y = ~value, color = ~`SIC07 code`,
+# plot_ly(data = itl2.hl %>% filter(`ITL region name`=="Greater Manchester"), x = ~year, y = ~value, color = ~`SIC07 code`,
+        text = ~paste("Sector:", `SIC07 description`),  # Add this line for hover text
+        hoverinfo = 'text+y+x',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly values by SIC", 
+         xaxis = list(title = "Year"), 
+         # yaxis = list(title = "Value"),
+         yaxis = list(title = "Value", type='log'),
+         showlegend = TRUE)
+
+
+#MOVING AV
+plot_ly(data = itl2.hl %>% filter(`ITL region name`=="South Yorkshire"), x = ~year, y = ~movingav, color = ~`SIC07 code`,
+# plot_ly(data = itl2.hl %>% filter(`ITL region name`=="Greater Manchester"), x = ~year, y = ~movingav, color = ~`SIC07 code`,
         text = ~paste("Sector:", `SIC07 description`),  # Add this line for hover text
         hoverinfo = 'text+y+x',
         type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
   layout(title = "Yearly values by SIC", 
          xaxis = list(title = "Year"), 
          yaxis = list(title = "Value"),
+         # yaxis = list(title = "Value", type='log'),
          showlegend = TRUE)
 
 
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#LOCATION QUOTIENTS FOR GVA CURRENT PRICES, ITL2----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Using 'current prices' - LQs are purely proportional at single time points
+#So across-time comparisons only matter for the proportions, not the nominal values
+#Given that - the GVA current price values actually sum correctly across industries and within regions (unlike volume-chained)
+itl2.cp <- read_csv('data/sectors/Table 2c ITL2 UK current price estimates pounds million.csv')
+
+#Filter out duplicate value rows and make long by year
+itl2.cp <- itl2.cp %>% filter(!`SIC07 code` %in% SICremoves) %>% 
+  pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'value')
+
+#check sums just for one year
+#that is, make sure kept single categories add up to the correct total
+chk <- itl2.cp %>% 
+  filter(year == 2021) %>% 
+  group_by(`ITL region name`) %>% 
+  summarise(mytotal = sum(value))
+
+#Check against totals in orig
+chk2 <- read_csv('data/sectors/Table 2c ITL2 UK current price estimates pounds million.csv') %>% 
+  filter(`SIC07 code` == 'Total') %>% 
+  pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'originaltotal') %>% 
+  filter(year == 2021) %>% 
+  arrange(`ITL region name`)
+
+#Rounding error diffs I think, all fine
+#Use totals here for proportions so they're accurate / sum to 1
+chk <- chk %>% 
+  left_join(chk2, by = "ITL region name") %>% 
+  mutate(diff = originaltotal-mytotal)
 
 
-
-
-
-
-
+#What we need for yearly location quotients
 
 
 

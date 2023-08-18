@@ -6,6 +6,7 @@
 .RDataTmp
 *.docx
 *.doc
+*.tmp
 local/
 cuttinz/
 rsconnect/

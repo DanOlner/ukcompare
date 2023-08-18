@@ -4,7 +4,8 @@ library(zoo)
 library(sf)
 library(tmap)
 library(plotly)
-
+library(magick)
+options(scipen = 99)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #LOAD AND INITIAL PROCESS----
@@ -135,7 +136,7 @@ itl1.hluk <- itl1.hluk %>%
   group_by(`SIC07 code`) %>% 
   mutate(movingav = rollapply(value,5,mean,align='right',fill=NA))
 
-plot_ly(data = itl1.hluk %>% filter(group==5), x = ~year, y = ~movingav, color = ~`SIC07 code`, 
+plot_ly(data = itl1.hluk %>% filter(group==3), x = ~year, y = ~movingav, color = ~`SIC07 code`, 
         text = ~paste("Sector:", `SIC07 description`),  # Add this line for hover text
         hoverinfo = 'text+y+x',
         type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
@@ -212,8 +213,8 @@ plot_ly(data = itl2.hl %>% filter(`ITL region name`=="South Yorkshire"), x = ~ye
         type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
   layout(title = "Yearly values by SIC", 
          xaxis = list(title = "Year"), 
-         # yaxis = list(title = "Value"),
-         yaxis = list(title = "Value", type='log'),
+         yaxis = list(title = "Value"),
+         # yaxis = list(title = "Value", type='log'),
          showlegend = TRUE)
 
 
@@ -244,6 +245,16 @@ itl2.cp <- read_csv('data/sectors/Table 2c ITL2 UK current price estimates pound
 itl2.cp <- itl2.cp %>% filter(!`SIC07 code` %in% SICremoves) %>% 
   pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'value')
 
+#RANDOM NEGATIVE VALUES IN THERE
+#Looking, I think just typos given previous data
+#(And also makes no logical sense, so...)
+itl2.cp %>% filter(value < 0)
+
+#Check on just water and air transport, where the neg values are
+itl2.cp %>% filter(`SIC07 description` == "Water and air transport") %>% View
+
+#Hmm. Will come back to that.
+
 #check sums just for one year
 #that is, make sure kept single categories add up to the correct total
 chk <- itl2.cp %>% 
@@ -265,7 +276,246 @@ chk <- chk %>%
   mutate(diff = originaltotal-mytotal)
 
 
-#What we need for yearly location quotients
+#https://www.economicmodeling.com/wp-content/uploads/2007/10/emsi_understandinglq.pdf
+#What do we need for yearly location quotients
+
+#1. Find regional proportion of sector: sector x as proportion of all sectors in that region
+#2. Find proportion of same sector for the UK as a whole (sum sector total, sum entire UK total, find proportion)
+#3. LQ is relative proportion - 1 / 2. 
+#4. < 1 = region has less concentration than nationally. > 1 = concentration is higher than nationally.
+
+#For regional proportion calc, Add values for calc steps into the same DF
+itl2.cp <- itl2.cp %>%
+  group_by(`ITL region name`, year) %>% 
+  mutate(
+    region_totalsize = sum(value),#a. Current price per region per year, for regional denominator
+    sector_regional_proportion = value / region_totalsize#b. regional sector proportion.
+    ) %>% 
+  group_by(year, `SIC07 code`) %>% 
+  mutate(
+    uk_sectorsize = sum(value),#c. Summed current prices for EACH SECTOR, UK-wide
+    ) %>% 
+  group_by(year) %>% 
+  mutate(
+    uk_totalsize = sum(value),#d. Summed current prices for WHOLE UK per year, for UK denominator
+    uk_regional_proportion = uk_sectorsize / uk_totalsize#e. UK-level sector proportion
+    ) %>% 
+  mutate(
+    LQ = sector_regional_proportion / uk_regional_proportion#f. Location quotient!
+  )
+  
+#Those regional values by themselves are going to be interesting:
+#How has a region's OWN economy structure changed over time?
+
+#Quick question:
+#How do LQs spread across all regions? Some presumably wider spread than others, right?
+#Pick a year or two
+#OK, some silly values in there for places with tiny proportions
+#Narrow down
+#Too small numbers for decent density plot
+# ggplot(itl2.cp %>% filter(year==2021), aes(x = LQ, colour = `SIC07 code`)) +
+#   geom_density() +
+#   coord_cartesian(xlim = c(-25,25))
+
+#Check one LQ spread...
+y <- itl2.cp %>% filter(year==2021, `SIC07 code` == 75)
+plot(density(y$LQ))
+hist(y$LQ,breaks = 10)
+
+#Just check range and means. Means should be 1ish...
+#Testing +1 and log
+#+1 to get rid of <0 values
+#Why? Because the values are otherwise asymmetrical either side of 1
+x <- itl2.cp %>% 
+  filter(year==2021) %>% 
+  mutate(LQplusone_log = log(LQ + 1)) %>% 
+  group_by(`SIC07 description`) %>% 
+  summarise(
+    mean = mean(LQ), min = min(LQ), max = max(LQ),
+    mean_log = mean(LQplusone_log), min_log = min(LQplusone_log), max_log = max(LQplusone_log)
+    ) 
+
+#We do have a reasonable spread there. Would quite like to see.
+ggplot(x %>% pivot_longer(min:max, names_to = 'minmax', values_to = 'value'), 
+       aes(y = `SIC07 description`, x = value, colour = minmax)) +
+  geom_point() + 
+  coord_cartesian(xlim = c(-25,25))
+
+#Log version... this is looking more useful to me
+#Reorder based on minimum values: close to zeroes, no sectoral presence there
+minmaxes <- x %>% pivot_longer(min_log:max_log, names_to = 'minmax', values_to = 'value') 
+minmaxes$`SIC07 description` <- factor(minmaxes$`SIC07 description`)
+minmaxes$`SIC07 description` <- fct_reorder(minmaxes$`SIC07 description`, -rep(x$min_log, each = 2))
+
+ggplot(minmaxes, 
+       aes(y = `SIC07 description`, x = value, colour = minmax)) +
+  geom_point() + 
+  coord_cartesian(xlim = c(0,3)) +
+  geom_vline(xintercept = log(2))#this value? I've added +1 to LQ before logging, so where 1 was the <> point, it becomes 2. Hence log 2 for the cutoff between "less than national / more than national".
+
+#Though it would also be possible just to convert the 0-1 range to a more useful value by inverting
+#So the ratios are properly readable / symmetric
+
+#Actually, that's a very useful plot, UK structure wise:
+#Note the line of near-zeroes for manufacturing
+#Some places have very little of any sector
+#Can get at what those patterns are as we proceed
+
+#Can just add SY to that, in fact.
+#Get the LQ for each sector in SY for 2021...
+#And make log+1 value
+sylq <- itl2.cp %>% 
+  filter(`ITL region name` == 'South Yorkshire', year == 2021) %>% 
+  mutate(LQplusone_log = log(LQ + 1)) 
+  
+
+#Keep only relevant columns from minmax and combine
+minmaxes_plus_sy <- 
+  rbind(
+    minmaxes %>% select(`SIC07 description`,minmax,value),
+    sylq %>% ungroup() %>% mutate(minmax = "SY") %>% select(`SIC07 description`,minmax, value = LQplusone_log)
+  ) %>% 
+  arrange(as.character(`SIC07 description`))#arranging purely for later factor ordering
+
+#Order by SY
+minmaxes_plus_sy$`SIC07 description` <- fct_reorder(minmaxes_plus_sy$`SIC07 description`, 
+                                                    -rep(minmaxes_plus_sy$value[minmaxes_plus_sy$minmax=="SY"], each = 3))
+
+
+ggplot(minmaxes_plus_sy, 
+       aes(y = `SIC07 description`, x = value, colour = minmax, shape = minmax, size = minmax)) +
+  geom_point() + 
+  coord_cartesian(xlim = c(0,3)) +
+  geom_vline(xintercept = log(2)) +#this value? I've added +1 to LQ before logging, so where 1 was the <> point, it becomes 2. Hence log 2 for the cutoff between "less than national / more than national".
+  scale_shape_manual(values = c(16,16,17)) +
+  scale_size_manual(values = c(2,2,3))
+
+
+
+
+#Rather than minmax, let's do a full spread and place SY in that context
+#I should make numbers for other places too for comparison
+itl2.cp <- itl2.cp %>% 
+  mutate(LQplusone_log = log(LQ + 1)) 
+
+
+
+
+#View for 2021. Can just flag one we want to overlay?
+#Something odd with water and air transport, remove until work out what
+
+place = 'South Yorkshire'
+
+x <- itl2.cp %>% filter(year == 2021, `SIC07 description` != 'Water and air transport') %>% mutate(flaggedplace = `ITL region name`==place)
+
+#Ordering by the flagged place, bit awkward
+x$`SIC07 description` <- factor(x$`SIC07 description`)
+x$`SIC07 description` <- fct_relevel(
+  x$`SIC07 description`, 
+  unique(as.character(x$`SIC07 description`))[order(x %>% filter(`ITL region name`==place) %>%ungroup() %>% select(LQplusone_log) %>% pull(),decreasing = T)]
+  )
+
+#Actually, keep that order and use for animation below
+ordertouse <- unique(as.character(x$`SIC07 description`))[order(x %>% filter(`ITL region name`==place) %>%ungroup() %>% select(LQplusone_log) %>% pull(),decreasing = T)]
+
+
+ggplot(
+  x, 
+  aes(y = `SIC07 description`, x = LQplusone_log, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace)
+  ) +
+  geom_point() +
+  scale_size_manual(values = c(2,4)) +
+  scale_alpha_manual(values = c(0.2,1)) +
+  scale_colour_manual(values = c('black','red')) +
+  geom_vline(xintercept = log(2), colour = 'blue') 
+  # scale_shape_manual(values = c(16,24))
+
+#test save size for animation... yep, good
+# ggsave(filename = 'local/localimages/animations/test.png', height = 10, width = 10)
+
+
+#ANIMATE THAT OVER ALL YEARS
+#Bouncing off https://ryanpeek.org/2016-10-19-animated-gif_maps_in_r/
+LQovertime_ggplot <- function(filteryear,placename){
+  
+  x <- itl2.cp %>% filter(year == filteryear, `SIC07 description` != 'Water and air transport') %>% mutate(flaggedplace = `ITL region name`==placename)
+  
+  #Ordering by the flagged place, bit awkward
+  x$`SIC07 description` <- factor(x$`SIC07 description`)
+  x$`SIC07 description` <- fct_relevel(
+    x$`SIC07 description`, 
+    ordertouse
+  )
+
+  ggplot(
+    x, 
+    aes(y = `SIC07 description`, x = LQplusone_log, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace)
+  ) +
+    geom_point() +
+    coord_cartesian(xlim = c(0,3.5)) +
+    scale_size_manual(values = c(2,4)) +
+    scale_alpha_manual(values = c(0.2,1)) +
+    scale_colour_manual(values = c('black','red')) +
+    geom_vline(xintercept = log(2), colour = 'blue') +
+    annotate("text", x = 2.5, y = 15, label = filteryear, size = 15) +
+    annotate("text", x = 2.5, y = 38, label = filteryear, size = 15) +
+    annotate("text", x = 2.5, y = 61, label = filteryear, size = 15)
+  
+  ggsave(filename = paste0('local/localimages/animations/',filteryear,'.png'), height = 10, width = 10)
+  
+}
+
+#Change plotting order for SICs before running function
+x <- itl2.cp %>% filter(year == 1998, `SIC07 description` != 'Water and air transport') %>% mutate(flaggedplace = `ITL region name`==place)
+ordertouse <- unique(as.character(x$`SIC07 description`))[order(x %>% filter(`ITL region name`==place) %>%ungroup() %>% select(LQplusone_log) %>% pull(),decreasing = T)]
+
+#Create images in folder
+lapply(1998:2021, function(x) LQovertime_ggplot(x, 'South Yorkshire'))
+
+list.files(path = "local/localimages/animations/", pattern = "*.png", full.names = T) %>% 
+  map(image_read) %>% # reads each path file
+  image_join() %>% # joins image
+  image_animate(fps=2) %>% # animates, can opt for number of loops
+  image_write("local/localimages/animations/LQ_overtime_w_SY_1998baseyear.gif")
+
+
+
+
+
+#Plot just one place statically
+
+
+#Random thing: grouped df won't plot lines: https://stackoverflow.com/questions/50889627/plotly-does-not-show-lines
+sy <- itl2.cp %>% filter(`ITL region name` == 'South Yorkshire') %>% ungroup()
+
+#MOVING AVERAGE
+#https://stackoverflow.com/questions/26198551/rolling-mean-moving-average-by-group-id-with-dplyr
+sy <- sy %>% 
+  group_by(`SIC07 code`) %>% 
+  mutate(movingav = rollapply(LQplusone_log,5,mean,align='right',fill=NA))
+
+plot_ly(data = sy, x = ~year, y = ~LQplusone_log, color = ~`SIC07 code`,
+# plot_ly(data = sy, x = ~year, y = ~movingav, color = ~`SIC07 code`,
+        text = ~paste("Sector:", `SIC07 description`),  # Add this line for hover text
+        hoverinfo = 'text+y+x',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly values by SIC", 
+         xaxis = list(title = "Year"), 
+         # yaxis = list(title = "Value", type='log'),
+         yaxis = list(title = "Value"),
+         showlegend = TRUE)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

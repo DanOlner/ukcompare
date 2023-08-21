@@ -285,11 +285,15 @@ chk <- chk %>%
 #4. < 1 = region has less concentration than nationally. > 1 = concentration is higher than nationally.
 
 #For regional proportion calc, Add values for calc steps into the same DF
+
+itl2.cp %>% group_by(`ITL region name`, year) %>% View()
+
+
 itl2.cp <- itl2.cp %>%
   group_by(`ITL region name`, year) %>% 
   mutate(
     region_totalsize = sum(value),#a. Current price per region per year, for regional denominator
-    sector_regional_proportion = value / region_totalsize#b. regional sector proportion.
+    sector_regional_proportion = value / region_totalsize#b. regional sector proportion (noting that a single row in this group is a single sector)
     ) %>% 
   group_by(year, `SIC07 code`) %>% 
   mutate(
@@ -322,6 +326,27 @@ y <- itl2.cp %>% filter(year==2021, `SIC07 code` == 75)
 plot(density(y$LQ))
 hist(y$LQ,breaks = 10)
 
+#TEST DUPLICATE
+#WITHOUT PLUS ONE, DON'T NEED THAT, SHOULDN'T BE NEG VALUES
+x <- itl2.cp %>% 
+  filter(year==2021) %>% 
+  mutate(LQ_log = log(LQ)) %>% 
+  group_by(`SIC07 description`) %>% 
+  summarise(
+    mean = mean(LQ), min = min(LQ), max = max(LQ),
+    mean_log = mean(LQ_log), min_log = min(LQ_log), max_log = max(LQ_log)
+    ) 
+
+#We do have a reasonable spread there. Would quite like to see.
+ggplot(x %>% pivot_longer(min:max, names_to = 'minmax', values_to = 'value'), 
+       aes(y = `SIC07 description`, x = value, colour = minmax)) +
+  geom_point() + 
+  coord_cartesian(xlim = c(-25,25))
+
+
+
+#ORIGNAL:
+
 #Just check range and means. Means should be 1ish...
 #Testing +1 and log
 #+1 to get rid of <0 values
@@ -341,6 +366,8 @@ ggplot(x %>% pivot_longer(min:max, names_to = 'minmax', values_to = 'value'),
   geom_point() + 
   coord_cartesian(xlim = c(-25,25))
 
+#SAME
+
 #Log version... this is looking more useful to me
 #Reorder based on minimum values: close to zeroes, no sectoral presence there
 minmaxes <- x %>% pivot_longer(min_log:max_log, names_to = 'minmax', values_to = 'value') 
@@ -351,6 +378,7 @@ ggplot(minmaxes,
        aes(y = `SIC07 description`, x = value, colour = minmax)) +
   geom_point() + 
   coord_cartesian(xlim = c(0,3)) +
+  # geom_vline(xintercept = 0)#this value? I've added +1 to LQ before logging, so where 1 was the <> point, it becomes 2. Hence log 2 for the cutoff between "less than national / more than national".
   geom_vline(xintercept = log(2))#this value? I've added +1 to LQ before logging, so where 1 was the <> point, it becomes 2. Hence log 2 for the cutoff between "less than national / more than national".
 
 #Though it would also be possible just to convert the 0-1 range to a more useful value by inverting
@@ -466,7 +494,7 @@ LQovertime_ggplot <- function(filteryear,placename){
 }
 
 #Change plotting order for SICs before running function
-x <- itl2.cp %>% filter(year == 1998, `SIC07 description` != 'Water and air transport') %>% mutate(flaggedplace = `ITL region name`==place)
+x <- itl2.cp %>% filter(year == 2009, `SIC07 description` != 'Water and air transport') %>% mutate(flaggedplace = `ITL region name`==place)
 ordertouse <- unique(as.character(x$`SIC07 description`))[order(x %>% filter(`ITL region name`==place) %>%ungroup() %>% select(LQplusone_log) %>% pull(),decreasing = T)]
 
 #Create images in folder
@@ -476,7 +504,7 @@ list.files(path = "local/localimages/animations/", pattern = "*.png", full.names
   map(image_read) %>% # reads each path file
   image_join() %>% # joins image
   image_animate(fps=2) %>% # animates, can opt for number of loops
-  image_write("local/localimages/animations/LQ_overtime_w_SY_1998baseyear.gif")
+  image_write("local/localimages/animations/LQ_overtime_w_SY_2009baseyear.gif")
 
 
 

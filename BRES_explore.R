@@ -489,6 +489,15 @@ itl2.lq <- itl2.lq %>%
 
 ##INITIAL LOOK AT BRES LQ----
 
+#Test: get 2 and 3 digit SICs, use to colour clusters, see if those are the clusters that matter
+#Other ways to cluster 5 digit possibly available based on LQ
+#(Lookup made below)
+SIClookup <- read_csv('data/SIClookup.csv')
+
+itl2.lq <- itl2.lq %>% 
+  left_join(SIClookup %>% select(-SIC_5DIGIT_NAME), by = c('INDUSTRY_CODE' = 'SIC_5DIGIT_CODE'))
+
+
 itl2.lq <- itl2.lq %>% mutate(LQ_log = log(LQ)) 
 
 #View for 2021. Can just flag one we want to overlay?
@@ -502,7 +511,7 @@ x <- itl2.lq %>% filter(DATE == 2021) %>% mutate(flaggedplace = GEOGRAPHY_NAME==
 x$INDUSTRY_NAME <- factor(x$INDUSTRY_NAME)
 x$INDUSTRY_NAME <- fct_relevel(
   x$INDUSTRY_NAME, 
-  unique(as.character(x$INDUSTRY_NAME))[order(x %>% filter(GEOGRAPHY_NAME==place) %>%ungroup() %>% select(LQplusone_log) %>% pull(),decreasing = T)]
+  unique(as.character(x$INDUSTRY_NAME))[order(x %>% filter(GEOGRAPHY_NAME==place) %>%ungroup() %>% select(LQ) %>% pull(),decreasing = T)]
 )
 
 #Actually, keep that order and use for animation below
@@ -516,8 +525,29 @@ x$INDUSTRY_NAME <- fct_relevel(
 # sectors.to.view <- x %>% ungroup() %>% filter(flaggedplace == T, LQplusone_log == 0) %>% select(INDUSTRY_NAME) %>% pull() %>% as.character()
 sectors.to.view <- x %>% ungroup() %>% filter(flaggedplace == T, LQ > 2) %>% select(INDUSTRY_NAME) %>% pull() %>% as.character()
 
+
+#Group 2 digit SICs by average 5-digit LQ
+#For each place, in each year
+x <- x %>% 
+  group_by(SIC_2DIGIT_NAME, DATE, GEOGRAPHY_NAME) %>% 
+  mutate(
+    av_LQ_2digitSIC = mean(LQ)
+  ) %>% 
+  group_by(DATE, GEOGRAPHY_NAME) %>% 
+mutate(
+    RANK_av_LQ_2digitSIC = rank(av_LQ_2digitSIC)
+    )
+
+#Quite small number for each place / year
+unique(x$RANK_av_LQ_2digitSIC)[order(unique(x$RANK_av_LQ_2digitSIC))]
+
+#Really though?
+unique(x %>% filter(GEOGRAPHY_NAME=="South Yorkshire",DATE==2021) %>% select(av_LQ_2digitSIC) %>% arrange() %>% pull())
+
+
 ggplot(
-  x %>% filter(INDUSTRY_NAME %in% sectors.to.view),
+  x,
+  # x %>% filter(INDUSTRY_NAME %in% sectors.to.view),
   # x,
   aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace)
   # aes(y = INDUSTRY_NAME, x = LQ_log, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace)
@@ -527,10 +557,10 @@ ggplot(
   scale_size_manual(values = c(2,4)) +
   scale_alpha_manual(values = c(0.2,1)) +
   scale_colour_manual(values = c('black','red')) +
-  geom_vline(xintercept = 1, colour = 'blue') 
-# +
-#   theme(axis.text.y=element_blank(), #remove x axis labels
-#         axis.ticks.y=element_blank())
+  geom_vline(xintercept = 1, colour = 'blue') +
+  facet_wrap(~SIC_2DIGIT_NAME,ncol = 8) +
+  theme(axis.text.y=element_blank(), #remove x axis labels
+        axis.ticks.y=element_blank())
 
 
 unique(itl2.lq$GEOGRAPHY_NAME)
@@ -547,24 +577,25 @@ sy <- sy %>%
   mutate(movingav = rollapply(LQ,3,mean,align='right',fill=NA))
 
 # plot_ly(data = sy %>% filter(INDUSTRY_NAME %in% sectors.to.view), x = ~DATE, y = ~LQplusone_log, color = ~INDUSTRY_NAME,
-plot_ly(data = sy %>% filter(INDUSTRY_NAME %in% sectors.to.view), x = ~DATE, y = ~movingav, color = ~INDUSTRY_NAME,
+plot_ly(data = sy %>% filter(INDUSTRY_NAME %in% sectors.to.view), x = ~DATE, y = ~movingav, color = ~SIC_2DIGIT_NAME,
         text = ~paste("Sector:", INDUSTRY_NAME),  # Add this line for hover text
         hoverinfo = 'text+y+x',
         type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
   layout(title = "Yearly values by SIC", 
          xaxis = list(title = "Year"),
-         # yaxis = list(title = "Value", type='log'),
-         yaxis = list(title = "Value"),
+         yaxis = list(title = "LQ", type='log'),
+         # yaxis = list(title = "LQ"),
          showlegend = F)
 
 
 
 #Location quotient vs proportion in the region (already calculated) seems obvious...
 # plot_ly(data = sy %>% filter(DATE==2015), x = ~LQ, y = ~sector_regional_proportion, color = ~INDUSTRY_NAME,
-plot_ly(data = sy %>% filter(DATE==2015), x = ~LQ, y = ~sector_regional_proportion,
-        text = ~paste("Sector:", INDUSTRY_NAME, ", percent: ", sector_regional_proportion * 100, ", count: ", COUNT),  # Add this line for hover text
+plot_ly(data = sy %>% filter(DATE==2021), x = ~LQ, y = ~sector_regional_proportion, color = ~SIC_2DIGIT_NAME,
+        text = ~paste("5 digit Sector:", INDUSTRY_NAME, "\n2 digit Sector:", SIC_2DIGIT_NAME, "\npercent: ", sector_regional_proportion * 100, "\ncount: ", COUNT),  # Add this line for hover text
         hoverinfo = 'text+y+x',
-        type = 'scatter') %>%
+        type = 'scatter',
+        size = 7) %>%
   layout(title = "Yearly values by SIC", 
          xaxis = list(title = "LQ", type = 'log'),
          # yaxis = list(title = "Region proportion"),
@@ -581,8 +612,14 @@ plot_ly(data = sy %>% filter(DATE==2015), x = ~LQ, y = ~sector_regional_proporti
   )
 
 
-#Test: get 3 or 4 digit SICs, use to colour clusters, see if those are the clusters that matter
-#Other ways to cluster 5 digit possibly available based on LQ
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#MAKE 2,3,5 LEVEL SIC SECTOR LOOKUP----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
 #Doesn't matter which one, we just need the SIC lookup
 sic <- readRDS('local/data/BRES_NUTS2_2021.rds') %>% filter(MEASURES_NAME=='Value', MEASURE_NAME=='Count', !INDUSTRY_TYPE %in% c('industry','SIC 2007 class (4 digit)')) %>% 
   select(INDUSTRY_NAME, INDUSTRY_CODE, INDUSTRY_TYPE) %>% 
@@ -617,6 +654,7 @@ SIClookup <- five.digit %>%
   select(SIC_2DIGIT_CODE,SIC_2DIGIT_NAME,SIC_3DIGIT_CODE,SIC_3DIGIT_NAME,SIC_5DIGIT_CODE,SIC_5DIGIT_NAME)
 
 write_csv(SIClookup,'data/SIClookup.csv')
+
 
 
 

@@ -37,6 +37,13 @@ cor(x,xdiff,method = 'spearman')
 #Some data to experiment on:
 gb <- readRDS('data/sectors/gb_fulltimeemployeecountandpercent5digitSIC_BRESopen09to21.rds')
 
+# gb <- gb %>% group_by(DATE) %>% 
+#   mutate(
+#     count = sum(COUNT),
+#     percent = (count/sum(count)*100),
+#     percent = ifelse(is.nan(percent), 0, percent)
+#     )
+
 #Drop sectors who never get employees above 1000
 drops <- gb %>% 
   group_by(INDUSTRY_NAME) %>% 
@@ -48,15 +55,20 @@ gb.test <- gb %>%
 #Check for annoying column
 #gb.test$INDUSTRY_NAME[grepl('build',gb.test$INDUSTRY_NAME)]
 
+#From some scribbles, 2nd diff is probably what one would want.
+#It picks up on similar changes in vector direction, I think
+
 
 #Find diffs
+#Log not necessary if diffing %s surely?
 gb.test <- gb.test %>% 
   group_by(INDUSTRY_NAME) %>% 
   arrange(DATE) %>% 
   mutate(
-    log_percent = log(percent),
+    # log_percent = log(percent),
     diff = percent-lag(percent),
-    diff_log = log_percent-lag(log_percent)
+    second_diff = diff-lag(diff)
+    # diff_log = log_percent-lag(log_percent)
     ) %>% 
   filter(DATE != 2009) %>% #drop the NA year
   # filter(INDUSTRY_CODE!=22230) %>%  #also remove annoying UTF-8 issue sector just for now

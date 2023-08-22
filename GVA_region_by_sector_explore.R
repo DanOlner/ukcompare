@@ -285,10 +285,6 @@ chk <- chk %>%
 #4. < 1 = region has less concentration than nationally. > 1 = concentration is higher than nationally.
 
 #For regional proportion calc, Add values for calc steps into the same DF
-
-itl2.cp %>% group_by(`ITL region name`, year) %>% View()
-
-
 itl2.cp <- itl2.cp %>%
   group_by(`ITL region name`, year) %>% 
   mutate(
@@ -514,15 +510,22 @@ list.files(path = "local/localimages/animations/", pattern = "*.png", full.names
 
 
 #Random thing: grouped df won't plot lines: https://stackoverflow.com/questions/50889627/plotly-does-not-show-lines
-sy <- itl2.cp %>% filter(`ITL region name` == 'South Yorkshire') %>% ungroup()
+sy <- itl2.cp %>% filter(`ITL region name` == 'South Yorkshire') %>% ungroup() %>% 
+  filter(`SIC07 description`!='Water and air transport')#negative values
+
+sy <- itl2.cp %>% filter(`ITL region name` == 'Greater Manchester') %>% ungroup() %>% 
+  filter(`SIC07 description`!='Water and air transport')#negative values
+
+sy <- itl2.cp %>% filter(`ITL region name` == 'Leicestershire, Rutland and Northamptonshire') %>% ungroup() %>% 
+  filter(`SIC07 description`!='Water and air transport')#negative values
 
 #MOVING AVERAGE
 #https://stackoverflow.com/questions/26198551/rolling-mean-moving-average-by-group-id-with-dplyr
 sy <- sy %>% 
   group_by(`SIC07 code`) %>% 
-  mutate(movingav = rollapply(LQplusone_log,5,mean,align='right',fill=NA))
+  mutate(movingav = rollapply(LQ,5,mean,align='right',fill=NA))
 
-plot_ly(data = sy, x = ~year, y = ~LQplusone_log, color = ~`SIC07 code`,
+plot_ly(data = sy, x = ~year, y = ~LQ, color = ~`SIC07 code`,
 # plot_ly(data = sy, x = ~year, y = ~movingav, color = ~`SIC07 code`,
         text = ~paste("Sector:", `SIC07 description`),  # Add this line for hover text
         hoverinfo = 'text+y+x',
@@ -534,6 +537,130 @@ plot_ly(data = sy, x = ~year, y = ~LQplusone_log, color = ~`SIC07 code`,
          showlegend = TRUE)
 
 
+
+#Location quotient vs proportion in the region (already calculated) seems obvious...
+# plot_ly(data = sy %>% filter(DATE==2015), x = ~LQ, y = ~sector_regional_proportion, color = ~INDUSTRY_NAME,
+plot_ly(data = sy %>% filter(year==2021), x = ~LQ, y = ~sector_regional_proportion,
+        text = ~paste("Sector:", `SIC07 description`, "\npercent: ", sector_regional_proportion * 100, "\nvalue: ", value),  # Add this line for hover text
+        hoverinfo = 'text+y+x',
+        type = 'scatter',
+        size = 7) %>%
+  layout(title = "Yearly values by SIC", 
+         # xaxis = list(title = "LQ"),
+         xaxis = list(title = "LQ", type = 'log'),
+         # yaxis = list(title = "Region proportion"),
+         yaxis = list(title = "Region proportion", type = 'log'),
+         showlegend = F) %>% 
+  add_lines(
+    y = range(sy$sector_regional_proportion),
+    x = 1,
+    line = list(
+      color = "grey"
+    ),
+    inherit = FALSE,
+    showlegend = FALSE
+  )
+
+
+
+#Version comparing more than one place. Can we link related points?
+x <- itl2.cp %>% filter(`ITL region name` %in% c('South Yorkshire','Greater Manchester')) %>% ungroup() %>% 
+  filter(`SIC07 description`!='Water and air transport') 
+x <- itl2.cp %>% filter(`ITL region name` %in% c('Leicestershire, Rutland and Northamptonshire','Greater Manchester')) %>% ungroup() %>% 
+  filter(`SIC07 description`!='Water and air transport') 
+# %>% #negative values
+#   group_by(`SIC07 description`)
+
+plot_ly(data = x %>% filter(year==2021), x = ~LQ, y = ~sector_regional_proportion, color = ~`SIC07 description`, split =~`SIC07 description`,
+        # symbol =~`ITL region name`,
+        text = ~paste("Place: ",`ITL region name`,"\nSector:", `SIC07 description`, "\npercent: ", sector_regional_proportion * 100, "\nvalue: ", value),  # Add this line for hover text
+        hoverinfo = 'text+y+x',
+        type = 'scatter',
+        mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly values by SIC", 
+         xaxis = list(title = "LQ"),
+         # xaxis = list(title = "LQ", type = 'log'),
+         yaxis = list(title = "Region proportion"),
+         # yaxis = list(title = "Region proportion", type = 'log'),
+         showlegend = F) %>% 
+  add_lines(
+    y = range(sy$sector_regional_proportion),
+    x = 1,
+    line = list(
+      color = "grey"
+    ),
+    inherit = FALSE,
+    showlegend = FALSE
+  )
+
+
+
+
+
+
+
+
+p <- plot_ly(data = x, 
+             x = ~LQ, y = ~sector_regional_proportion, color = ~`ITL region name`,
+             type = 'scatter', 
+             mode = 'markers',
+             marker = list(size = 10)) %>%
+  layout(showlegend = T)
+
+# Add lines connecting corresponding points between Group A and Group B
+for(i in 1:(nrow(x) / 2)) {
+  # Subset data for the two groups of the current row
+  subset_df <- df[df$id == i, ]
+  
+  p <- p %>%
+    add_trace(
+      x = subset_df$variable1,
+      y = subset_df$variable2,
+      type = 'scatter',
+      mode = 'lines',
+      line = list(color = 'grey', width = 2),
+      showlegend = F
+    )
+}
+
+
+
+
+
+# Sample data
+df <- data.frame(
+  id = 1:4,  # to uniquely identify rows/observations
+  group = c(rep("A", 2), rep("B", 2)),
+  variable1 = c(5, 7, 8, 6),
+  variable2 = c(6, 8, 7, 9)
+)
+
+p <- plot_ly(data = df, 
+             x = ~variable1, 
+             y = ~variable2, 
+             color = ~factor(group),
+             type = 'scatter', 
+             mode = 'markers',
+             marker = list(size = 10)) %>%
+  layout(showlegend = T)
+
+# Add lines connecting corresponding points between Group A and Group B
+for(i in 1:(nrow(df) / 2)) {
+  # Subset data for the two groups of the current row
+  subset_df <- df[df$id == i, ]
+  
+  p <- p %>%
+    add_trace(
+      x = subset_df$variable1,
+      y = subset_df$variable2,
+      type = 'scatter',
+      mode = 'lines',
+      line = list(color = 'grey', width = 2),
+      showlegend = F
+    )
+}
+
+p
 
 
 

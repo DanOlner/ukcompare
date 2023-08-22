@@ -417,6 +417,8 @@ saveRDS(itl2, 'data/sectors/ITL2_fulltimeemployeecountandpercent5digitSIC_BRESop
 
 
 
+
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #ITL2 LOCATION QUOTIENTS----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -456,10 +458,10 @@ itl2.lq <- itl2 %>%
   group_by(DATE) %>% 
   mutate(
     uk_totalsize = sum(COUNT),#d. Summed current prices for WHOLE UK per year, for UK denominator
-    uk_regional_proportion = uk_sectorsize / uk_totalsize#e. UK-level sector proportion
+    sector_uk_proportion = uk_sectorsize / uk_totalsize#e. UK-level sector proportion
   ) %>% 
   mutate(
-    LQ = sector_regional_proportion / uk_regional_proportion#f. Location quotient!
+    LQ = sector_regional_proportion / sector_uk_proportion#f. Location quotient!
   )
 
 
@@ -479,10 +481,20 @@ gb.chk <- readRDS('data/sectors/gb_fulltimeemployeecountandpercent5digitSIC_BRES
 table(unique(gb.chk$INDUSTRY_NAME) %in% unique(chk$INDUSTRY_NAME))
 
 
-#Argument for noting those and removing from the analysis given that LQ of 0 has a meaning.
+#Argument for noting those and removing from the analysis given that LQ of 0 has no meaning.
 #Actually let's just do that now and note for later
 itl2.lq <- itl2.lq %>% 
   filter(!INDUSTRY_NAME %in% chk$INDUSTRY_NAME)
+
+
+
+#TEST LOCATION QUOTIENT CALC----
+
+#Make 100% sure it's doing what I want
+#First, stare at one year
+yr <- itl2.lq %>% filter(DATE==2021)
+yr <- itl2.lq %>% filter(DATE==2021, grepl('cutlery',INDUSTRY_NAME))
+yr <- itl2.lq %>% filter(DATE==2021, grepl('basic iron',INDUSTRY_NAME))
 
 
 
@@ -612,6 +624,88 @@ plot_ly(data = sy %>% filter(DATE==2021), x = ~LQ, y = ~sector_regional_proporti
   )
 
 
+
+
+#View 2 digit groups on hover
+#Adapted from https://stackoverflow.com/a/52709868
+xy <- sy %>% filter(DATE==2021)
+
+#create a SharedData object for use in the ggplot below, group by 'groups' 
+d <- highlight_key(xy, ~SIC_2DIGIT_NAME)
+
+#create a normal ggplot to fit your needs, but use the SharedData object as data for the chart
+p <- ggplot( d, aes(x = LQ, y = sector_regional_proportion, group = SIC_2DIGIT_NAME, colour = INDUSTRY_NAME)) + theme_bw() + geom_point() +
+  scale_x_log10() +
+  scale_y_log10() +
+  geom_vline(xintercept = 1) +
+  guides(colour = F)
+
+#now ggplotly the newly created ggplot, and add text for the tooltips as needed
+gg <- ggplotly( p, tooltip = c("SIC_2DIGIT_NAME","x","y","INDUSTRY_NAME" ))
+
+#set the highlight-options to your liking, and plot...
+highlight( gg, on = "plotly_hover", off = "plotly_deselect", color = "red", opacityDim = 0.2)
+
+
+
+
+
+
+
+
+
+
+
+#Compare two, or try to
+cp <- itl2.lq %>% filter(GEOGRAPHY_NAME %in% c('South Yorkshire','Greater Manchester')) %>% ungroup()
+cp <- itl2.lq %>% filter(GEOGRAPHY_NAME %in% c('South Yorkshire','Inner London - East')) %>% ungroup()
+
+# plot_ly(data = cp %>% filter(DATE==2021, SIC_2DIGIT_NAME=='24 : Manufacture of basic metals'), x = ~LQ, y = ~sector_regional_proportion, color = ~INDUSTRY_NAME, split =~INDUSTRY_NAME,
+plot_ly(data = cp %>% filter(DATE==2021), x = ~LQ, y = ~sector_regional_proportion, color = ~INDUSTRY_NAME, split =~INDUSTRY_NAME,
+        text = ~paste("5 digit Sector:", INDUSTRY_NAME, "\n2 digit Sector:", SIC_2DIGIT_NAME, "\npercent: ", sector_regional_proportion * 100, "\ncount: ", COUNT),  # Add this line for hover text
+        hoverinfo = 'text+y+x',
+        type = 'scatter',
+        mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly values by SIC", 
+         xaxis = list(title = "LQ"),
+         # xaxis = list(title = "LQ", type = 'log'),
+         yaxis = list(title = "Region proportion"),
+         # yaxis = list(title = "Region proportion", type = 'log'),
+         showlegend = F) %>% 
+  add_lines(
+    y = range(sy$sector_regional_proportion),
+    x = 1,
+    line = list(
+      color = "grey"
+    ),
+    inherit = FALSE,
+    showlegend = FALSE
+  )
+
+
+
+
+
+
+#Remove nans
+rn <- itl2.lq %>% filter(!is.nan(LQ), LQ > 1)
+cor(rn$LQ,rn$sector_regional_proportion)
+plot(rn$LQ,rn$sector_regional_proportion)
+#This isn't showing it up, correlation not that high. If the calc is correct (think it is)
+#The rel shows up clearly when you compare two places - higher LQ = higher regionial proportion
+#Cor isn't high cos it's lines coming from corner splaying out, but the rel is real
+
+#Actually, the correlation would be same sector across different places, right?
+#Yup, bang on.
+xn <- itl2.lq %>% filter(DATE == 2021, !is.nan(LQ), LQ > 1, INDUSTRY_NAME=='28940 : Manufacture of machinery for textile, apparel and leather production')
+xn <- itl2.lq %>% filter(!is.nan(LQ), LQ > 1, grepl('cutlery', INDUSTRY_NAME))
+xn <- itl2.lq %>% filter(!is.nan(LQ), LQ > 1, grepl('basic iron', INDUSTRY_NAME))
+xn <- itl2.lq %>% filter(!is.nan(LQ), LQ > 1, grepl('Hospital activities', INDUSTRY_NAME))
+xn <- itl2.lq %>% filter(!is.nan(LQ), LQ > 1, grepl('Travel agency', INDUSTRY_NAME))
+
+#Perfect cor across one year
+cor(xn$LQ,xn$sector_regional_proportion)
+plot(xn$LQ,xn$sector_regional_proportion)
 
 
 

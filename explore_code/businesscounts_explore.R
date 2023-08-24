@@ -268,6 +268,10 @@ lapply(years, function(x) download_all_BUSINESSCOUNT_LOCALUNITS(x))
 #Will need reducing a lot to be manageable. What are we after? Look at one to pick out
 x <- readRDS('local/data/BusinessCountsByNUTS2/BUSINESSCOUNT_ENTERPRISE_NUTS2_2020.rds')
 
+table(x$EMPLOYMENT_SIZEBAND_NAME)
+
+
+
 
 
 #NOTE: FOR NOW, FILTERING DOWN TO 2015-2021 AS 09-14 HAS NO DATA IN THE NUTS2 DOWNLOADS

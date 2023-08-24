@@ -391,7 +391,6 @@ gb.pt <- pt %>%
 
 #NOTE: FOR NOW, FILTERING DOWN TO 2015-2021 AS 09-14 HAS NO DATA IN THE NUTS2 DOWNLOADS
 #There's probably a way to aggregate the data through smaller geographies, will come back to that if needed
-
 loadallITL2_fulltime_and_reduce <- function(filename){
   
   readRDS(filename) %>% filter(INDUSTRY_TYPE=='SIC 2007 subclass (5 digit)', EMPLOYMENT_STATUS_NAME=='Full-time employees',
@@ -439,6 +438,7 @@ itl2 %>% filter(is.na(COUNT)) %>% View
 itl2$COUNT[is.na(itl2$COUNT)] <- 0
 
 
+#CALCULATE LQ
 #1. Find regional proportion of sector: sector x as proportion of all sectors in that region
 #2. Find proportion of same sector for the UK as a whole (sum sector total, sum entire UK total, find proportion)
 #3. LQ is relative proportion - 1 / 2. 
@@ -495,6 +495,36 @@ itl2.lq <- itl2.lq %>%
 yr <- itl2.lq %>% filter(DATE==2021)
 yr <- itl2.lq %>% filter(DATE==2021, grepl('cutlery',INDUSTRY_NAME))
 yr <- itl2.lq %>% filter(DATE==2021, grepl('basic iron',INDUSTRY_NAME))
+
+#Check concentration and specialisation interpretation
+#Viewed in one place across sectors = concentration (denominator stays the same in that interpretation)
+placetolook <- itl2.lq %>% filter(DATE==2021, grepl('South Yorkshire',GEOGRAPHY_NAME))
+
+p <- ggplot(placetolook %>% filter(INDUSTRY_NAME %in% placetolook$INDUSTRY_NAME[placetolook$LQ > 2]), 
+            aes(x = LQ, y = fct_reorder(INDUSTRY_NAME,LQ), colour = INDUSTRY_NAME)) +
+  geom_bar(stat = 'identity') +
+  guides(colour = F) +
+  theme(axis.text.y=element_blank(), #remove x axis labels
+        axis.ticks.y=element_blank())
+
+ggplotly(p, tooltip = c("INDUSTRY_NAME" ))
+
+
+
+#Then, geographical specialisation.
+#Denom here is "how the proportion of industry is distributed across the UK"
+#So if we look at one industry, that stays the same and we see proportion across the UK
+industrytolook <- itl2.lq %>% filter(DATE==2021, grepl('cutlery',INDUSTRY_NAME))
+industrytolook <- itl2.lq %>% filter(DATE==2021, grepl('basic iron',INDUSTRY_NAME))
+
+p <- ggplot(industrytolook %>% filter(INDUSTRY_NAME %in% industrytolook$INDUSTRY_NAME[industrytolook$LQ > 2]), 
+            aes(x = LQ, y = fct_reorder(GEOGRAPHY_NAME,LQ), colour = GEOGRAPHY_NAME)) +
+  geom_bar(stat = 'identity') +
+  guides(colour = F) +
+  theme(axis.text.y=element_blank(), #remove x axis labels
+        axis.ticks.y=element_blank())
+
+ggplotly(p, tooltip = c("GEOGRAPHY_NAME" ))
 
 
 
@@ -647,66 +677,30 @@ gg <- ggplotly( p, tooltip = c("SIC_2DIGIT_NAME","x","y","INDUSTRY_NAME" ))
 highlight( gg, on = "plotly_hover", off = "plotly_deselect", color = "red", opacityDim = 0.2)
 
 
+#Remove some ineffective 2 place comparison code. See here if want to refer back to:
+#https://github.com/DanOlner/ukcompare/tree/203b5e921b13a4d81b769b46981805b9fa57edfb
 
 
 
+#Compare regional proportions directly
+cp <- itl2.lq %>% filter(GEOGRAPHY_NAME %in% c('South Yorkshire','Greater Manchester'), DATE==2021) %>%
+  mutate(sector_regional_percent = sector_regional_proportion * 100) %>% 
+  ungroup()
+
+#Put each place on its own axis
+cpwide <- cp %>% 
+  select(GEOGRAPHY_NAME,INDUSTRY_NAME,sector_regional_proportion) %>% 
+  pivot_wider(names_from = GEOGRAPHY_NAME, values_from = sector_regional_proportion)
 
 
+p <- ggplot(cpwide,aes(x = `Greater Manchester`, y = `South Yorkshire`, colour = INDUSTRY_NAME)) +
+  geom_point() + 
+  geom_abline(slope = 1) +
+  scale_y_log10() +
+  scale_x_log10() +
+  guides(colour = F)
 
-
-
-
-#Compare two, or try to
-cp <- itl2.lq %>% filter(GEOGRAPHY_NAME %in% c('South Yorkshire','Greater Manchester')) %>% ungroup()
-cp <- itl2.lq %>% filter(GEOGRAPHY_NAME %in% c('South Yorkshire','Inner London - East')) %>% ungroup()
-
-# plot_ly(data = cp %>% filter(DATE==2021, SIC_2DIGIT_NAME=='24 : Manufacture of basic metals'), x = ~LQ, y = ~sector_regional_proportion, color = ~INDUSTRY_NAME, split =~INDUSTRY_NAME,
-plot_ly(data = cp %>% filter(DATE==2021), x = ~LQ, y = ~sector_regional_proportion, color = ~INDUSTRY_NAME, split =~INDUSTRY_NAME,
-        text = ~paste("5 digit Sector:", INDUSTRY_NAME, "\n2 digit Sector:", SIC_2DIGIT_NAME, "\npercent: ", sector_regional_proportion * 100, "\ncount: ", COUNT),  # Add this line for hover text
-        hoverinfo = 'text+y+x',
-        type = 'scatter',
-        mode = 'lines+markers', line = list(shape = 'linear')) %>%
-  layout(title = "Yearly values by SIC", 
-         xaxis = list(title = "LQ"),
-         # xaxis = list(title = "LQ", type = 'log'),
-         yaxis = list(title = "Region proportion"),
-         # yaxis = list(title = "Region proportion", type = 'log'),
-         showlegend = F) %>% 
-  add_lines(
-    y = range(sy$sector_regional_proportion),
-    x = 1,
-    line = list(
-      color = "grey"
-    ),
-    inherit = FALSE,
-    showlegend = FALSE
-  )
-
-
-
-
-
-
-#Remove nans
-rn <- itl2.lq %>% filter(!is.nan(LQ), LQ > 1)
-cor(rn$LQ,rn$sector_regional_proportion)
-plot(rn$LQ,rn$sector_regional_proportion)
-#This isn't showing it up, correlation not that high. If the calc is correct (think it is)
-#The rel shows up clearly when you compare two places - higher LQ = higher regionial proportion
-#Cor isn't high cos it's lines coming from corner splaying out, but the rel is real
-
-#Actually, the correlation would be same sector across different places, right?
-#Yup, bang on.
-xn <- itl2.lq %>% filter(DATE == 2021, !is.nan(LQ), LQ > 1, INDUSTRY_NAME=='28940 : Manufacture of machinery for textile, apparel and leather production')
-xn <- itl2.lq %>% filter(!is.nan(LQ), LQ > 1, grepl('cutlery', INDUSTRY_NAME))
-xn <- itl2.lq %>% filter(!is.nan(LQ), LQ > 1, grepl('basic iron', INDUSTRY_NAME))
-xn <- itl2.lq %>% filter(!is.nan(LQ), LQ > 1, grepl('Hospital activities', INDUSTRY_NAME))
-xn <- itl2.lq %>% filter(!is.nan(LQ), LQ > 1, grepl('Travel agency', INDUSTRY_NAME))
-
-#Perfect cor across one year
-cor(xn$LQ,xn$sector_regional_proportion)
-plot(xn$LQ,xn$sector_regional_proportion)
-
+ggplotly( p, tooltip = c("INDUSTRY_NAME" ))
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -828,6 +822,8 @@ gb$INDUSTRY_NAME <- iconv(gb$INDUSTRY_NAME, "UTF-8", "UTF-8",sub='')
 #Save for use elsewhere
 saveRDS(gb, 'data/sectors/gb_fulltimeemployeecountandpercent5digitSIC_BRESopen09to21.rds')
 
+gb <- readRDS('data/sectors/gb_fulltimeemployeecountandpercent5digitSIC_BRESopen09to21.rds')
+
 
 #Add each industry percent for each year
 #Ungroup cos plotly doesn't like it
@@ -940,7 +936,7 @@ x <- gb %>% filter(INDUSTRY_NAME %in% (percentchange.in.percent.09to21 %>% filte
 x <- gb %>% filter(INDUSTRY_NAME %in% (percentchange.in.percent.09to21 %>% filter(decile_percent09 %in% c(10)) %>% select(INDUSTRY_NAME) %>% pull()))
 
 #Working through sector size ventiles
-x <- gb %>% filter(INDUSTRY_NAME %in% (percentchange.in.percent.09to21 %>% filter(ventile_percent09 %in% c(17)) %>% select(INDUSTRY_NAME) %>% pull()))
+x <- gb %>% filter(INDUSTRY_NAME %in% (percentchange.in.percent.09to21 %>% filter(ventile_percent09 %in% c(19)) %>% select(INDUSTRY_NAME) %>% pull()))
 
 plot_ly(data = x, x = ~DATE, y = ~percent, color = ~INDUSTRY_NAME, 
         text = ~paste("Sector:", INDUSTRY_NAME),  # Add this line for hover text
@@ -972,7 +968,92 @@ plot_ly(data = y, x = ~DATE, y = ~movingav, color = ~INDUSTRY_NAME,
 
 
 
+#Cluster by change over time.
+#Just use plain ol' OLS applied to each sector time series
+#https://stackoverflow.com/a/71944195
+#Use slope estimate to group to view
+l <- gb %>%
+  mutate(percentlog = ifelse(percent>0, percent,0.000000001)) %>% #to deal with log 0s
+  group_by(INDUSTRY_NAME) %>%
+  group_modify(
+    # ~ broom::tidy(lm(percentlog ~ DATE, data = .))#That made no difference!
+    ~ broom::tidy(lm(percent ~ DATE, data = .))
+  ) %>% 
+  filter(term!='(Intercept)') %>% 
+  arrange(-estimate) %>% #arrange not necessary to cut, but want to view
+  ungroup() %>% 
+  mutate(group = as.integer(cut_number(estimate,20)))
 
+  
+x <- gb %>% filter(INDUSTRY_NAME %in% (l %>% filter(group %in% c(1)) %>% select(INDUSTRY_NAME) %>% pull()))
+
+y <- x %>% 
+  group_by(INDUSTRY_NAME) %>% 
+  arrange(DATE) %>% 
+  mutate(movingav = rollapply(percent,3,mean,align='right',fill=NA))
+
+plot_ly(data = y, x = ~DATE, y = ~movingav, color = ~INDUSTRY_NAME, 
+        text = ~paste("Sector:", INDUSTRY_NAME),  # Add this line for hover text
+        hoverinfo = 'text+y+x',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly percents by SIC", 
+         xaxis = list(title = "Year"), 
+         yaxis = list(title = "Value", type='log'),
+         # yaxis = list(title = "Value"),
+         showlegend = F)
+
+
+
+
+#Check other methods for picking out largest vs smallest change
+#Use SD. Can combine 'largest change' with polarity of lm to filter down further?
+#Log works better here
+sds <- gb %>%
+  group_by(INDUSTRY_NAME) %>%
+  summarise(sd = sd(log(percent))) %>%
+  # summarise(sd = sd(percent)) %>% 
+  ungroup() %>% 
+  mutate(group = as.integer(cut_number(sd,20)))
+
+x <- gb %>% filter(INDUSTRY_NAME %in% (sds %>% filter(group %in% c(1)) %>% select(INDUSTRY_NAME) %>% pull()))
+
+#Big SD and polarity of move
+
+#In the biggest changers over time via SD we have...
+#Climbers
+x <- gb %>% filter(INDUSTRY_NAME %in% (sds %>% filter(group %in% c(20)) %>% select(INDUSTRY_NAME) %>% pull())) %>% 
+  filter(INDUSTRY_NAME %in% (l %>% filter(estimate > 0) %>% select(INDUSTRY_NAME) %>% pull()))
+
+#Droppers
+x <- gb %>% filter(INDUSTRY_NAME %in% (sds %>% filter(group %in% c(20)) %>% select(INDUSTRY_NAME) %>% pull())) %>% 
+  filter(INDUSTRY_NAME %in% (l %>% filter(estimate <= 0) %>% select(INDUSTRY_NAME) %>% pull()))
+
+
+#For sectors with lowest SD, just curious...
+#Climbers
+x <- gb %>% filter(INDUSTRY_NAME %in% (sds %>% filter(group %in% c(1)) %>% select(INDUSTRY_NAME) %>% pull())) %>% 
+  filter(INDUSTRY_NAME %in% (l %>% filter(estimate > 0) %>% select(INDUSTRY_NAME) %>% pull()))
+
+#Droppers
+x <- gb %>% filter(INDUSTRY_NAME %in% (sds %>% filter(group %in% c(1)) %>% select(INDUSTRY_NAME) %>% pull())) %>% 
+  filter(INDUSTRY_NAME %in% (l %>% filter(estimate <= 0) %>% select(INDUSTRY_NAME) %>% pull()))
+
+#NOTE: THESE ARE PERCENTAGES RELATIVE TO UK WHOLE, SO DROPS CAN BE DUE TO OTHER SECTORS GROWING
+#COuld do with also showing raw diff
+y <- x %>% 
+  group_by(INDUSTRY_NAME) %>% 
+  arrange(DATE) %>% 
+  mutate(movingav = rollapply(percent,3,mean,align='right',fill=NA))
+
+plot_ly(data = y, x = ~DATE, y = ~movingav, color = ~INDUSTRY_NAME, 
+        text = ~paste("Sector:", INDUSTRY_NAME, "\nPEOPLE: ",COUNT),  # Add this line for hover text
+        hoverinfo = 'text',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly percents by SIC", 
+         xaxis = list(title = "Year"), 
+         yaxis = list(title = "Value", type='log'),
+         # yaxis = list(title = "Value"),
+         showlegend = F)
 
 
 

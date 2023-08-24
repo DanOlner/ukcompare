@@ -129,8 +129,12 @@ gsub('(?<![0-9])/(?![0-9])', '_', "Bath/Bristol", perl=TRUE)
 
 #Looks like bath/bristol is the only one with a problem
 
+
+
+
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#BUSINESS COUNTS ENTERPRISES BULK DOWNLOAD----
+#BUSINESS COUNTS: ITL2 / NUTS2 BULK DOWNLOAD----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #Break down by NUTS2 geography to enable bulk download. Combine/reduce after.
@@ -185,12 +189,8 @@ gsub('(?<![0-9])/(?![0-9])', '_', "Bath/Bristol", perl=TRUE)
 # lapply(years, function(x) download_all_BUSINESSCOUNT_ENTERPRISE(x))
 
 
-
-
 #REPEAT GETTING YEARLY IN ONE GO
-years = c(2016:2021)
 years = c(2016:2022)
-years = c(2020:2022)
 
 #ENTERPRISE LEVEL
 download_all_BUSINESSCOUNT_ENTERPRISE <- function(year){
@@ -200,7 +200,7 @@ download_all_BUSINESSCOUNT_ENTERPRISE <- function(year){
   x <- proc.time()
   
   #If select is done after download, this isn't going to make any difference... no, it's faster
-  z <- nomis_get_data(id = "NM_142_1", time = 2022, geography = "TYPE450", measures = 20100, 
+  z <- nomis_get_data(id = "NM_142_1", time = year, geography = "TYPE450", measures = 20100, 
                       select = c(
                         'DATE',
                         'GEOGRAPHY_NAME',
@@ -233,7 +233,7 @@ download_all_BUSINESSCOUNT_LOCALUNITS <- function(year){
   x <- proc.time()
   
   #If select is done after download, this isn't going to make any difference... no, it's faster
-  z <- nomis_get_data(id = "NM_141_1", time = 2022, geography = "TYPE450", measures = 20100, 
+  z <- nomis_get_data(id = "NM_141_1", time = year, geography = "TYPE450", measures = 20100, 
                       select = c(
                         'DATE',
                         'GEOGRAPHY_NAME',
@@ -262,47 +262,243 @@ lapply(years, function(x) download_all_BUSINESSCOUNT_LOCALUNITS(x))
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#COMBINE COUNTS DATA INTO SINGLE DF----
+#ITL2 / NUTS2: COMBINE COUNTS DATA INTO SINGLE DF----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #Will need reducing a lot to be manageable. What are we after? Look at one to pick out
 x <- readRDS('local/data/BusinessCountsByNUTS2/BUSINESSCOUNT_ENTERPRISE_NUTS2_2020.rds')
 
-table(x$EMPLOYMENT_SIZEBAND_NAME)
+unique(x$EMPLOYMENT_SIZEBAND_NAME)
+#There are overlapping categories. We may want to keep these at some later time, but let's look at the highest resolution first
+#Dropping these:
+#Micro (0 to 9)
+#Small (10 to 49)
+#Medium-sized (50 to 249)
+#Large (250+)
+
+#Public / private will be useful. Let's start with total, though.
+unique(x$LEGAL_STATUS_NAME)
+
+#5 digit for now
+unique(x$INDUSTRY_TYPE)
+
+
+#9559200 to 262440 rows, 19mb.
+x <- x %>% 
+  filter(!EMPLOYMENT_SIZEBAND_NAME %in% c(
+    'Micro (0 to 9)',
+    'Small (10 to 49)',
+    'Medium-sized (50 to 249)',
+    'Large (250+)',
+    'Total'
+  ),
+  LEGAL_STATUS_NAME == 'Total',
+  INDUSTRY_NAME != 'Total',
+  INDUSTRY_TYPE == 'SIC 2007 subclass (5 digit)'
+  )
 
 
 
-
-
-#NOTE: FOR NOW, FILTERING DOWN TO 2015-2021 AS 09-14 HAS NO DATA IN THE NUTS2 DOWNLOADS
-#There's probably a way to aggregate the data through smaller geographies, will come back to that if needed
+#Currently hardcoding filter choices...
 LOADBUSINESSCOUNTS_and_reduce <- function(filename){
   
-  readRDS(filename) %>% filter(INDUSTRY_TYPE=='SIC 2007 subclass (5 digit)', EMPLOYMENT_STATUS_NAME=='Full-time employees',
-                               INDUSTRY_NAME!="Total", MEASURES_NAME=='Value', MEASURE_NAME=='Count') %>% 
-    select(DATE,GEOGRAPHY_NAME,GEOGRAPHY_CODE,INDUSTRY_NAME,INDUSTRY_CODE,COUNT=OBS_VALUE)
+  readRDS(filename) %>% filter(!EMPLOYMENT_SIZEBAND_NAME %in% c(
+    'Micro (0 to 9)',
+    'Small (10 to 49)',
+    'Medium-sized (50 to 249)',
+    'Large (250+)',
+    'Total'
+  ),
+  LEGAL_STATUS_NAME == 'Total',
+  INDUSTRY_NAME != 'Total',
+  INDUSTRY_TYPE == 'SIC 2007 subclass (5 digit)'
+  ) %>% 
+    select(DATE,GEOGRAPHY_NAME,GEOGRAPHY_CODE,INDUSTRY_NAME,INDUSTRY_CODE,EMPLOYMENT_SIZEBAND_NAME,COUNT=OBS_VALUE)
   
 }
 
-#All years
-itl2 <- list.files(path = "local/data/", pattern = "NUTS2", full.names = T) %>% 
-  map(loadallITL2_fulltime_and_reduce) %>% 
-  bind_rows() %>% 
-  filter(DATE > 2014)
+#All years... 103mb, very reasonable!
+bc <- list.files(path = "local/data/BusinessCountsByNUTS2/", pattern = "ENTERPRISE_NUTS2", full.names = T) %>% 
+  map(LOADBUSINESSCOUNTS_and_reduce) %>% 
+  bind_rows()
 
 #One single INDUSTY_NAME field has a non-UTF8 char that breaks some things
 #Check for annoying chars and fix
 #https://stackoverflow.com/a/17292126
-itl2$INDUSTRY_NAME <- iconv(itl2$INDUSTRY_NAME, "UTF-8", "UTF-8",sub='')
+bc$INDUSTRY_NAME <- iconv(bc$INDUSTRY_NAME, "UTF-8", "UTF-8",sub='')
 
-#Save for use elsewhere
-saveRDS(itl2, 'data/sectors/ITL2_fulltimeemployeecountandpercent5digitSIC_BRESopen15to21.rds')
-
-
+#Save!
+saveRDS(bc, 'data/sectors/ITL2_BUSINESSCOUNTS_9CATSIZEBAND_LEGALSTATUSALL_INDUSTRYTYPE5DIGIT_16to21.rds')
 
 
 
 
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#BUSINESS COUNTS: GREAT BRITAIN BULK DOWNLOAD----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#GETTING YEARLY IN ONE GO
+years = c(2016:2022)
+
+#ENTERPRISE LEVEL
+download_all_BUSINESSCOUNT_ENTERPRISE_GB <- function(year){
+  
+  cat('Downloading year ',year,'\n')
+  
+  x <- proc.time()
+  
+  #If select is done after download, this isn't going to make any difference... no, it's faster
+  z <- nomis_get_data(id = "NM_142_1", time = year, geography = "2092957698", measures = 20100, 
+                      select = c(
+                        'DATE',
+                        'GEOGRAPHY_NAME',
+                        'INDUSTRY_NAME',
+                        'INDUSTRY_CODE',
+                        'INDUSTRY_TYPE',
+                        'GEOGRAPHY_CODE',
+                        'EMPLOYMENT_SIZEBAND_NAME',
+                        'LEGAL_STATUS_NAME',
+                        'OBS_VALUE'
+                      )
+  )
+  
+  saveRDS(z,paste0('local/data/BusinessCountsByNUTS2/BUSINESSCOUNT_ENTERPRISE_GB_',year,'.rds'))
+  
+  print(proc.time()-x)
+  
+}
+
+lapply(years, function(x) download_all_BUSINESSCOUNT_ENTERPRISE_GB(x))
+
+
+#LOCAL UNIT LEVEL
+download_all_BUSINESSCOUNT_LOCALUNITS_GB <- function(year){
+  
+  cat('Downloading year ',year,'\n')
+  
+  x <- proc.time()
+  
+  #That's the code for Great Britain in geography
+  z <- nomis_get_data(id = "NM_141_1", time = year, geography = "2092957698", measures = 20100, 
+                      select = c(
+                        'DATE',
+                        'GEOGRAPHY_NAME',
+                        'INDUSTRY_NAME',
+                        'INDUSTRY_CODE',
+                        'INDUSTRY_TYPE',
+                        'GEOGRAPHY_CODE',
+                        'EMPLOYMENT_SIZEBAND_NAME',
+                        'LEGAL_STATUS_NAME',
+                        'OBS_VALUE'
+                      )
+  )
+  
+  saveRDS(z,paste0('local/data/BusinessCountsByNUTS2/BUSINESSCOUNT_LOCALUNITS_GB_',year,'.rds'))
+  
+  print(proc.time()-x)
+  
+}
+
+lapply(years, function(x) download_all_BUSINESSCOUNT_LOCALUNITS_GB(x))
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#GB: COMBINE COUNTS DATA INTO SINGLE DF----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Same function should work, loaded above in ITL2 version of combine
+
+#All years... 2.7mb
+gb <- list.files(path = "local/data/BusinessCountsByNUTS2/", pattern = "ENTERPRISE_GB", full.names = T) %>% 
+  map(LOADBUSINESSCOUNTS_and_reduce) %>% 
+  bind_rows()
+
+#One single INDUSTY_NAME field has a non-UTF8 char that breaks some things
+#Check for annoying chars and fix
+#https://stackoverflow.com/a/17292126
+gb$INDUSTRY_NAME <- iconv(gb$INDUSTRY_NAME, "UTF-8", "UTF-8",sub='')
+
+#Save!
+saveRDS(gb, 'data/sectors/GB_BUSINESSCOUNTS_ENTERPRISE_9CATSIZEBAND_LEGALSTATUSALL_INDUSTRYTYPE5DIGIT_16to21.rds')
+
+
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#GB: ENTERPRISE BUSINESS COUNT EXPLORE----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+gb <- readRDS('data/sectors/GB_BUSINESSCOUNTS_ENTERPRISE_9CATSIZEBAND_LEGALSTATUSALL_INDUSTRYTYPE5DIGIT_16to21.rds')
+
+#Some oddities here immediately:
+#I know there's some nuclear fuel processing goes on. So why is that zero?
+counts <- gb %>%
+  filter(DATE==2020) %>% 
+  group_by(INDUSTRY_NAME) %>% 
+  summarise(av = mean(COUNT))
+
+#zero across all years?
+counts_allyears <- gb %>%
+  group_by(INDUSTRY_NAME) %>% 
+  summarise(av = mean(COUNT))
+
+#How many that are zero match across all years and just one?
+table(
+  (counts %>% filter(av == 0) %>% select(INDUSTRY_NAME) %>% pull) %in% 
+    (counts_allyears %>% filter(av == 0) %>% select(INDUSTRY_NAME) %>% pull)
+  )
+
+#The same 21 are coming up true?
+allyr <- counts_allyears %>% filter(av == 0) %>% select(INDUSTRY_NAME) %>% pull
+oneyr <- counts %>% filter(av == 0) %>% select(INDUSTRY_NAME) %>% pull
+
+#Yes, that's the same across years (checked by manually changing year above)
+allyr[allyr %in% oneyr]
+
+#Hmm.
+gb %>% filter(grepl('cement',INDUSTRY_NAME), DATE==2022) %>% View
+
+
+
+#Let's just look at one grouping, to look for change
+sizeband <- gb %>% 
+  filter(
+    EMPLOYMENT_SIZEBAND_NAME == '0 to 4',
+    # EMPLOYMENT_SIZEBAND_NAME == '5 to 9',
+    # EMPLOYMENT_SIZEBAND_NAME == '5 to 9',
+    # EMPLOYMENT_SIZEBAND_NAME == '500 to 999',
+    # EMPLOYMENT_SIZEBAND_NAME == '1000+',
+    COUNT > 0
+    )
+
+#How many per year? Need to check this against other SIC code levels.
+sizeband %>% 
+  group_by(DATE) %>% 
+  summarise(n())
+
+#TOp ones in most recent year
+top <- sizeband %>% 
+  # filter(DATE==2022, COUNT > 3000)#5 TO 9
+  filter(DATE==2022, COUNT > 15000)#0 TO 4
+
+#One year (to see all)
+ggplot(sizeband %>% filter(DATE == 2022),
+       aes(y = fct_reorder(INDUSTRY_NAME,COUNT), x = COUNT)
+       ) +
+  geom_bar(stat='identity') +
+  facet_wrap(~DATE)
+
+
+
+#All years (filtered down by count)
+ggplot(sizeband %>% filter(INDUSTRY_NAME %in% top$INDUSTRY_NAME),
+       aes(y = fct_reorder(INDUSTRY_NAME,COUNT), x = COUNT)
+       ) +
+  geom_bar(stat='identity') +
+  facet_wrap(~DATE)
 
 
 

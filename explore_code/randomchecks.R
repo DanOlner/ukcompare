@@ -145,10 +145,12 @@ e = 125
 
 
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#BUSINESS SIZE BAND CHECKS----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
-
-
+#For the larger counts, band size error bars are going to be negligible and the mean exactly the centre
+#But let's work it out where we've got places with small numbers? For some, we just won't know - but then the band range is just the min/max, we know that
 
 
 

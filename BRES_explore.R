@@ -837,6 +837,13 @@ gb <- gb %>%
 #Though not too small
 
 #Let's start with largest sectors in the earliest year
+#First, just for looking at...
+largestsectors <- gb %>% 
+  filter(DATE==2021) %>% 
+  arrange(percent) %>% 
+  select(INDUSTRY_NAME,percent) 
+
+
 largestsectors <- gb %>% 
   filter(DATE==2009) %>% 
   arrange(percent) %>% 

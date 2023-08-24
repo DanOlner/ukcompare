@@ -83,9 +83,6 @@ print(nomis_get_metadata(id = "NM_142_1", concept = "GEOGRAPHY", type = 'type'),
 #2015-2022 data - NUTS2 2013 geography. Scots mismatch with ITL2 possibly, but should match BRES data
 
 
-
-
-
 #Test reducing the query to get a year at a time rather than doing one geography at a time
 
 #Check variable names with random file

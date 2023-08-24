@@ -1,6 +1,9 @@
 #Random checks
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #rank of diffs different from rank of nominals?----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 x <- runif(100)
 y <- runif(100)
 
@@ -111,6 +114,36 @@ plot(log10(y))
 x <- 1:20
 y <- c(1/(21-x),x)
 plot(y)
+
+
+
+
+#~~~~~~~~~~~~~
+#LQ CHECKS----
+#~~~~~~~~~~~~~
+
+#Concentration and specialisation, same number in different form?
+#Via https://www.ons.gov.uk/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/locationquotientdataandindustrialspecialisationforlocalauthorities
+#1) E(ir) = number of employee jobs in industry i in region r
+#2) E(i) = total number of employee jobs in industry i for whole of GB (for example)
+#3) E(r) = total number of employee jobs in region r
+#4) E = total number of employee jobs in GB
+
+#Concentration:
+# (1 / 2) over (3 / 4)
+# Specialisation:
+#(1 / 3) over (2 / 4)
+
+eir = 4
+ei = 55
+er = 20
+e = 125
+
+#Yup, same number
+(eir/ei)/(er/e)
+(eir/er)/(ei/e)
+
+
 
 
 

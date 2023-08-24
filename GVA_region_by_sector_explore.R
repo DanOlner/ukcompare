@@ -49,6 +49,10 @@ table(itl2.geo$ITL221CD %in% itl2$`ITL region code`)
 #These are all categories with duplicate values in other rows (which takes some spotting, the colour coding is not very helpful!)
 #Note: "real estate activities" is a single category, but there are two subcats that break it down into
 #With and without imputed rental. So just need those two to avoid double counting.
+
+
+#WARNING: CURRENTLY ONLY CORRECT LIST TO REMOVE FOR ITL2
+#Each geog level has a different number of SIC categories in it 
 SICremoves = c(
   'Total',
   'A-E',
@@ -191,22 +195,26 @@ sectors.byavsize <- itl2.hl %>%
   summarise(av = mean(value), sectorname = max(`SIC07 description`)) %>% 
   arrange(-av)
 
-ggplot(
+p <- ggplot(
   itl2.hl %>% filter(
-    `ITL region name` %in% unique(itl2.hl$`ITL region name`)[1:5]
+    `ITL region name` %in% c(unique(sectors.byavsize$`ITL region name`)[1:9],'South Yorkshire','Greater Manchester')
     ),
-  aes(x = year, y = value, colour = `SIC07 code`, group = `SIC07 code`)
+  aes(x = year, y = value, colour = `SIC07 description`, group = `SIC07 code`)
 ) +
   geom_line() +
-  facet_wrap(~`ITL region name`) +
+  facet_wrap(~`ITL region name`, ncol = 2) +
   # scale_y_log10() +
   guides(colour = "none")
 
+
+ggplotly( p, tooltip = c('SIC07 description'))
 
 
 #PLOTLY VERSION
 #For hovering to easily see the sector names
 plot_ly(data = itl2.hl %>% filter(`ITL region name`=="South Yorkshire"), x = ~year, y = ~value, color = ~`SIC07 code`,
+# plot_ly(data = itl2.hl %>% filter(`ITL region name`=="South Yorkshire", `SIC07 description` == unique(itl2.hl$`SIC07 description`)[grepl('basic metal',unique(itl2.hl$`SIC07 description`))]), 
+        x = ~year, y = ~value, color = ~`SIC07 code`,
 # plot_ly(data = itl2.hl %>% filter(`ITL region name`=="Greater Manchester"), x = ~year, y = ~value, color = ~`SIC07 code`,
         text = ~paste("Sector:", `SIC07 description`),  # Add this line for hover text
         hoverinfo = 'text+y+x',
@@ -245,15 +253,13 @@ itl2.cp <- read_csv('data/sectors/Table 2c ITL2 UK current price estimates pound
 itl2.cp <- itl2.cp %>% filter(!`SIC07 code` %in% SICremoves) %>% 
   pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'value')
 
+#Check on just water and air transport, where the neg values are
+itl2.cp %>% filter(`SIC07 description` == "Water and air transport") %>% View
+
 #RANDOM NEGATIVE VALUES IN THERE
 #Looking, I think just typos given previous data
 #(And also makes no logical sense, so...)
 itl2.cp %>% filter(value < 0)
-
-#Check on just water and air transport, where the neg values are
-itl2.cp %>% filter(`SIC07 description` == "Water and air transport") %>% View
-
-#Hmm. Will come back to that.
 
 #check sums just for one year
 #that is, make sure kept single categories add up to the correct total
@@ -275,6 +281,10 @@ chk <- chk %>%
   left_join(chk2, by = "ITL region name") %>% 
   mutate(diff = originaltotal-mytotal)
 
+
+#https://www.ons.gov.uk/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/locationquotientdataandindustrialspecialisationforlocalauthorities
+#Notes there and more info in the publication from it
+#Explaining concentration and specialisation LQ being same number
 
 #https://www.economicmodeling.com/wp-content/uploads/2007/10/emsi_understandinglq.pdf
 #What do we need for yearly location quotients
@@ -298,10 +308,10 @@ itl2.cp <- itl2.cp %>%
   group_by(year) %>% 
   mutate(
     uk_totalsize = sum(value),#d. Summed current prices for WHOLE UK per year, for UK denominator
-    uk_regional_proportion = uk_sectorsize / uk_totalsize#e. UK-level sector proportion
+    sector_uk_proportion = uk_sectorsize / uk_totalsize#e. UK-level sector proportion
     ) %>% 
   mutate(
-    LQ = sector_regional_proportion / uk_regional_proportion#f. Location quotient!
+    LQ = sector_regional_proportion / sector_uk_proportion#f. Location quotient!
   )
   
 #Those regional values by themselves are going to be interesting:
@@ -340,27 +350,6 @@ ggplot(x %>% pivot_longer(min:max, names_to = 'minmax', values_to = 'value'),
   coord_cartesian(xlim = c(-25,25))
 
 
-
-#ORIGNAL:
-
-#Just check range and means. Means should be 1ish...
-#Testing +1 and log
-#+1 to get rid of <0 values
-#Why? Because the values are otherwise asymmetrical either side of 1
-x <- itl2.cp %>% 
-  filter(year==2021) %>% 
-  mutate(LQplusone_log = log(LQ + 1)) %>% 
-  group_by(`SIC07 description`) %>% 
-  summarise(
-    mean = mean(LQ), min = min(LQ), max = max(LQ),
-    mean_log = mean(LQplusone_log), min_log = min(LQplusone_log), max_log = max(LQplusone_log)
-    ) 
-
-#We do have a reasonable spread there. Would quite like to see.
-ggplot(x %>% pivot_longer(min:max, names_to = 'minmax', values_to = 'value'), 
-       aes(y = `SIC07 description`, x = value, colour = minmax)) +
-  geom_point() + 
-  coord_cartesian(xlim = c(-25,25))
 
 #SAME
 
@@ -532,13 +521,68 @@ plot_ly(data = sy, x = ~year, y = ~LQ, color = ~`SIC07 code`,
         type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
   layout(title = "Yearly values by SIC", 
          xaxis = list(title = "Year"), 
+         yaxis = list(title = "Value", type='log'),
+         # yaxis = list(title = "Value"),
+         showlegend = TRUE)
+
+#Sector regional proportion change by itself?
+plot_ly(data = sy, x = ~year, y = ~sector_regional_proportion, color = ~`SIC07 code`,
+# plot_ly(data = sy, x = ~year, y = ~movingav, color = ~`SIC07 code`,
+        text = ~paste("Sector:", `SIC07 description`),  # Add this line for hover text
+        hoverinfo = 'text+y+x',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly values by SIC", 
+         xaxis = list(title = "Year"), 
          # yaxis = list(title = "Value", type='log'),
          yaxis = list(title = "Value"),
          showlegend = TRUE)
+ 
 
 
 
-#Location quotient vs proportion in the region (already calculated) seems obvious...
+#That last one shows SY basic metals having a slow decline then massive jump
+#How did it change proprortionally across places?
+onesectorallplaces <- itl2.cp %>% filter(`SIC07 description` == unique(itl2.hl$`SIC07 description`)[grepl('basic metal',unique(itl2.hl$`SIC07 description`))]) %>% ungroup() 
+onesectorallplaces <- itl2.cp %>% filter(`SIC07 description` == unique(itl2.hl$`SIC07 description`)[grepl('Owner-occupiers',unique(itl2.hl$`SIC07 description`))]) %>% ungroup() 
+
+#MOVING AVERAGE
+#https://stackoverflow.com/questions/26198551/rolling-mean-moving-average-by-group-id-with-dplyr
+onesectorallplaces <- onesectorallplaces %>% 
+  group_by(`ITL region code`) %>% 
+  mutate(
+    movingav = rollapply(LQ,5,mean,align='right',fill=NA),
+    movingav_regionalprop = rollapply(sector_regional_proportion,5,mean,align='right',fill=NA)
+    ) %>% 
+  ungroup()
+
+plot_ly(data = onesectorallplaces, x = ~year, y = ~movingav, color = ~`ITL region code`,
+# plot_ly(data = onesectorallplaces, x = ~year, y = ~LQ, color = ~`ITL region code`,
+        text = ~paste(`ITL region name`),  # Add this line for hover text
+        hoverinfo = 'text+y+x',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly values by SIC", 
+         xaxis = list(title = "Year"), 
+         yaxis = list(title = "Value", type='log'),
+         # yaxis = list(title = "Value"),
+         showlegend = F)
+
+
+#Actual proportion of that sector in the different places over time?
+plot_ly(data = onesectorallplaces, x = ~year, y = ~movingav_regionalprop, color = ~`ITL region code`,
+        # plot_ly(data = onesectorallplaces, x = ~year, y = ~LQ, color = ~`ITL region code`,
+        text = ~paste(`ITL region name`),  # Add this line for hover text
+        hoverinfo = 'text+y+x',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly values by SIC", 
+         xaxis = list(title = "Year"), 
+         # yaxis = list(title = "Value", type='log'),
+         yaxis = list(title = "Value"),
+         showlegend = F)
+
+
+
+
+#Location quotient vs proportion in the region (already calculated) seems obvious, though note issues with LQ maths
 # plot_ly(data = sy %>% filter(DATE==2015), x = ~LQ, y = ~sector_regional_proportion, color = ~INDUSTRY_NAME,
 plot_ly(data = sy %>% filter(year==2021), x = ~LQ, y = ~sector_regional_proportion,
         text = ~paste("Sector:", `SIC07 description`, "\npercent: ", sector_regional_proportion * 100, "\nvalue: ", value),  # Add this line for hover text
@@ -560,115 +604,6 @@ plot_ly(data = sy %>% filter(year==2021), x = ~LQ, y = ~sector_regional_proporti
     inherit = FALSE,
     showlegend = FALSE
   )
-
-
-
-#Version comparing more than one place. Can we link related points?
-x <- itl2.cp %>% filter(`ITL region name` %in% c('South Yorkshire','Greater Manchester')) %>% ungroup() %>% 
-  filter(`SIC07 description`!='Water and air transport') 
-x <- itl2.cp %>% filter(`ITL region name` %in% c('Leicestershire, Rutland and Northamptonshire','Greater Manchester')) %>% ungroup() %>% 
-  filter(`SIC07 description`!='Water and air transport') 
-# %>% #negative values
-#   group_by(`SIC07 description`)
-
-plot_ly(data = x %>% filter(year==2021), x = ~LQ, y = ~sector_regional_proportion, color = ~`SIC07 description`, split =~`SIC07 description`,
-        # symbol =~`ITL region name`,
-        text = ~paste("Place: ",`ITL region name`,"\nSector:", `SIC07 description`, "\npercent: ", sector_regional_proportion * 100, "\nvalue: ", value),  # Add this line for hover text
-        hoverinfo = 'text+y+x',
-        type = 'scatter',
-        mode = 'lines+markers', line = list(shape = 'linear')) %>%
-  layout(title = "Yearly values by SIC", 
-         xaxis = list(title = "LQ"),
-         # xaxis = list(title = "LQ", type = 'log'),
-         yaxis = list(title = "Region proportion"),
-         # yaxis = list(title = "Region proportion", type = 'log'),
-         showlegend = F) %>% 
-  add_lines(
-    y = range(sy$sector_regional_proportion),
-    x = 1,
-    line = list(
-      color = "grey"
-    ),
-    inherit = FALSE,
-    showlegend = FALSE
-  )
-
-
-
-
-
-
-
-
-p <- plot_ly(data = x, 
-             x = ~LQ, y = ~sector_regional_proportion, color = ~`ITL region name`,
-             type = 'scatter', 
-             mode = 'markers',
-             marker = list(size = 10)) %>%
-  layout(showlegend = T)
-
-# Add lines connecting corresponding points between Group A and Group B
-for(i in 1:(nrow(x) / 2)) {
-  # Subset data for the two groups of the current row
-  subset_df <- df[df$id == i, ]
-  
-  p <- p %>%
-    add_trace(
-      x = subset_df$variable1,
-      y = subset_df$variable2,
-      type = 'scatter',
-      mode = 'lines',
-      line = list(color = 'grey', width = 2),
-      showlegend = F
-    )
-}
-
-
-
-
-
-# Sample data
-df <- data.frame(
-  id = 1:4,  # to uniquely identify rows/observations
-  group = c(rep("A", 2), rep("B", 2)),
-  variable1 = c(5, 7, 8, 6),
-  variable2 = c(6, 8, 7, 9)
-)
-
-p <- plot_ly(data = df, 
-             x = ~variable1, 
-             y = ~variable2, 
-             color = ~factor(group),
-             type = 'scatter', 
-             mode = 'markers',
-             marker = list(size = 10)) %>%
-  layout(showlegend = T)
-
-# Add lines connecting corresponding points between Group A and Group B
-for(i in 1:(nrow(df) / 2)) {
-  # Subset data for the two groups of the current row
-  subset_df <- df[df$id == i, ]
-  
-  p <- p %>%
-    add_trace(
-      x = subset_df$variable1,
-      y = subset_df$variable2,
-      type = 'scatter',
-      mode = 'lines',
-      line = list(color = 'grey', width = 2),
-      showlegend = F
-    )
-}
-
-p
-
-
-
-
-
-
-
-
 
 
 

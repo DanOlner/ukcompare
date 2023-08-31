@@ -244,6 +244,34 @@ plot_ly(data = itl2.hl %>% filter(`ITL region name`=="South Yorkshire"), x = ~ye
 #LOCATION QUOTIENTS FOR GVA CURRENT PRICES, ITL2----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+#ITL2 SIC removes (different for GB-level data from the same excel doc)
+SICremoves = c(
+  'Total',
+  'A-E',
+  'A (1-3)',
+  'C (10-33)',
+  'CA (10-12)',
+  'CB (13-15)',
+  'CC (16-18)',
+  'CG (22-23)',
+  'CH (24-25)',
+  'CL (29-30)',
+  'CM (31-33)',
+  'F (41-43)',
+  'G-T',
+  'G (45-47)',
+  'H (49-53)',
+  'I (55-56)',
+  'J (58-63)',
+  'K (64-66)',
+  'L (68)',#real estate activities - leaves in "Real estate activities, excluding imputed rental" & "Owner-occupiers' imputed rental" as separate categories
+  'M (69-75)',
+  'N (77-82)',
+  'Q (86-88)',
+  'R (90-93)',
+  'S (94-96)'
+)
+
 #Using 'current prices' - LQs are purely proportional at single time points
 #So across-time comparisons only matter for the proportions, not the nominal values
 #Given that - the GVA current price values actually sum correctly across industries and within regions (unlike volume-chained)
@@ -409,14 +437,10 @@ ggplot(minmaxes_plus_sy,
 #Rather than minmax, let's do a full spread and place SY in that context
 #I should make numbers for other places too for comparison
 itl2.cp <- itl2.cp %>% 
-  mutate(LQplusone_log = log(LQ + 1)) 
-
-
-
+  mutate(LQ_log = log(LQ)) 
 
 #View for 2021. Can just flag one we want to overlay?
 #Something odd with water and air transport, remove until work out what
-
 place = 'South Yorkshire'
 
 x <- itl2.cp %>% filter(year == 2021, `SIC07 description` != 'Water and air transport') %>% mutate(flaggedplace = `ITL region name`==place)
@@ -425,22 +449,22 @@ x <- itl2.cp %>% filter(year == 2021, `SIC07 description` != 'Water and air tran
 x$`SIC07 description` <- factor(x$`SIC07 description`)
 x$`SIC07 description` <- fct_relevel(
   x$`SIC07 description`, 
-  unique(as.character(x$`SIC07 description`))[order(x %>% filter(`ITL region name`==place) %>%ungroup() %>% select(LQplusone_log) %>% pull(),decreasing = T)]
+  unique(as.character(x$`SIC07 description`))[order(x %>% filter(`ITL region name`==place) %>%ungroup() %>% select(LQ_log) %>% pull(),decreasing = T)]
   )
 
 #Actually, keep that order and use for animation below
-ordertouse <- unique(as.character(x$`SIC07 description`))[order(x %>% filter(`ITL region name`==place) %>%ungroup() %>% select(LQplusone_log) %>% pull(),decreasing = T)]
+ordertouse <- unique(as.character(x$`SIC07 description`))[order(x %>% filter(`ITL region name`==place) %>%ungroup() %>% select(LQ_log) %>% pull(),decreasing = T)]
 
 
 ggplot(
   x, 
-  aes(y = `SIC07 description`, x = LQplusone_log, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace)
+  aes(y = `SIC07 description`, x = LQ_log, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace)
   ) +
   geom_point() +
   scale_size_manual(values = c(2,4)) +
   scale_alpha_manual(values = c(0.2,1)) +
   scale_colour_manual(values = c('black','red')) +
-  geom_vline(xintercept = log(2), colour = 'blue') 
+  geom_vline(xintercept = 0, colour = 'blue') 
   # scale_shape_manual(values = c(16,24))
 
 #test save size for animation... yep, good

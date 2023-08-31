@@ -191,6 +191,7 @@ gsub('(?<![0-9])/(?![0-9])', '_', "Bath/Bristol", perl=TRUE)
 
 #REPEAT GETTING YEARLY IN ONE GO
 years = c(2016:2022)
+years = c(2016:2021)
 
 #ENTERPRISE LEVEL
 download_all_BUSINESSCOUNT_ENTERPRISE <- function(year){
@@ -225,7 +226,7 @@ download_all_BUSINESSCOUNT_ENTERPRISE <- function(year){
 lapply(years, function(x) download_all_BUSINESSCOUNT_ENTERPRISE(x))
 
 
-#ENTERPRISE LEVEL
+#LOCAL UNIT LEVEL
 download_all_BUSINESSCOUNT_LOCALUNITS <- function(year){
   
   cat('Downloading year ',year,'\n')
@@ -267,6 +268,7 @@ lapply(years, function(x) download_all_BUSINESSCOUNT_LOCALUNITS(x))
 
 #Will need reducing a lot to be manageable. What are we after? Look at one to pick out
 x <- readRDS('local/data/BusinessCountsByNUTS2/BUSINESSCOUNT_ENTERPRISE_NUTS2_2020.rds')
+#x <- readRDS('local/data/BusinessCountsByNUTS2/BUSINESSCOUNT_LOCALUNITS_GB_2016.rds')
 
 unique(x$EMPLOYMENT_SIZEBAND_NAME)
 #There are overlapping categories. We may want to keep these at some later time, but let's look at the highest resolution first
@@ -328,7 +330,7 @@ bc <- list.files(path = "local/data/BusinessCountsByNUTS2/", pattern = "ENTERPRI
 bc$INDUSTRY_NAME <- iconv(bc$INDUSTRY_NAME, "UTF-8", "UTF-8",sub='')
 
 #Save!
-saveRDS(bc, 'data/sectors/ITL2_BUSINESSCOUNTS_9CATSIZEBAND_LEGALSTATUSALL_INDUSTRYTYPE5DIGIT_16to21.rds')
+saveRDS(bc, 'data/sectors/ITL2_BUSINESSCOUNTS_ENTERPRISE_9CATSIZEBAND_LEGALSTATUSALL_INDUSTRYTYPE5DIGIT_16to21.rds')
 
 
 
@@ -433,6 +435,8 @@ saveRDS(gb, 'data/sectors/GB_BUSINESSCOUNTS_ENTERPRISE_9CATSIZEBAND_LEGALSTATUSA
 
 gb <- readRDS('data/sectors/GB_BUSINESSCOUNTS_ENTERPRISE_9CATSIZEBAND_LEGALSTATUSALL_INDUSTRYTYPE5DIGIT_16to21.rds')
 
+#NOTE, SOME OF THESE ODDITIES DUE TO DOWNLOAD ERROR GETTING JUST 2022 NOT ALL YEARS
+
 #Some oddities here immediately:
 #I know there's some nuclear fuel processing goes on. So why is that zero?
 counts <- gb %>%
@@ -466,23 +470,24 @@ gb %>% filter(grepl('cement',INDUSTRY_NAME), DATE==2022) %>% View
 #Let's just look at one grouping, to look for change
 sizeband <- gb %>% 
   filter(
-    EMPLOYMENT_SIZEBAND_NAME == '0 to 4',
+    # EMPLOYMENT_SIZEBAND_NAME == '0 to 4',
     # EMPLOYMENT_SIZEBAND_NAME == '5 to 9',
     # EMPLOYMENT_SIZEBAND_NAME == '5 to 9',
-    # EMPLOYMENT_SIZEBAND_NAME == '500 to 999',
+    EMPLOYMENT_SIZEBAND_NAME == '500 to 999',
     # EMPLOYMENT_SIZEBAND_NAME == '1000+',
-    COUNT > 0
+    COUNT > 20
     )
 
-#How many per year? Need to check this against other SIC code levels.
+#How many SIC sectors per year? Need to check this against other SIC code levels.
 sizeband %>% 
   group_by(DATE) %>% 
   summarise(n())
 
 #TOp ones in most recent year
 top <- sizeband %>% 
+  filter(DATE==2022, COUNT > 3000)#500 to 999
   # filter(DATE==2022, COUNT > 3000)#5 TO 9
-  filter(DATE==2022, COUNT > 15000)#0 TO 4
+  # filter(DATE==2022, COUNT > 15000)#0 TO 4
 
 #One year (to see all)
 ggplot(sizeband %>% filter(DATE == 2022),
@@ -494,11 +499,14 @@ ggplot(sizeband %>% filter(DATE == 2022),
 
 
 #All years (filtered down by count)
-ggplot(sizeband %>% filter(INDUSTRY_NAME %in% top$INDUSTRY_NAME),
+# ggplot(sizeband %>% filter(INDUSTRY_NAME %in% top$INDUSTRY_NAME),
+ggplot(sizeband,
        aes(y = fct_reorder(INDUSTRY_NAME,COUNT), x = COUNT)
        ) +
   geom_bar(stat='identity') +
   facet_wrap(~DATE)
+
+
 
 
 

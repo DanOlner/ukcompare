@@ -419,7 +419,7 @@ saveRDS(itl2, 'data/sectors/ITL2_fulltimeemployeecountandpercent5digitSIC_BRESop
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#ITL2 LOCATION QUOTIENTS----
+#ITL2 LOCATION QUOTIENTS PLUS OTHER ADDITIONS TO THE DF----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 itl2 <- readRDS('data/sectors/ITL2_fulltimeemployeecountandpercent5digitSIC_BRESopen15to21.rds')
@@ -486,9 +486,28 @@ table(unique(gb.chk$INDUSTRY_NAME) %in% unique(chk$INDUSTRY_NAME))
 itl2.lq <- itl2.lq %>% 
   filter(!INDUSTRY_NAME %in% chk$INDUSTRY_NAME)
 
+#Add log column
+itl2.lq <- itl2.lq %>% 
+  mutate(LQ_log = log(LQ)) %>% 
+  mutate(LQ_log = ifelse(is.infinite(LQ_log),NA,LQ_log))#NA removed from plots, but also removable from other calcs
 
 
+#Add in 2 and 3 digit SIC lookups
+#Other ways to cluster 5 digit possibly available based on LQ
+#(Lookup made below)
+SIClookup <- read_csv('data/SIClookup.csv')
+
+itl2.lq <- itl2.lq %>% 
+  left_join(SIClookup %>% select(-SIC_5DIGIT_NAME), by = c('INDUSTRY_CODE' = 'SIC_5DIGIT_CODE'))
+
+
+#SAVE!
+saveRDS(itl2.lq,'data/BRESopen_fulltimeemployees_ITL2_plusSIClookup.rds')
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #TEST LOCATION QUOTIENT CALC----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #Make 100% sure it's doing what I want
 #First, stare at one year
@@ -501,9 +520,9 @@ yr <- itl2.lq %>% filter(DATE==2021, grepl('basic iron',INDUSTRY_NAME))
 placetolook <- itl2.lq %>% filter(DATE==2021, grepl('South Yorkshire',GEOGRAPHY_NAME))
 
 p <- ggplot(placetolook %>% filter(INDUSTRY_NAME %in% placetolook$INDUSTRY_NAME[placetolook$LQ > 2]), 
-            aes(x = LQ, y = fct_reorder(INDUSTRY_NAME,LQ), colour = INDUSTRY_NAME)) +
+            aes(x = LQ, y = fct_reorder(INDUSTRY_NAME,LQ), fill = INDUSTRY_NAME)) +
   geom_bar(stat = 'identity') +
-  guides(colour = F) +
+  guides(fill = F) +
   theme(axis.text.y=element_blank(), #remove x axis labels
         axis.ticks.y=element_blank())
 
@@ -517,10 +536,10 @@ ggplotly(p, tooltip = c("INDUSTRY_NAME" ))
 industrytolook <- itl2.lq %>% filter(DATE==2021, grepl('cutlery',INDUSTRY_NAME))
 industrytolook <- itl2.lq %>% filter(DATE==2021, grepl('basic iron',INDUSTRY_NAME))
 
-p <- ggplot(industrytolook %>% filter(INDUSTRY_NAME %in% industrytolook$INDUSTRY_NAME[industrytolook$LQ > 2]), 
-            aes(x = LQ, y = fct_reorder(GEOGRAPHY_NAME,LQ), colour = GEOGRAPHY_NAME)) +
+p <- ggplot(industrytolook %>% filter(INDUSTRY_NAME %in% industrytolook$INDUSTRY_NAME[industrytolook$LQ > 1]), 
+            aes(x = LQ, y = fct_reorder(GEOGRAPHY_NAME,LQ), fill = GEOGRAPHY_NAME)) +
   geom_bar(stat = 'identity') +
-  guides(colour = F) +
+  guides(fill = F) +
   theme(axis.text.y=element_blank(), #remove x axis labels
         axis.ticks.y=element_blank())
 
@@ -528,26 +547,243 @@ ggplotly(p, tooltip = c("GEOGRAPHY_NAME" ))
 
 
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#BRES LQ: QUICK CHANGE OVER TIME LOOK----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-##INITIAL LOOK AT BRES LQ----
-
-#Test: get 2 and 3 digit SICs, use to colour clusters, see if those are the clusters that matter
-#Other ways to cluster 5 digit possibly available based on LQ
-#(Lookup made below)
-SIClookup <- read_csv('data/SIClookup.csv')
-
-itl2.lq <- itl2.lq %>% 
-  left_join(SIClookup %>% select(-SIC_5DIGIT_NAME), by = c('INDUSTRY_CODE' = 'SIC_5DIGIT_CODE'))
+#Reload if nec
+itl2.lq <- readRDS('data/BRESopen_fulltimeemployees_ITL2_plusSIClookup.rds')
 
 
-itl2.lq <- itl2.lq %>% mutate(LQ_log = log(LQ)) 
+#Test change over time calcs on a single place
+sy <- itl2.lq %>% filter(GEOGRAPHY_NAME=='South Yorkshire')
+
+diffchange <- sy %>%
+  group_by(INDUSTRY_NAME) %>%
+  mutate(logdiff = LQ_log - lag(LQ_log)) %>%
+  summarise(difftotal = sum(logdiff,na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(group = as.integer(cut_number(difftotal,8)))
+
+#8 is max cust number...??
+
+table(diffchange$difftotal)
+
+#Is the issue all the zeroes?
+#Yup.
+diffchange <- sy %>%
+  group_by(INDUSTRY_NAME) %>%
+  mutate(logdiff = LQ_log - lag(LQ_log)) %>%
+  summarise(difftotal = sum(logdiff,na.rm = T)) %>% 
+  ungroup() %>% 
+  filter(difftotal != 0) %>% 
+  mutate(group = as.integer(cut_number(difftotal,21)))
+
+
+#There's a tiny chance sectors with zero did sum to that over time
+#But it's more likely those ones were zero for all values and so not much use
+#Prob the agri ones, right?
+chk <- sy %>%
+  group_by(INDUSTRY_NAME) %>%
+  mutate(logdiff = LQ_log - lag(LQ_log)) %>%
+  summarise(difftotal = sum(logdiff,na.rm = T)) %>% 
+  filter(difftotal==0)
+
+chk.sy <- sy %>% 
+  filter(
+    INDUSTRY_NAME %in% chk$INDUSTRY_NAME
+  )
+
+#Not all are zero throughout
+sy %>% 
+  filter(grepl('Mining of hard coal from deep',INDUSTRY_NAME)) %>% View
+
+#Pick one with some small numbers in and work out how diffsum ends up at zero despite values there
+checkdiff <- sy %>% 
+  filter(INDUSTRY_NAME=='17120 : Manufacture of paper and paperboard')
+
+#OK - I think it's that diff between time points is going to be returning zeroes
+#Because no two adjadcent timepoints have differing values
+#There may still be values in there
+#But these are all for sectors where largely the work pop is zero anyway
+#So I don't think filtering out is an issue
+
+#E.g. these are the ones with the two highest values
+sy %>% filter(grepl('Mining of hard coal from deep',INDUSTRY_NAME)) %>% View
+sy %>% filter(grepl('Mining of hard coal from open',INDUSTRY_NAME)) %>% View
+sy %>% filter(grepl('credit bureaus',INDUSTRY_NAME)) %>% View
+
+
+
+#Note, LQs are all relative, so change over time here is relative to GB as a whole
+#But let's see how things change over time for a few places
+#Cf. change over time for GB as a whole, below
+
+#Break down by largest change over time per sector per place per year
+#Can order by place for plotting before comparing
+#Leave out DATE from group - we're summing across all dates
+
+#Get a "change over time" set of groups, 21 so there's a middle grouping
+diffchange <- itl2.lq %>%
+  group_by(INDUSTRY_NAME,GEOGRAPHY_NAME) %>%
+  arrange(DATE) %>% 
+  mutate(logdiff = LQ_log - lag(LQ_log)) %>%
+  summarise(difftotal = sum(logdiff,na.rm = T)) %>% 
+  filter(difftotal != 0) %>% #See above
+  group_by(GEOGRAPHY_NAME) %>% 
+  mutate(group = as.integer(cut_number(difftotal,31))) %>% 
+  ungroup()
+
+
+
+
+#TEST WITH SD + OLS APPROACH
+#Use SD to get overall volatility.
+#Use OLS to get polarity of change.
+#Combine... does it do any better at categorising into change groups?
+
+#Create a function that fits lm and returns slope
+get_slope <- function(data) {
+  model <- lm(LQ_log ~ DATE, data = data, na.action = na.omit)
+  coef(model)[2]
+}
+
+#Make it a safe function using purrr::possibly
+safe_get_slope <- purrr::possibly(get_slope, otherwise = 0)
+
+l <- itl2.lq %>%
+  group_by(GEOGRAPHY_NAME, INDUSTRY_NAME) %>%
+  nest() %>%
+  mutate(slope = map_dbl(data, safe_get_slope)) %>%
+  select(-data) %>% 
+  mutate(slope = ifelse(is.na(slope),0,slope))
+
+
+#Find sds also
+sds <- itl2.lq %>%
+  group_by(GEOGRAPHY_NAME,INDUSTRY_NAME) %>%
+  summarise(sd = sd(LQ_log, na.rm=T)) %>%
+  ungroup() %>% 
+  mutate(sd = ifelse(is.na(sd),0,sd))
+
+
+#Next - use slope just to set polarity of SD, so can break down in viz into growing/shrinking
+#Call diffchange to keep changes below to a minimum
+diffchange <- l %>% 
+  left_join(
+    sds,
+    by = c('INDUSTRY_NAME','GEOGRAPHY_NAME')) %>% 
+  mutate(sd_w_polarity = ifelse(slope >= 0, sd, sd * -1)) %>% 
+  filter(sd_w_polarity != 0) %>% 
+  group_by(GEOGRAPHY_NAME) %>% 
+  mutate(group = as.integer(cut_number(sd_w_polarity,31))) %>% 
+  ungroup()
+
+
+
+#Or just using OLS directly...
+diffchange <- l %>% 
+  filter(slope!=0) %>% 
+  group_by(GEOGRAPHY_NAME) %>% 
+  mutate(group = as.integer(cut_number(slope,31))) %>% 
+  ungroup() %>% 
+  rename(difftotal = slope)
+
+
+
+
+#Check single place built in
+#For viewing to check
+# diffchange <- itl2.lq %>%
+#   filter(GEOGRAPHY_NAME==place) %>% 
+#   group_by(INDUSTRY_NAME) %>%
+#   arrange(DATE) %>% 
+#   mutate(logdiff = LQ_log - lag(LQ_log)) %>%
+#   mutate(difftotal = sum(logdiff,na.rm = T))
+
+
+# diffchange <- itl2.lq %>%
+#   filter(GEOGRAPHY_NAME==place) %>% 
+#   group_by(INDUSTRY_NAME) %>%
+#   arrange(DATE) %>% 
+#   mutate(logdiff = LQ_log - lag(LQ_log)) %>%
+#   summarise(difftotal = sum(logdiff,na.rm = T)) %>% 
+#   filter(difftotal != 0) %>% 
+#   mutate(group = as.integer(cut_number(difftotal,21))) %>% 
+#   ungroup()
+
+#pick a place
+place = 'South Yorkshire'
+place = 'Greater Manchester'
+
+#climbers
+industries = diffchange %>% filter(GEOGRAPHY_NAME == place, group %in% c(31)) %>% select(INDUSTRY_NAME) %>% pull()
+#droppers
+industries = diffchange %>% filter(GEOGRAPHY_NAME == place, group %in% c(1)) %>% select(INDUSTRY_NAME) %>% pull()
+#middle
+industries = diffchange %>% filter(GEOGRAPHY_NAME == place, group %in% c(16)) %>% select(INDUSTRY_NAME) %>% pull()
+
+x <- itl2.lq %>% filter(GEOGRAPHY_NAME == place, INDUSTRY_NAME %in% industries) 
+
+
+
+y <- x %>% 
+  group_by(INDUSTRY_NAME) %>% 
+  arrange(DATE) %>% 
+  mutate(
+    LQ = ifelse(LQ == 0, NA, LQ),#Set to NA so plotly won't show
+    movingav = rollapply(LQ,3,mean,align='right',fill=NA)
+    # LQ_movingav = rollapply(LQ,3,mean,align='right',fill=NA),0)#Have a count moving average too, so it matches the percent (so count orders are correct vertically)
+  )
+
+plot_ly(data = y, x = ~DATE, y = ~movingav, color = ~INDUSTRY_NAME, 
+        text = ~paste("Sector:", INDUSTRY_NAME, "\nPEOPLE: ",COUNT),  # Add this line for hover text
+        hoverinfo = 'text',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly percents by SIC", 
+         xaxis = list(title = "Year"), 
+         yaxis = list(title = "Value", type='log'),
+         # yaxis = list(title = "Value"),
+         showlegend = F)
+
+plot_ly(data = x %>% ungroup() %>% filter(LQ!=0), x = ~DATE, y = ~LQ, color = ~INDUSTRY_NAME, 
+        text = ~paste("Sector:", INDUSTRY_NAME, "\nPEOPLE: ",COUNT),  # Add this line for hover text
+        hoverinfo = 'text',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly percents by SIC", 
+         # xaxis = list(title = "Year"), 
+         yaxis = list(title = "Value", type='log'),
+         # yaxis = list(title = "Value"),
+         showlegend = F)
+
+
+#Does ggplot do any better with that last one? Hmm it's just zero values... 
+ggplot(x %>% filter(LQ!=0),aes(x = DATE, y = LQ, colour = INDUSTRY_NAME)) +
+  geom_point() +
+  geom_line() +
+  scale_y_log10()
+
+
+#Just looking at some of those...
+x %>% filter(grepl('Farm animal boarding', INDUSTRY_NAME)) %>% View
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#BRES LQ: LOOKING AT 5-DIGIT SECTOR BY 2-DIGIT SECTOR----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
 
 #View for 2021. Can just flag one we want to overlay?
 #Something odd with water and air transport, remove until work out what
 place = 'South Yorkshire'
 
-x <- itl2.lq %>% filter(DATE == 2015) %>% mutate(flaggedplace = GEOGRAPHY_NAME==place)
-x <- itl2.lq %>% filter(DATE == 2021) %>% mutate(flaggedplace = GEOGRAPHY_NAME==place)
+# x <- itl2.lq %>% filter(DATE == 2015) %>% mutate(flaggedplace = GEOGRAPHY_NAME==place)
+# x <- itl2.lq %>% filter(DATE == 2021) %>% mutate(flaggedplace = GEOGRAPHY_NAME==place)
+
+#Attempt to get drawing order working below
+x <- itl2.lq %>% filter(DATE == 2021) %>% mutate(flaggedplace = ifelse(GEOGRAPHY_NAME==place, 'A', 'B'))
 
 #Ordering by the flagged place, bit awkward
 x$INDUSTRY_NAME <- factor(x$INDUSTRY_NAME)
@@ -565,7 +801,7 @@ x$INDUSTRY_NAME <- fct_relevel(
 
 #List of sectors where LQ = certain value for the named place
 # sectors.to.view <- x %>% ungroup() %>% filter(flaggedplace == T, LQplusone_log == 0) %>% select(INDUSTRY_NAME) %>% pull() %>% as.character()
-sectors.to.view <- x %>% ungroup() %>% filter(flaggedplace == T, LQ > 2) %>% select(INDUSTRY_NAME) %>% pull() %>% as.character()
+sectors.to.view <- x %>% ungroup() %>% filter(GEOGRAPHY_NAME == place, LQ > 2) %>% select(INDUSTRY_NAME) %>% pull() %>% as.character()
 
 
 #Group 2 digit SICs by average 5-digit LQ
@@ -578,13 +814,15 @@ x <- x %>%
   group_by(DATE, GEOGRAPHY_NAME) %>% 
 mutate(
     RANK_av_LQ_2digitSIC = rank(av_LQ_2digitSIC)
-    )
+    ) 
+# %>% 
+#   mutate(flaggedplace = factor(flaggedplace, levels = c(T,F)))
 
 #Quite small number for each place / year
 unique(x$RANK_av_LQ_2digitSIC)[order(unique(x$RANK_av_LQ_2digitSIC))]
 
 #Really though?
-unique(x %>% filter(GEOGRAPHY_NAME=="South Yorkshire",DATE==2021) %>% select(av_LQ_2digitSIC) %>% arrange() %>% pull())
+unique(x %>% filter(GEOGRAPHY_NAME==place,DATE==2021) %>% select(av_LQ_2digitSIC) %>% arrange() %>% pull())
 
 
 ggplot(
@@ -596,17 +834,603 @@ ggplot(
 ) +
   geom_point() +
   scale_x_continuous(trans = "log10") +
-  scale_size_manual(values = c(2,4)) +
-  scale_alpha_manual(values = c(0.2,1)) +
-  scale_colour_manual(values = c('black','red')) +
+  scale_size_manual(values = c(2,1)) +
+  scale_alpha_manual(values = c(1,0.1)) +
+  scale_shape_manual(values = c(17,16)) +
+  scale_colour_manual(values = c('red','black')) +
   geom_vline(xintercept = 1, colour = 'blue') +
-  facet_wrap(~SIC_2DIGIT_NAME,ncol = 8) +
+  facet_wrap(~SIC_2DIGIT_NAME,ncol = 8, scales = 'free_y') +
   theme(axis.text.y=element_blank(), #remove x axis labels
         axis.ticks.y=element_blank())
 
 
-unique(itl2.lq$GEOGRAPHY_NAME)
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#ADD IN INDICATION OF 5-DIGIT SIC TREND ONTO LQ PLOTS----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#LOOK AT SOME OF THOSE CLOSER UP
+#Do manually to get order right? How annoying it doesn't work automatically
+sector2digit_grepl <- 'Manufacture of fabricated metal products, except machinery and equipment'
+sector2digit_grepl <- 'basic metals'
+sector2digit_grepl <- 'non-metallic'
+sector2digit_grepl <- 'Manufacture of machinery and equipment n.e.c.'
+sector2digit_grepl <- 'Wholesale trade'
+sector2digit_grepl <- 'food products'
+sector2digit_grepl <- 'wearing apparel'
+sector2digit_grepl <- 'recorded media'
+sector2digit_grepl <- 'Manufacture of chemicals'
+sector2digit_grepl <- 'rubber and plastic'
+sector2digit_grepl <- 'Manufacture of electrical equipment'
+sector2digit_grepl <- 'Repair of computers'
+
+#Check is single sector
+x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME)) %>% select(SIC_2DIGIT_NAME) %>% pull() %>% unique()
+
+
+#Use diff change to mark change in LQ over the whole period, indicate growth
+
+#Pick a diff change from above, don't use this one. Testing OLS.
+
+# diffchange <- itl2.lq %>%
+#   group_by(INDUSTRY_NAME,GEOGRAPHY_NAME) %>%
+#   arrange(DATE) %>% 
+#   mutate(logdiff = LQ_log - lag(LQ_log)) %>%
+#   summarise(difftotal = sum(logdiff,na.rm = T)) %>% 
+#   filter(difftotal != 0) %>% #See above
+#   group_by(GEOGRAPHY_NAME) %>% 
+#   mutate(group = as.integer(cut_number(difftotal,31))) %>% 
+#   ungroup()
+
+
+x <- x %>% 
+  left_join(
+    diffchange %>% select(-group),
+    by = c('INDUSTRY_NAME','GEOGRAPHY_NAME')
+  )
+
+#Redo factor, gets lost in join
+x$INDUSTRY_NAME <- factor(x$INDUSTRY_NAME)
+x$INDUSTRY_NAME <- fct_relevel(
+  x$INDUSTRY_NAME, 
+  unique(as.character(x$INDUSTRY_NAME))[order(x %>% filter(GEOGRAPHY_NAME==place) %>%ungroup() %>% select(LQ) %>% pull(),decreasing = T)]
+)
+
+
+#reduce sector name lengths
+x <- x %>% mutate(INDUSTRY_NAME_REDUCED = substr(INDUSTRY_NAME,1,70))
+x$INDUSTRY_NAME_REDUCED <- factor(x$INDUSTRY_NAME_REDUCED)
+x$INDUSTRY_NAME_REDUCED <- fct_relevel(
+  x$INDUSTRY_NAME_REDUCED, 
+  unique(as.character(x$INDUSTRY_NAME_REDUCED))[order(x %>% filter(GEOGRAPHY_NAME==place) %>%ungroup() %>% select(LQ) %>% pull(),decreasing = T)]
+)
+
+
+
+#NOTE: REGIONAL PROPORTION OF JOBS WILL GO UP LEFT TO RIGHT, LARGEST ON RIGHT. DON'T NEED TO PLOT THAT, IT'S LINEAR FOR SPECIFIC SECTORS BAKED INTO LQ MATHS
+ggplot() +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='B'), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = COUNT),
+    alpha = 0.2
+  ) +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='A'), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = COUNT *1.5),
+    shape = 16, colour = 'white'
+  ) +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='A'), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = COUNT),
+    shape = 16, colour = 'red'
+  ) +
+  scale_size_continuous(range = c(1,18)) +
+  scale_x_continuous(trans = "log10") +
+  geom_vline(xintercept = 1, colour = 'blue') 
+  # guides(size = F)
+
+
+#Mark av change over time to indicate growth?
+ggplot() +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='B', difftotal > 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = difftotal),
+    alpha = 0.2,
+    shape = 24,
+    fill = 'black'
+  ) +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='B', difftotal < 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = difftotal * -1),
+    alpha = 0.2,
+    shape = 25,
+    fill = 'black'
+  ) +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='A', difftotal > 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = difftotal *1.5),
+    shape = 24,
+    fill = 'white',
+    colour = 'white'
+  ) +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='A', difftotal < 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = difftotal *-1.5),
+    shape = 25,
+    fill = 'white',
+    colour = 'white'
+  ) +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='A', difftotal > 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = difftotal),
+    shape = 24,
+    fill = 'red'
+  ) +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='A', difftotal < 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = difftotal * -1),
+    shape = 25,
+    fill = 'red'
+  ) +
+  # geom_point(
+  #   data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='A'), 
+  #   # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+  #   aes(y = INDUSTRY_NAME, x = LQ, size = COUNT),
+  #   shape = 16, colour = 'red'
+  # ) +
+  scale_size_continuous(range = c(1,18)) +
+  scale_x_continuous(trans = "log10") +
+  geom_vline(xintercept = 1, colour = 'blue') +
+  guides(size = F)
+
+  
+
+sector2digit_grepl <- 'Manufacture of fabricated metal products, except machinery and equipment'
+sector2digit_grepl <- 'basic metals'
+sector2digit_grepl <- 'non-metallic'
+sector2digit_grepl <- 'Manufacture of machinery and equipment n.e.c.'
+sector2digit_grepl <- 'Wholesale trade'
+sector2digit_grepl <- 'food products'
+sector2digit_grepl <- 'wearing apparel'
+sector2digit_grepl <- 'recorded media'
+sector2digit_grepl <- 'Manufacture of chemicals'
+sector2digit_grepl <- 'rubber and plastic'
+sector2digit_grepl <- 'Manufacture of electrical equipment'
+sector2digit_grepl <- 'Repair of computers'
+sector2digit_grepl <- 'administration and defence'
+sector2digit_grepl <- 'Warehousing and support activities for transportation'
+
+
+#Check is single sector
+x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME)) %>% select(SIC_2DIGIT_NAME) %>% pull() %>% unique()
+
+
+#Try same, indicate with colour
+ggplot() +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='B', difftotal > 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = difftotal),
+    alpha = 0.1,
+    shape = 16,
+    colour = 'green'
+  ) +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='B', difftotal < 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = difftotal * -1),
+    alpha = 0.1,
+    shape = 16,
+    colour = 'red'
+  ) +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='A', difftotal > 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = difftotal *1.75),
+    shape = 16,
+    colour = 'black'
+  ) +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='A', difftotal < 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = difftotal *-1.75),
+    shape = 16,
+    colour = 'black'
+  ) +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='A', difftotal > 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = difftotal),
+    shape = 16,
+    colour = 'green'
+  ) +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='A', difftotal < 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = difftotal * -1),
+    shape = 16,
+    colour = 'red'
+  ) +
+  # geom_point(
+  #   data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='A'), 
+  #   # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+  #   aes(y = INDUSTRY_NAME, x = LQ, size = COUNT),
+  #   shape = 16, colour = 'red'
+  # ) +
+  scale_size_continuous(range = c(1,24)) +
+  scale_x_continuous(trans = "log10") +
+  geom_vline(xintercept = 1, colour = 'blue') +
+  guides(size = F)
+
+
+
+#Can we pick out smaller ones to combine? Is that all going to work with facetting? Seems slim, would have to use cowplot...?
+sector2digit_grepl <- 'fabricated metal products, except machinery and equipment|basic metals|non-metallic'
+
+#Check number of sectors is what we're aiming for given grepl
+x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME)) %>% select(SIC_2DIGIT_NAME) %>% pull() %>% unique()
+
+
+ggplot() +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='B', difftotal > 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = difftotal),
+    alpha = 0.1,
+    shape = 16,
+    colour = 'green'
+  ) +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='B', difftotal < 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = difftotal * -1),
+    alpha = 0.1,
+    shape = 16,
+    colour = 'red'
+  ) +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='A', difftotal > 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = difftotal *1.75),
+    shape = 16,
+    colour = 'black'
+  ) +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='A', difftotal < 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = difftotal *-1.75),
+    shape = 16,
+    colour = 'black'
+  ) +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='A', difftotal > 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = difftotal),
+    shape = 16,
+    colour = 'green'
+  ) +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='A', difftotal < 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME, x = LQ, size = difftotal * -1),
+    shape = 16,
+    colour = 'red'
+  ) +
+  # geom_point(
+  #   data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='A'), 
+  #   # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+  #   aes(y = INDUSTRY_NAME, x = LQ, size = COUNT),
+  #   shape = 16, colour = 'red'
+  # ) +
+  scale_size_continuous(range = c(1,24)) +
+  scale_x_continuous(trans = "log10") +
+  geom_vline(xintercept = 1, colour = 'blue') +
+  guides(size = F) +
+  facet_wrap(~SIC_2DIGIT_NAME, ncol = 1, scales = 'free_y') +
+  geom_text(data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), flaggedplace =='A', difftotal < 0), aes(y = INDUSTRY_NAME, x = LQ, label = COUNT), nudge_x = 0.2, hjust = 0, size = 3)
+
+
+
+
+
+
+
+#TEST ADDING IN ARBITRARY PLACE OVER THE TOP E.G. TO SEE SY + MANC COMPARED
+addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundcolour='black', add_jobnumbers = F, setalpha = 1){
+  
+  plot_to_addto <- plot_to_addto +
+    geom_point(
+      data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), GEOGRAPHY_NAME == place, difftotal > 0), 
+      # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+      aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal *1.75),
+      shape = shapenumber,
+      colour = backgroundcolour,
+      alpha = setalpha
+    ) +
+    geom_point(
+      data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), GEOGRAPHY_NAME == place, difftotal < 0), 
+      # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+      aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal *-1.75),
+      shape = shapenumber,
+      colour = backgroundcolour,
+      alpha = setalpha
+    ) +
+    geom_point(
+      data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), GEOGRAPHY_NAME == place, difftotal > 0), 
+      # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+      aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal),
+      shape = shapenumber,
+      colour = 'green',
+      alpha = setalpha
+    ) +
+    geom_point(
+      data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), GEOGRAPHY_NAME == place, difftotal < 0), 
+      # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+      aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal * -1),
+      shape = shapenumber,
+      colour = 'red',
+      alpha = setalpha
+    ) 
+  
+  
+  if(add_jobnumbers){
+    
+    plot_to_addto <- plot_to_addto +  
+      geom_text(
+        data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), GEOGRAPHY_NAME == place), 
+        aes(y = INDUSTRY_NAME_REDUCED, x = max(LQ) + 10, label = paste0(COUNT,', ',round(sector_regional_proportion * 100, 2),'%')),
+        # aes(y = INDUSTRY_NAME, x = max(LQ) + 2, label = COUNT),
+        nudge_x = 0.3, hjust = 1, alpha = 0.7, size = 3
+      )
+    
+    
+  }
+   
+  return(plot_to_addto)
+  
+}
+
+
+
+#Base plot
+p <- ggplot() +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), difftotal > 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal),
+    alpha = 0.1,
+    shape = 16,
+    colour = 'green'
+  ) +
+  geom_point(
+    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), difftotal < 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal * -1),
+    alpha = 0.1,
+    shape = 16,
+    colour = 'red'
+  )  +
+  scale_size_continuous(range = c(1,24)) +
+  scale_x_continuous(trans = "log10") +
+  geom_vline(xintercept = 1, colour = 'blue') +
+  guides(size = F) +
+  facet_wrap(~SIC_2DIGIT_NAME, ncol = 1, scales = 'free_y')#If one sector only, adds name anyway, still useful
+
+
+#Add a place
+p <- addplace_to_LQplot(plot_to_addto = p, place = 'Greater Manchester', shapenumber = 18,backgroundcolour = '#9ac0db', setalpha = 0.7)
+p <- addplace_to_LQplot(plot_to_addto = p, place = 'South Yorkshire', shapenumber = 16, add_jobnumbers = T)
+p
+
+
+
+#Let's output all of those to have a look through
+SIC2digits <- unique(x$SIC_2DIGIT_NAME)
+
+#Keep ones where LQ for this year / 2 digit SIC is at least 1 for one 5-digit
+SIC2digits <- x %>% filter(LQ > 1, GEOGRAPHY_NAME == 'South Yorkshire') %>% select(SIC_2DIGIT_NAME) %>% pull() %>% unique
+
+for(sector2digit_grepl in SIC2digits){
+  
+  p <- ggplot() +
+    geom_point(
+      data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), difftotal > 0), 
+      # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+      aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal),
+      alpha = 0.1,
+      shape = 16,
+      colour = 'green'
+    ) +
+    geom_point(
+      data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), difftotal < 0), 
+      # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+      aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal * -1),
+      alpha = 0.1,
+      shape = 16,
+      colour = 'red'
+    )  +
+    scale_size_continuous(range = c(1,24)) +
+    scale_x_continuous(trans = "log10") +
+    geom_vline(xintercept = 1, colour = 'blue') +
+    guides(size = F) +
+    facet_wrap(~SIC_2DIGIT_NAME, ncol = 1, scales = 'free_y')#If one sector only, adds name anyway, still useful
+  
+  
+  #Add a place
+  p <- addplace_to_LQplot(plot_to_addto = p, place = 'Greater Manchester', shapenumber = 18,backgroundcolour = '#9ac0db', setalpha = 0.7)
+  p <- addplace_to_LQplot(plot_to_addto = p, place = 'South Yorkshire', shapenumber = 16, add_jobnumbers = T)
+  
+  ggsave(plot = p, filename = paste0('local/localimages/2digitSICs_BRES_LQs/',gsub(pattern = ' : ',replacement = '_', x = sector2digit_grepl),'.png'),width = 12, height = 12)
+  
+  
+}
+
+
+
+#Pick out random SY sectors from looking through the above to plot, see underlying pattern
+v <- itl2.lq %>% 
+  # filter(GEOGRAPHY_NAME=='South Yorkshire', grepl('23130', INDUSTRY_NAME))#manuf hollow glass
+  # filter(GEOGRAPHY_NAME=='South Yorkshire', grepl('16230', INDUSTRY_NAME))#manuf other builders’ carpentry / joinery 
+  # filter(GEOGRAPHY_NAME=='South Yorkshire', grepl('24100', INDUSTRY_NAME))#manuf basic iron steel, 3500 people
+  # filter(GEOGRAPHY_NAME=='South Yorkshire', grepl('52103 : Operation of warehousing and storage facilities for land trans', INDUSTRY_NAME))
+  filter(GEOGRAPHY_NAME=='South Yorkshire', grepl('58130 : Publishing of newspapers', INDUSTRY_NAME))
+
+ggplot(v, aes(x = DATE, y = LQ)) +
+  geom_point() +
+  geom_line()
+ggplot(v, aes(x = DATE, y = sector_regional_proportion * 100)) +
+  geom_point() +
+  geom_line()
+ggplot(v, aes(x = DATE, y = COUNT)) +
+  geom_point() +
+  geom_line()
+
+
+#All places
+z <- itl2.lq %>% 
+  # filter(grepl('58130 : Publishing of newspapers', INDUSTRY_NAME))
+  # filter(grepl('62020 : Computer consultancy activities', INDUSTRY_NAME))
+  # filter(grepl('84110 : General public administration activities', INDUSTRY_NAME))
+  filter(grepl('87200 : Residential care activities for learning disabilities, mental', INDUSTRY_NAME))
+
+ggplot(z, aes(x = DATE, y = LQ, colour = GEOGRAPHY_NAME)) +
+  geom_point() +
+  geom_line()
+
+ggplot(z, aes(x = DATE, y = sector_regional_proportion * 100, colour = GEOGRAPHY_NAME)) +
+  geom_point() +
+  geom_line() +
+  scale_y_log10()
+
+ggplot(z, aes(x = DATE, y = COUNT, colour = GEOGRAPHY_NAME)) +
+  geom_point() +
+  geom_line() +
+  scale_y_log10()
+
+#MOVING AVERAGE
+#https://stackoverflow.com/questions/26198551/rolling-mean-moving-average-by-group-id-with-dplyr
+z <- z %>% 
+  group_by(GEOGRAPHY_NAME) %>% 
+  mutate(movingav = rollapply(sector_regional_proportion,3,mean,align='right',fill=NA)) %>%
+  # mutate(movingav = rollapply(COUNT,3,mean,align='right',fill=NA)) %>% 
+  ungroup()
+
+# plot_ly(data = z %>% ungroup(), x = ~DATE, y = ~sector_regional_proportion, color = ~GEOGRAPHY_NAME, 
+plot_ly(data = z %>% ungroup(), x = ~DATE, y = ~movingav, color = ~GEOGRAPHY_NAME, 
+        text = ~paste("Place:", GEOGRAPHY_NAME, "\nPEOPLE: ",COUNT),  # Add this line for hover text
+        hoverinfo = 'text',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly percents by SIC", 
+         xaxis = list(title = "Year"), 
+         yaxis = list(title = "Value", type='log'),
+         # yaxis = list(title = "Value"),
+         showlegend = F)
+
+
+#What's the geography of where increased or decreased in public admin?
+#There's a 2019 inflection so would be interesting to see different slopes for different time chunks...
+#Come back to.
+
+
+
+
+
+#What's total employment in 25: manuf fabricated for 5-digits with LQ 1+, in SY?
+w <- itl2.lq %>% 
+  filter(GEOGRAPHY_NAME=='South Yorkshire', grepl('Manufacture of fabricated metal products, except', SIC_2DIGIT_NAME), LQ > 1, DATE == 2021)
+
+#10,900 people = not far off 3% of working pop, big chunk.
+sum(w$COUNT)
+(sum(w$COUNT)/376670)*100
+
+#What's the change pattern for those 12?
+b <- itl2.lq %>% 
+  filter(GEOGRAPHY_NAME=='South Yorkshire', grepl('Manufacture of fabricated metal products, except', SIC_2DIGIT_NAME), INDUSTRY_NAME %in% w$INDUSTRY_NAME)
+
+ggplot(b, aes(x = DATE, y = LQ, colour = INDUSTRY_NAME)) +
+  geom_point() +
+  geom_line() +
+  scale_y_log10() +
+  scale_colour_brewer(palette = "Set1")
+
+
+# plot_ly(data = b %>% ungroup(), x = ~DATE, y = ~LQ, color = ~INDUSTRY_NAME, 
+# plot_ly(data = b %>% ungroup(), x = ~DATE, y = ~COUNT, color = ~INDUSTRY_NAME, 
+plot_ly(data = b %>% ungroup(), x = ~DATE, y = ~sector_regional_proportion, color = ~INDUSTRY_NAME, 
+        text = ~paste("Sector:", INDUSTRY_NAME, "\nPEOPLE: ",COUNT),  # Add this line for hover text
+        hoverinfo = 'text',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly percents by SIC", 
+         xaxis = list(title = "Year"), 
+         yaxis = list(title = "Value", type='log'),
+         # yaxis = list(title = "Value"),
+         showlegend = F)
+
+
+
+#MAP??
+# oneyear <- itl2.lq %>% filter(grepl('Manufacture of computer, electronic', SIC_2DIGIT_NAME), DATE==2021)
+oneyear <- itl2.lq %>% filter(DATE==2021)
+itl2.geo <- st_read('data/geographies/International_Territorial_Level_2_January_2021_UK_BFE_V2_2022_-4735199360818908762/ITL2_JAN_2021_UK_BFE_V2.shp') %>% 
+  st_simplify(preserveTopology = T, dTolerance = 100)
+
+#Reminder: two spelling diffs, plus UK in the geo vs GB in the non geo
+table(itl2.geo$ITL221NM %in% oneyear$GEOGRAPHY_NAME)
+itl2.geo$ITL221NM[!itl2.geo$ITL221NM %in% oneyear$GEOGRAPHY_NAME]
+unique(oneyear$GEOGRAPHY_NAME)[!unique(oneyear$GEOGRAPHY_NAME) %in% itl2.geo$ITL221NM]
+
+#Manually set names in the geo
+itl2.geo$ITL221NM[itl2.geo$ITL221NM=='Northumberland, and Tyne and Wear'] <- 'Northumberland and Tyne and Wear'
+itl2.geo$ITL221NM[itl2.geo$ITL221NM=='West Wales and The Valleys'] <- 'West Wales'
+
+#Now a merge will drop NI and we're all good.
+chk <- itl2.geo %>% 
+  right_join(
+    oneyear,
+    by = c('ITL221NM'='GEOGRAPHY_NAME')
+  )
+
+
+
+#Pick a 5-digit sector to plot
+maptoplot <- chk %>% filter(INDUSTRY_NAME == '26110 : Manufacture of electronic components')
+maptoplot <- chk %>% filter(grepl('26701 : Manufacture of optical precision instruments',INDUSTRY_NAME))
+maptoplot <- chk %>% filter(grepl('25990 : Manufacture of other fabricated metal products',INDUSTRY_NAME))
+maptoplot <- chk %>% filter(grepl('28410 : Manufacture of metal forming machinery',INDUSTRY_NAME))
+maptoplot <- chk %>% filter(grepl('28910 : Manufacture of machinery for metallurgy',INDUSTRY_NAME))
+maptoplot <- chk %>% filter(grepl('28930 : Manufacture of machinery for food, beverage and tobacco',INDUSTRY_NAME))
+maptoplot <- chk %>% filter(grepl('28290 : Manufacture of other general-purpose machinery',INDUSTRY_NAME))
+maptoplot <- chk %>% filter(grepl('32500 : Manufacture of medical and dental instruments and supplies',INDUSTRY_NAME))
+maptoplot <- chk %>% filter(grepl('43220 : Plumbing, heat and air-conditioning installation',INDUSTRY_NAME))
+maptoplot <- chk %>% filter(grepl('49410 : Freight transport by road',INDUSTRY_NAME))
+maptoplot <- chk %>% filter(grepl('52103 : Operation of warehousing and storage facilities for land trans',INDUSTRY_NAME))
+maptoplot <- chk %>% filter(grepl('69102 : Solicitors',INDUSTRY_NAME))
+maptoplot <- chk %>% filter(grepl('69101 : Barristers at law',INDUSTRY_NAME))
+maptoplot <- chk %>% filter(grepl('74909 : Other professional, scientific and technical activities',INDUSTRY_NAME))
+maptoplot <- chk %>% filter(grepl('81100 : Combined facilities support activities',INDUSTRY_NAME))
+
+tm_shape(maptoplot) +
+  tm_polygons('LQ_log', n = 11)
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~
+#MORE CHANGE OVER TIME----
+#~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+sectors.to.view <- x %>% ungroup() %>% filter(GEOGRAPHY_NAME == place, LQ > 2) %>% select(INDUSTRY_NAME) %>% pull() %>% as.character()
+
+unique(itl2.lq$GEOGRAPHY_NAME)
 
 #SY over time
 sy <- itl2.lq %>% filter(GEOGRAPHY_NAME == 'South Yorkshire') %>% ungroup()
@@ -616,10 +1440,11 @@ sy <- itl2.lq %>% filter(GEOGRAPHY_NAME == 'Greater Manchester') %>% ungroup()
 #https://stackoverflow.com/questions/26198551/rolling-mean-moving-average-by-group-id-with-dplyr
 sy <- sy %>% 
   group_by(INDUSTRY_NAME) %>% 
-  mutate(movingav = rollapply(LQ,3,mean,align='right',fill=NA))
+  mutate(movingav = rollapply(LQ,3,mean,align='right',fill=NA)) %>% 
+  ungroup()
 
 # plot_ly(data = sy %>% filter(INDUSTRY_NAME %in% sectors.to.view), x = ~DATE, y = ~LQplusone_log, color = ~INDUSTRY_NAME,
-plot_ly(data = sy %>% filter(INDUSTRY_NAME %in% sectors.to.view), x = ~DATE, y = ~movingav, color = ~SIC_2DIGIT_NAME,
+plot_ly(data = sy %>% filter(INDUSTRY_NAME %in% sectors.to.view, LQ!=0), x = ~DATE, y = ~movingav, color = ~INDUSTRY_NAME,
         text = ~paste("Sector:", INDUSTRY_NAME),  # Add this line for hover text
         hoverinfo = 'text+y+x',
         type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
@@ -1045,14 +1870,48 @@ x <- gb %>% filter(INDUSTRY_NAME %in% (sds %>% filter(group %in% c(1)) %>% selec
 x <- gb %>% filter(INDUSTRY_NAME %in% (sds %>% filter(group %in% c(1)) %>% select(INDUSTRY_NAME) %>% pull())) %>% 
   filter(INDUSTRY_NAME %in% (l %>% filter(estimate <= 0) %>% select(INDUSTRY_NAME) %>% pull()))
 
+
+
+#Test using sum of diffs to pick out change bands
+diffchange <- gb %>%
+  group_by(INDUSTRY_NAME) %>%
+  arrange(DATE) %>% 
+  mutate(logdiff = log(percent)-lag(log(percent))) %>%
+  summarise(difftotal = sum(logdiff,na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(group = as.integer(cut_number(difftotal,21)))
+
+#Climbers
+x <- gb %>% filter(INDUSTRY_NAME %in% (diffchange %>% filter(group %in% c(21)) %>% select(INDUSTRY_NAME) %>% pull())) 
+#Droppers
+x <- gb %>% filter(INDUSTRY_NAME %in% (diffchange %>% filter(group %in% c(1)) %>% select(INDUSTRY_NAME) %>% pull()))
+#In the middle
+x <- gb %>% filter(INDUSTRY_NAME %in% (diffchange %>% filter(group %in% c(11)) %>% select(INDUSTRY_NAME) %>% pull()))
+
+
 #NOTE: THESE ARE PERCENTAGES RELATIVE TO UK WHOLE, SO DROPS CAN BE DUE TO OTHER SECTORS GROWING
 #COuld do with also showing raw diff
 y <- x %>% 
   group_by(INDUSTRY_NAME) %>% 
   arrange(DATE) %>% 
-  mutate(movingav = rollapply(percent,3,mean,align='right',fill=NA))
+  mutate(
+    movingav = rollapply(percent,3,mean,align='right',fill=NA),
+    count_movingav = round(rollapply(COUNT,3,mean,align='right',fill=NA),0)#Have a count moving average too, so it matches the percent (so count orders are correct vertically)
+    )
 
 plot_ly(data = y, x = ~DATE, y = ~movingav, color = ~INDUSTRY_NAME, 
+        text = ~paste("Sector:", INDUSTRY_NAME, "\nPEOPLE: ",count_movingav),  # Add this line for hover text
+        hoverinfo = 'text',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly percents by SIC", 
+         xaxis = list(title = "Year"), 
+         yaxis = list(title = "Value", type='log'),
+         # yaxis = list(title = "Value"),
+         showlegend = F)
+
+
+#Non-moving av...
+plot_ly(data = x, x = ~DATE, y = ~percent, color = ~INDUSTRY_NAME, 
         text = ~paste("Sector:", INDUSTRY_NAME, "\nPEOPLE: ",COUNT),  # Add this line for hover text
         hoverinfo = 'text',
         type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
@@ -1061,6 +1920,8 @@ plot_ly(data = y, x = ~DATE, y = ~movingav, color = ~INDUSTRY_NAME,
          yaxis = list(title = "Value", type='log'),
          # yaxis = list(title = "Value"),
          showlegend = F)
+
+
 
 
 

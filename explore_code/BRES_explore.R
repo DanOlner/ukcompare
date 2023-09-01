@@ -1262,6 +1262,7 @@ for(sector2digit_grepl in SIC2digits){
     scale_x_continuous(trans = "log10") +
     geom_vline(xintercept = 1, colour = 'blue') +
     guides(size = F) +
+    ylab('') +
     facet_wrap(~SIC_2DIGIT_NAME, ncol = 1, scales = 'free_y')#If one sector only, adds name anyway, still useful
   
   
@@ -1300,7 +1301,8 @@ z <- itl2.lq %>%
   # filter(grepl('58130 : Publishing of newspapers', INDUSTRY_NAME))
   # filter(grepl('62020 : Computer consultancy activities', INDUSTRY_NAME))
   # filter(grepl('84110 : General public administration activities', INDUSTRY_NAME))
-  filter(grepl('87200 : Residential care activities for learning disabilities, mental', INDUSTRY_NAME))
+  # filter(grepl('87200 : Residential care activities for learning disabilities, mental', INDUSTRY_NAME))
+  filter(grepl('24100 : Manufacture of basic iron and steel', INDUSTRY_NAME))
 
 ggplot(z, aes(x = DATE, y = LQ, colour = GEOGRAPHY_NAME)) +
   geom_point() +
@@ -1351,6 +1353,15 @@ w <- itl2.lq %>%
 #10,900 people = not far off 3% of working pop, big chunk.
 sum(w$COUNT)
 (sum(w$COUNT)/376670)*100
+
+#What is it for +1 in 24 and 25?
+w <- itl2.lq %>% 
+  filter(GEOGRAPHY_NAME=='South Yorkshire', grepl('Manufacture of fabricated metal products, except|Manufacture of basic metals', SIC_2DIGIT_NAME), LQ > 1, DATE == 2021)
+
+#10,900 people = not far off 3% of working pop, big chunk.
+sum(w$COUNT)
+(sum(w$COUNT)/376670)*100
+
 
 #What's the change pattern for those 12?
 b <- itl2.lq %>% 

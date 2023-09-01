@@ -154,5 +154,41 @@ e = 125
 
 
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#EIGENCHECKS----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Install and load the 'Matrix' package for sparse matrix operations (if not already installed)
+library(Matrix)
+
+
+# Create a hypothetical friendship adjacency matrix
+# 1 indicates a friendship, and 0 indicates no friendship
+
+# Let's assume:
+# Person 1 is friends with everyone (the popular individual).
+# Person 2, 3, 4 are close friends among themselves (a tight-knit group).
+# Person 5, 6 are friends (another smaller group).
+
+friendship_matrix <- matrix(c(0, 1, 1, 1, 1, 1,
+                              1, 0, 1, 1, 0, 0,
+                              1, 1, 0, 1, 0, 0,
+                              1, 1, 1, 0, 0, 0,
+                              1, 0, 0, 0, 0, 1,
+                              1, 0, 0, 0, 1, 0), ncol=6)
+
+# Print the friendship matrix
+print(friendship_matrix)
+
+# Compute the eigenvectors and eigenvalues of the matrix
+eig <- eigen(friendship_matrix)
+
+# The first eigenvector
+print(eig$vectors[,1])
+
+# The second eigenvector
+print(eig$vectors[,2])
+
+
 
 

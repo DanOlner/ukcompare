@@ -51,7 +51,11 @@ table(itl2.geo$ITL221CD %in% itl2$`ITL region code`)
 #With and without imputed rental. So just need those two to avoid double counting.
 
 
+
+#!!!!!!!!!!!
 #WARNING: CURRENTLY ONLY CORRECT LIST TO REMOVE FOR ITL2
+#!!!!!!!!!!!
+
 #Each geog level has a different number of SIC categories in it 
 SICremoves = c(
   'Total',

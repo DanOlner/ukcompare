@@ -448,16 +448,16 @@ itl2$COUNT[is.na(itl2$COUNT)] <- 0
 itl2.lq <- itl2 %>%
   group_by(GEOGRAPHY_NAME, DATE) %>% 
   mutate(
-    region_totalsize = sum(COUNT),#a. Current employment per region per year, for regional denominator
+    region_totalsize = sum(COUNT, na.rm = T),#a. Current employment per region per year, for regional denominator
     sector_regional_proportion = COUNT / region_totalsize#b. regional sector proportion.
   ) %>% 
   group_by(DATE, INDUSTRY_NAME) %>% 
   mutate(
-    uk_sectorsize = sum(COUNT),#c. Summed current prices for EACH SECTOR, UK-wide
+    uk_sectorsize = sum(COUNT, na.rm = T),#c. Summed current prices for EACH SECTOR, UK-wide
   ) %>% 
   group_by(DATE) %>% 
   mutate(
-    uk_totalsize = sum(COUNT),#d. Summed current prices for WHOLE UK per year, for UK denominator
+    uk_totalsize = sum(COUNT, na.rm = T),#d. Summed current prices for WHOLE UK per year, for UK denominator
     sector_uk_proportion = uk_sectorsize / uk_totalsize#e. UK-level sector proportion
   ) %>% 
   mutate(

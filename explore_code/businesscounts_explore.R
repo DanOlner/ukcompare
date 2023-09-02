@@ -507,7 +507,14 @@ ggplot(sizeband,
   facet_wrap(~DATE)
 
 
-
+#How many businesses in each size band?
+gb %>% 
+  filter(DATE==2022) %>% 
+  group_by(EMPLOYMENT_SIZEBAND_NAME) %>% 
+  summarise(
+    count = sum(COUNT)
+    ) %>% 
+  mutate(percent = (count/sum(count))*100)
 
 
 

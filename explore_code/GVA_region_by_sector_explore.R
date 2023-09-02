@@ -282,36 +282,46 @@ SICremoves = c(
 itl2.cp <- read_csv('data/sectors/Table 2c ITL2 UK current price estimates pounds million.csv')
 
 #Filter out duplicate value rows and make long by year
+#Also convert year to numeric
 itl2.cp <- itl2.cp %>% filter(!`SIC07 code` %in% SICremoves) %>% 
-  pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'value')
+  pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'value') %>% 
+  mutate(year = as.numeric(year))
+
+
 
 #Check on just water and air transport, where the neg values are
-itl2.cp %>% filter(`SIC07 description` == "Water and air transport") %>% View
+# itl2.cp %>% filter(`SIC07 description` == "Water and air transport") %>% View
 
 #RANDOM NEGATIVE VALUES IN THERE
 #Looking, I think just typos given previous data
 #(And also makes no logical sense, so...)
-itl2.cp %>% filter(value < 0)
+# itl2.cp %>% filter(value < 0)
+
+#NA any negative values in GVA, can't be trusted
+#Only 2021 values for water transport
+itl2.cp <- itl2.cp %>% 
+  mutate(value = ifelse(value < 0, NA, value))
+
 
 #check sums just for one year
 #that is, make sure kept single categories add up to the correct total
-chk <- itl2.cp %>% 
-  filter(year == 2021) %>% 
-  group_by(`ITL region name`) %>% 
-  summarise(mytotal = sum(value))
-
-#Check against totals in orig
-chk2 <- read_csv('data/sectors/Table 2c ITL2 UK current price estimates pounds million.csv') %>% 
-  filter(`SIC07 code` == 'Total') %>% 
-  pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'originaltotal') %>% 
-  filter(year == 2021) %>% 
-  arrange(`ITL region name`)
-
-#Rounding error diffs I think, all fine
-#Use totals here for proportions so they're accurate / sum to 1
-chk <- chk %>% 
-  left_join(chk2, by = "ITL region name") %>% 
-  mutate(diff = originaltotal-mytotal)
+# chk <- itl2.cp %>% 
+#   filter(year == 2021) %>% 
+#   group_by(`ITL region name`) %>% 
+#   summarise(mytotal = sum(value))
+# 
+# #Check against totals in orig
+# chk2 <- read_csv('data/sectors/Table 2c ITL2 UK current price estimates pounds million.csv') %>% 
+#   filter(`SIC07 code` == 'Total') %>% 
+#   pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'originaltotal') %>% 
+#   filter(year == 2021) %>% 
+#   arrange(`ITL region name`)
+# 
+# #Rounding error diffs I think, all fine
+# #Use totals here for proportions so they're accurate / sum to 1
+# chk <- chk %>% 
+#   left_join(chk2, by = "ITL region name") %>% 
+#   mutate(diff = originaltotal-mytotal)
 
 
 #https://www.ons.gov.uk/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/locationquotientdataandindustrialspecialisationforlocalauthorities
@@ -330,21 +340,23 @@ chk <- chk %>%
 itl2.cp <- itl2.cp %>%
   group_by(`ITL region name`, year) %>% 
   mutate(
-    region_totalsize = sum(value),#a. Current price per region per year, for regional denominator
+    region_totalsize = sum(value, na.rm = T),#a. Current price per region per year, for regional denominator
     sector_regional_proportion = value / region_totalsize#b. regional sector proportion (noting that a single row in this group is a single sector)
     ) %>% 
   group_by(year, `SIC07 code`) %>% 
   mutate(
-    uk_sectorsize = sum(value),#c. Summed current prices for EACH SECTOR, UK-wide
+    uk_sectorsize = sum(value, na.rm = T),#c. Summed current prices for EACH SECTOR, UK-wide
     ) %>% 
   group_by(year) %>% 
   mutate(
-    uk_totalsize = sum(value),#d. Summed current prices for WHOLE UK per year, for UK denominator
+    uk_totalsize = sum(value, na.rm = T),#d. Summed current prices for WHOLE UK per year, for UK denominator
     sector_uk_proportion = uk_sectorsize / uk_totalsize#e. UK-level sector proportion
     ) %>% 
   mutate(
     LQ = sector_regional_proportion / sector_uk_proportion#f. Location quotient!
-  )
+  ) %>% 
+  mutate(LQ_log = log(LQ)) 
+
   
 #Those regional values by themselves are going to be interesting:
 #How has a region's OWN economy structure changed over time?
@@ -440,8 +452,6 @@ ggplot(minmaxes_plus_sy,
 
 #Rather than minmax, let's do a full spread and place SY in that context
 #I should make numbers for other places too for comparison
-itl2.cp <- itl2.cp %>% 
-  mutate(LQ_log = log(LQ)) 
 
 #View for 2021. Can just flag one we want to overlay?
 #Something odd with water and air transport, remove until work out what
@@ -632,6 +642,201 @@ plot_ly(data = sy %>% filter(year==2021), x = ~LQ, y = ~sector_regional_proporti
     inherit = FALSE,
     showlegend = FALSE
   )
+
+
+
+#~~~~~~~~~~~~~~~~~~~~
+#LQ CHANGE CHARTS----
+#~~~~~~~~~~~~~~~~~~~~
+
+#Originally made for BRES data, repeat code that adds change over time (via OLS) as colour
+
+#Create a function that fits lm and returns slope
+get_slope <- function(data) {
+  model <- lm(LQ_log ~ year, data = data, na.action = na.omit)
+  coef(model)[2]
+}
+
+#Make it a safe function using purrr::possibly
+#(Issue with some data being all NAs)
+safe_get_slope <- purrr::possibly(get_slope, otherwise = 0)
+
+l <- itl2.cp %>%
+  group_by(`ITL region name`, `SIC07 description`) %>%
+  nest() %>%
+  mutate(slope = map_dbl(data, safe_get_slope)) %>%
+  select(-data) %>% 
+  mutate(slope = ifelse(is.na(slope),0,slope)) %>% 
+  arrange(slope)
+
+
+#Break into groups of differing slope
+diffchange <- l %>% 
+  filter(slope!=0) %>% 
+  group_by(`ITL region name`) %>% 
+  mutate(group = as.integer(cut_number(slope,7))) %>% 
+  ungroup() %>% 
+  rename(difftotal = slope)
+
+
+#Look at some for sanity check
+place = 'South Yorkshire'
+place = 'Greater Manchester'
+
+#climbers
+industries = diffchange %>% filter(`ITL region name` == place, group %in% c(7)) %>% select(`SIC07 description`) %>% pull()
+#droppers
+industries = diffchange %>% filter(`ITL region name` == place, group %in% c(4)) %>% select(`SIC07 description`) %>% pull()
+#middle
+industries = diffchange %>% filter(`ITL region name` == place, group %in% c(1)) %>% select(`SIC07 description`) %>% pull()
+
+#Select those industries / place
+x <- itl2.cp %>% filter(`ITL region name` == place, `SIC07 description` %in% industries) 
+
+
+#Check one set of slopes
+# sy <- itl2.cp %>% filter(`ITL region name` == place) %>% 
+#   inner_join(l, by = c("ITL region name","SIC07 description"))
+# 
+# #unique slope values in order
+# slopeorder <- unique(sy$slope)[order(unique(sy$slope))]
+# 
+# x <- sy %>% filter(slope %in% slopeorder[1:10])
+
+y <- x %>% 
+  group_by(`SIC07 description`) %>% 
+  arrange(year) %>% 
+  mutate(
+    LQ = ifelse(LQ == 0, NA, LQ),#Set to NA so plotly won't show
+    movingav = rollapply(LQ,3,mean,align='right',fill=NA)
+    # LQ_movingav = rollapply(LQ,3,mean,align='right',fill=NA),0)#Have a count moving average too, so it matches the percent (so count orders are correct vertically)
+  )
+
+plot_ly(data = y, x = ~year, y = ~movingav, color = ~`SIC07 description`,
+# plot_ly(data = y, x = ~year, y = ~LQ, color = ~`SIC07 description`,
+        # text = ~paste("Sector:", `SIC07 description`, "\nGVA: ",value, "\nslope: ",slope),  # Add this line for hover text
+        text = ~paste("Sector:", `SIC07 description`, "\nGVA: ",value),  # Add this line for hover text
+        hoverinfo = 'text',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly percents by SIC", 
+         xaxis = list(title = "Year"), 
+         yaxis = list(title = "Value", type='log'),
+         # yaxis = list(title = "Value"),
+         showlegend = F)
+
+
+
+
+
+#LQ PLOTS
+x <- itl2.cp %>% filter(year == 2021) %>% mutate(flaggedplace = ifelse(`ITL region name`==place, 'A', 'B'))
+
+#Add slopes into data to get LQ plots
+x <- x %>% 
+  left_join(
+    diffchange %>% select(-group),
+    by = c(c("ITL region name","SIC07 description"))
+  )
+
+#Redo factor
+x$`SIC07 description` <- factor(x$`SIC07 description`)
+x$`SIC07 description` <- fct_relevel(
+  x$`SIC07 description`, 
+  unique(as.character(x$`SIC07 description`))[order(x %>% filter(`ITL region name`==place) %>%ungroup() %>% select(LQ) %>% pull(),decreasing = T)]
+)
+
+
+
+#LQ PLOT
+#Function for overlaying specific places / ITL2 zones
+addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundcolour='black', add_gva = F, setalpha = 1){
+  
+  plot_to_addto <- plot_to_addto +
+    geom_point(
+      data = x %>% filter(`ITL region name` == place, difftotal > 0), 
+      # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+      aes(y = `SIC07 description`, x = LQ, size = difftotal *1.75),
+      shape = shapenumber,
+      colour = backgroundcolour,
+      alpha = setalpha
+    ) +
+    geom_point(
+      data = x %>% filter(`ITL region name` == place, difftotal < 0), 
+      # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+      aes(y = `SIC07 description`, x = LQ, size = difftotal *-1.75),
+      shape = shapenumber,
+      colour = backgroundcolour,
+      alpha = setalpha
+    ) +
+    geom_point(
+      data = x %>% filter(`ITL region name` == place, difftotal > 0), 
+      # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+      aes(y = `SIC07 description`, x = LQ, size = difftotal),
+      shape = shapenumber,
+      colour = 'green',
+      alpha = setalpha
+    ) +
+    geom_point(
+      data = x %>% filter(`ITL region name` == place, difftotal < 0), 
+      # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+      aes(y = `SIC07 description`, x = LQ, size = difftotal * -1),
+      shape = shapenumber,
+      colour = 'red',
+      alpha = setalpha
+    ) 
+  
+  
+  if(add_gva){
+    
+    plot_to_addto <- plot_to_addto +  
+      geom_text(
+        data = x %>% filter(`ITL region name` == place), 
+        aes(y = `SIC07 description`, x = max(LQ,na.rm = T)+20, label = paste0('£',value,'M, ',round(sector_regional_proportion * 100, 2),'%')),
+        # aes(y = INDUSTRY_NAME, x = max(LQ) + 2, label = COUNT),
+        nudge_x = 0.3, hjust = 1, alpha = 0.7, size = 3
+      )
+    
+    
+  }
+  
+  return(plot_to_addto)
+  
+}
+
+
+
+#Base plot
+p <- ggplot() +
+  geom_point(
+    data = x %>% filter(difftotal > 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = `SIC07 description`, x = LQ, size = difftotal),
+    alpha = 0.1,
+    shape = 16,
+    colour = 'green'
+  ) +
+  geom_point(
+    data = x %>% filter(difftotal < 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = `SIC07 description`, x = LQ, size = difftotal * -1),
+    alpha = 0.1,
+    shape = 16,
+    colour = 'red'
+  )  +
+  scale_size_continuous(range = c(1,17)) +
+  scale_x_continuous(trans = "log10") +
+  geom_vline(xintercept = 1, colour = 'blue') +
+  guides(size = F) 
+
+
+#Add a place
+p <- addplace_to_LQplot(plot_to_addto = p, place = 'Greater Manchester', shapenumber = 18,backgroundcolour = '#9ac0db', setalpha = 0.7)
+p <- addplace_to_LQplot(plot_to_addto = p, place = 'South Yorkshire', shapenumber = 16, add_gva = T)
+p
+
+
+
+
 
 
 

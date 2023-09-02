@@ -645,9 +645,9 @@ plot_ly(data = sy %>% filter(year==2021), x = ~LQ, y = ~sector_regional_proporti
 
 
 
-#~~~~~~~~~~~~~~~~~~~~
-#LQ CHANGE CHARTS----
-#~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~
+#LQ/ITL2 CHANGE CHARTS----
+#~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #Originally made for BRES data, repeat code that adds change over time (via OLS) as colour
 
@@ -729,16 +729,32 @@ plot_ly(data = y, x = ~year, y = ~movingav, color = ~`SIC07 description`,
 
 
 #LQ PLOTS
-x <- itl2.cp %>% filter(year == 2021) %>% mutate(flaggedplace = ifelse(`ITL region name`==place, 'A', 'B'))
+x <- itl2.cp %>% filter(year == 2021)
 
 #Add slopes into data to get LQ plots
 x <- x %>% 
   left_join(
     diffchange %>% select(-group),
-    by = c(c("ITL region name","SIC07 description"))
+    by = c("ITL region name","SIC07 description")
   )
 
-#Redo factor
+#Get min max values over time as well, to add as bars so range of sector is easy to see
+minmaxes <- itl2.cp %>% 
+  group_by(`SIC07 description`,`ITL region name`) %>% 
+  summarise(
+    minn = min(LQ),
+    maxx = max(LQ)
+  )
+
+x <- x %>% 
+  left_join(
+    minmaxes,
+    by = c("ITL region name","SIC07 description")
+  )
+
+
+
+#Factor
 x$`SIC07 description` <- factor(x$`SIC07 description`)
 x$`SIC07 description` <- fct_relevel(
   x$`SIC07 description`, 
@@ -747,9 +763,14 @@ x$`SIC07 description` <- fct_relevel(
 
 
 
+
+
+
+
+
 #LQ PLOT
 #Function for overlaying specific places / ITL2 zones
-addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundcolour='black', add_gva = F, setalpha = 1){
+addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundcolour='black', add_gva = F, setalpha = 1, addminmax = F){
   
   plot_to_addto <- plot_to_addto +
     geom_point(
@@ -796,6 +817,16 @@ addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundco
         nudge_x = 0.3, hjust = 1, alpha = 0.7, size = 3
       )
     
+    if(addminmax){
+      
+      plot_to_addto <- plot_to_addto +
+        geom_errorbar(
+          data = x %>% filter(`ITL region name` == place),
+          aes(y = `SIC07 description`, xmin = minn, xmax = maxx)
+          )
+      
+    }
+    
     
   }
   
@@ -831,11 +862,154 @@ p <- ggplot() +
 
 #Add a place
 p <- addplace_to_LQplot(plot_to_addto = p, place = 'Greater Manchester', shapenumber = 18,backgroundcolour = '#9ac0db', setalpha = 0.7)
-p <- addplace_to_LQplot(plot_to_addto = p, place = 'South Yorkshire', shapenumber = 16, add_gva = T)
+p <- addplace_to_LQplot(plot_to_addto = p, place = 'South Yorkshire', shapenumber = 16, add_gva = T, addminmax = T)
 p
 
 
 
+#It would be good to see how radically the structure's changed over time
+#No animation, let's just save for each year - using one year as reference for the factor ordering
+
+#Assuming we've looked at 2021 first above (which we have)
+ordertouse <- unique(as.character(x$`SIC07 description`))[order(x %>% filter(`ITL region name`==place) %>%ungroup() %>% select(LQ) %>% pull(),decreasing = T)]
+
+
+for(yeartosave in 1998:2021){
+
+
+  x <- itl2.cp %>% filter(year == yeartosave)
+  
+  #Add slopes into data to get LQ plots
+  x <- x %>% 
+    left_join(
+      diffchange %>% select(-group),
+      by = c(c("ITL region name","SIC07 description"))
+    )
+  
+  #Factor
+  x$`SIC07 description` <- factor(x$`SIC07 description`)
+  x$`SIC07 description` <- fct_relevel(
+    x$`SIC07 description`, 
+    ordertouse
+  )
+  
+  #Base plot
+  p <- ggplot() +
+    geom_point(
+      data = x %>% filter(difftotal > 0), 
+      # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+      aes(y = `SIC07 description`, x = LQ, size = difftotal),
+      alpha = 0.1,
+      shape = 16,
+      colour = 'green'
+    ) +
+    geom_point(
+      data = x %>% filter(difftotal < 0), 
+      # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+      aes(y = `SIC07 description`, x = LQ, size = difftotal * -1),
+      alpha = 0.1,
+      shape = 16,
+      colour = 'red'
+    )  +
+    scale_size_continuous(range = c(1,17)) +
+    scale_x_continuous(trans = "log10", limits = c(0.01,15)) +
+    geom_vline(xintercept = 1, colour = 'blue') +
+    guides(size = F) +
+    ggtitle(yeartosave) +
+    # coord_cartesian(xlim = c(0,12)) +
+    annotate("text", x = 0.02, y = 15, label = yeartosave, size = 15) +
+    annotate("text", x = 0.02, y = 38, label = yeartosave, size = 15) +
+    annotate("text", x = 0.02, y = 61, label = yeartosave, size = 15)
+  
+  
+  #Add a place
+  p <- addplace_to_LQplot(plot_to_addto = p, place = 'Greater Manchester', shapenumber = 18,backgroundcolour = '#9ac0db', setalpha = 0.7)
+  p <- addplace_to_LQplot(plot_to_addto = p, place = 'South Yorkshire', shapenumber = 16, add_gva = T)
+  
+  ggsave(filename = paste0('local/localimages/GVA_LQplots/',yeartosave,'.png'), height = 10, width = 10)  
+
+}
+
+
+
+
+
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#Linking the SIC codes across BRES/GVA----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Starting with a look at what SIC codes we've got in both.
+#Reminder: the number of categories for the GVA data is different depending on the geography scale, dropping for each smaller geography
+#Another reminder: the cruder SIC cats for BRES will have more accurate employee count numbers because rounding will be on the larger numbers
+
+#Looking again at a single BRES year to get the SICs
+br <- readRDS('local/data/BRES_NUTS2_2021.rds')
+
+# division (2 digit)    88
+# group (3 digit)      273
+# class (4 digit)      616
+# subclass (5 digit)   729
+br %>% 
+  group_by(INDUSTRY_TYPE) %>% 
+  distinct(INDUSTRY_NAME) %>% 
+  summarise(count = n())
+
+#For the ITL2 level GVA data... 72
+#So these are division, but a bit less. Some are presumably going to need employee counts aggregating
+length(unique(itl2.cp$`SIC07 description`))
+
+#from BRES
+sic2 <- br %>% filter(INDUSTRY_TYPE=='SIC 2007 division (2 digit)') %>% 
+  distinct(INDUSTRY_NAME, .keep_all = T) %>% 
+  select(BRES_INDUSTRY_NAME=INDUSTRY_NAME,BRES_INDUSTRY_CODE=INDUSTRY_CODE)
+
+
+#From GVA data
+gv <- itl2.cp %>% 
+  ungroup() %>% 
+  distinct(`SIC07 description`, .keep_all = T) %>% 
+  select(GVA_INDUSTRY_NAME = `SIC07 description`, GVA_INDUSTRY_CODE = `SIC07 code`)
+
+
+#Some automatching to be done. Some notes:
+#The GVA data has 68 and 68IMP. But the BRES data at 2-digit level only has 68, so it's both combined.
+#I want to be able to separate those, so might pull from...
+sic3v <- unique(
+  br %>% filter(INDUSTRY_TYPE=='SIC 2007 group (3 digit)')
+  %>% select(INDUSTRY_NAME) %>% pull
+)
+
+sic4v <- unique(
+  br %>% filter(INDUSTRY_TYPE=='SIC 2007 class (4 digit)')
+  %>% select(INDUSTRY_NAME) %>% pull
+)
+
+sic5v <- unique(
+  br %>% filter(INDUSTRY_TYPE=='SIC 2007 subclass (5 digit)')
+  %>% select(INDUSTRY_NAME) %>% pull
+)
+
+#Where's imputed? It's in there somewhere isn't it? Or did I imagine that?
+#Might not be as there's no associated jobs?
+#Newp, doesn't have it. I did in fact imagine it being in the BRES industry list, it's not.
+sic3v[grepl('imput',sic3v,ignore.case = T)]
+sic4v[grepl('imput',sic4v,ignore.case = T)]
+sic5v[grepl('imput',sic5v,ignore.case = T)]
+
+#Which is easier - can just exclude imputed from GVA/BRES link, no jobs anyway
+
+#Pull out numbers in brackets, don't need the rest
+#https://stackoverflow.com/a/8613332
+repl <- regmatches(gv$GVA_INDUSTRY_CODE, gregexpr("(?<=\\().*?(?=\\))", gv$GVA_INDUSTRY_CODE, perl=T))
+repl[lengths(repl) == 0] <- NA
+repl <- unlist(repl)
+
+gv$GVA_INDUSTRY_CODE <- ifelse(is.na(repl), gv$GVA_INDUSTRY_CODE, repl)
+#And can drop imputed rent, we can't match against that
+gv <- gv %>% filter(GVA_INDUSTRY_CODE!='68IMP')
 
 
 

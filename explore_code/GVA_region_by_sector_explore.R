@@ -867,6 +867,12 @@ p
 
 
 
+
+
+
+
+
+#UDPATE: THIS IS PROBABLY BETTER DONE WITH THE TIME-BARS IN THE PLOT ABOVE
 #It would be good to see how radically the structure's changed over time
 #No animation, let's just save for each year - using one year as reference for the factor ordering
 
@@ -1010,6 +1016,127 @@ repl <- unlist(repl)
 gv$GVA_INDUSTRY_CODE <- ifelse(is.na(repl), gv$GVA_INDUSTRY_CODE, repl)
 #And can drop imputed rent, we can't match against that
 gv <- gv %>% filter(GVA_INDUSTRY_CODE!='68IMP')
+
+
+
+#The BRES data at 2 digit SIC level
+bres <- readRDS('data/sectors/ITL2_fulltimeemployeecountandpercent2digitSIC_BRESopen15to21.rds') %>% 
+  mutate(INDUSTRY_CODE_NUMERIC = as.numeric(INDUSTRY_CODE))
+
+#PLAN:
+#if we mark the bres categories with group names
+#Such that ones that need collating are in the same group
+#Can then just do easily with dplyr
+
+#Create a copy of GV where the codes are expanded to 1 each per row
+#But the names will be duplicates
+#Can then merge on the codes, and then group by these names to create the groups
+#Is the theory
+df <- gv
+
+# Split the rows with hyphenated codes
+split_rows <- function(row) {
+  start_code <- as.numeric(strsplit(row$GVA_INDUSTRY_CODE, "-")[[1]][1])
+  end_code <- as.numeric(strsplit(row$GVA_INDUSTRY_CODE, "-")[[1]][2])
+  
+  codes <- as.character(start_code:end_code)
+  data.frame(
+    GVA_INDUSTRY_NAME = rep(row$GVA_INDUSTRY_NAME, length(codes)),
+    GVA_INDUSTRY_CODE = codes,
+    stringsAsFactors = FALSE
+  )
+}
+
+# Identify the rows to be split
+rows_to_split <- grepl("-", df$GVA_INDUSTRY_CODE)
+
+# Use lapply to preserve dataframe structure and then rbind to combine the rows
+expanded_rows <- do.call(rbind, lapply(1:nrow(df), function(i) {
+  if (rows_to_split[i]) {
+    split_rows(df[i, , drop = FALSE])
+  }
+}))
+
+# Remove the hyphenated rows from the original dataframe
+df <- df[!rows_to_split, ]
+
+# Combine the two dataframes
+df <- rbind(df, expanded_rows)
+
+df <- df %>% 
+  mutate(GVA_INDUSTRY_CODE_NUMERIC = as.numeric(GVA_INDUSTRY_CODE))
+
+
+#87 in the expanded GVA, 88 in BRES
+#Let's see where's different
+table(df$GVA_INDUSTRY_CODE_NUMERIC %in% bres$INDUSTRY_CODE_NUMERIC)
+table(unique(bres$INDUSTRY_CODE_NUMERIC) %in% df$GVA_INDUSTRY_CODE_NUMERIC)
+
+#"99 : Activities of extraterritorial organisations and bodies"
+unique(bres$INDUSTRY_CODE_NUMERIC)[!unique(bres$INDUSTRY_CODE_NUMERIC) %in% df$GVA_INDUSTRY_CODE_NUMERIC]
+
+#Which I suspect are all zeroes anyway... tick
+bres %>% filter(INDUSTRY_NAME == '99 : Activities of extraterritorial organisations and bodies') %>% 
+  summarise(sum(COUNT))
+
+
+#So can drop those via inner join, the rest match
+#Tick, looks good
+both <- bres %>% 
+  inner_join(
+    df,
+    by = c('INDUSTRY_CODE_NUMERIC' = 'GVA_INDUSTRY_CODE_NUMERIC')
+    )
+
+
+#Can now group by GVA industry name and sum the counts
+bres_w_gvacodes <- both %>% 
+  group_by(GVA_INDUSTRY_NAME, GEOGRAPHY_NAME, DATE) %>%
+  summarise(
+    COUNT = sum(COUNT, na.rm=T),
+    INDUSTRY_CODE = max(GVA_INDUSTRY_CODE)
+    )
+
+#All that needs now is the original number code merged back in, so we have those labelled
+bres_w_gvacodes <- bres_w_gvacodes %>% 
+  left_join(
+    gv,
+    by = 'GVA_INDUSTRY_NAME'
+    ) %>% 
+  select(-INDUSTRY_CODE) %>% 
+  rename(INDUSTRY_CODE = GVA_INDUSTRY_CODE, INDUSTRY_NAME = GVA_INDUSTRY_NAME)
+
+
+#Think we might have some zero job counts on at least one other sector?
+#Activities of households.
+#Remove that one too, note no jobs data there
+bres_w_gvacodes %>% 
+  group_by(INDUSTRY_NAME) %>% 
+  summarise(COUNT= sum(COUNT)) %>% 
+  arrange(-COUNT) %>% 
+  print(n=80)
+
+bres_w_gvacodes <- bres_w_gvacodes %>% 
+  filter(INDUSTRY_NAME!='Activities of households')
+
+
+#Keep matching sectors, join
+gva_w_jobcounts <- bres_w_gvacodes %>% 
+  left_join(
+    itl2.cp,
+    by = c('DATE'='year','INDUSTRY_NAME'='SIC07 description','GEOGRAPHY_NAME'='ITL region name')
+  ) %>% 
+  rename(JOBCOUNT = COUNT, GVA = value)
+
+
+#GVA per job
+gva_w_jobcounts <- gva_w_jobcounts %>% 
+  mutate(GVA_perjob = (GVA * 1000000) / JOBCOUNT)
+
+
+
+
+
 
 
 

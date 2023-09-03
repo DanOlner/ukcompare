@@ -391,17 +391,27 @@ gb.pt <- pt %>%
 
 #NOTE: FOR NOW, FILTERING DOWN TO 2015-2021 AS 09-14 HAS NO DATA IN THE NUTS2 DOWNLOADS
 #There's probably a way to aggregate the data through smaller geographies, will come back to that if needed
-loadallITL2_fulltime_and_reduce <- function(filename){
+# loadallITL2_fulltime_and_reduce <- function(filename){
+#   
+#   readRDS(filename) %>% filter(INDUSTRY_TYPE=='SIC 2007 subclass (5 digit)', EMPLOYMENT_STATUS_NAME=='Full-time employees',
+#                                INDUSTRY_NAME!="Total", MEASURES_NAME=='Value', MEASURE_NAME=='Count') %>% 
+#     select(DATE,GEOGRAPHY_NAME,GEOGRAPHY_CODE,INDUSTRY_NAME,INDUSTRY_CODE,COUNT=OBS_VALUE)
+#   
+# }
+
+
+loadallITL2_and_Reduce <- function(filename, industry, employment_status){
   
-  readRDS(filename) %>% filter(INDUSTRY_TYPE=='SIC 2007 subclass (5 digit)', EMPLOYMENT_STATUS_NAME=='Full-time employees',
+  readRDS(filename) %>% filter(INDUSTRY_TYPE==industry, EMPLOYMENT_STATUS_NAME==employment_status,
                                INDUSTRY_NAME!="Total", MEASURES_NAME=='Value', MEASURE_NAME=='Count') %>% 
     select(DATE,GEOGRAPHY_NAME,GEOGRAPHY_CODE,INDUSTRY_NAME,INDUSTRY_CODE,COUNT=OBS_VALUE)
   
 }
 
 #All years
-itl2 <- list.files(path = "local/data/", pattern = "NUTS2", full.names = T) %>% 
-  map(loadallITL2_fulltime_and_reduce) %>% 
+itl2 <- list.files(path = "local/data/", pattern = "BRES_NUTS2", full.names = T) %>% 
+  # map(loadallITL2_fulltime_and_reduce) %>% 
+  map(loadallITL2_and_Reduce, industry = 'SIC 2007 subclass (5 digit)', employment_status = 'Full-time employees') %>%#Note, haven't tested this generic version 
   bind_rows() %>% 
   filter(DATE > 2014)
 
@@ -413,6 +423,21 @@ itl2$INDUSTRY_NAME <- iconv(itl2$INDUSTRY_NAME, "UTF-8", "UTF-8",sub='')
 #Save for use elsewhere
 saveRDS(itl2, 'data/sectors/ITL2_fulltimeemployeecountandpercent5digitSIC_BRESopen15to21.rds')
 
+
+
+#REPEAT FOR 2 DIGIT full time
+itl2 <- list.files(path = "local/data/", pattern = "BRES_NUTS2", full.names = T) %>% 
+  # map(loadallITL2_fulltime_and_reduce) %>% 
+  map(loadallITL2_and_Reduce, industry = 'SIC 2007 division (2 digit)', employment_status = 'Full-time employees') %>%#Note, haven't tested this generic version 
+  bind_rows() %>% 
+  filter(DATE > 2014)
+
+#Just in case...
+#https://stackoverflow.com/a/17292126
+itl2$INDUSTRY_NAME <- iconv(itl2$INDUSTRY_NAME, "UTF-8", "UTF-8",sub='')
+
+#Save for use elsewhere
+saveRDS(itl2, 'data/sectors/ITL2_fulltimeemployeecountandpercent2digitSIC_BRESopen15to21.rds')
 
 
 
@@ -889,6 +914,24 @@ x <- x %>%
     by = c('INDUSTRY_NAME','GEOGRAPHY_NAME')
   )
 
+
+
+#Get min max values over time as well, to add as bars so range of sector is easy to see
+minmaxes <- itl2.lq %>% 
+  group_by(INDUSTRY_NAME,GEOGRAPHY_NAME) %>% 
+  summarise(
+    minn = min(LQ),
+    maxx = max(LQ)
+  )
+
+x <- x %>% 
+  left_join(
+    minmaxes,
+    by = c('INDUSTRY_NAME','GEOGRAPHY_NAME')
+  )
+
+
+
 #Redo factor, gets lost in join
 x$INDUSTRY_NAME <- factor(x$INDUSTRY_NAME)
 x$INDUSTRY_NAME <- fct_relevel(
@@ -1143,9 +1186,8 @@ ggplot() +
 
 
 
-
 #TEST ADDING IN ARBITRARY PLACE OVER THE TOP E.G. TO SEE SY + MANC COMPARED
-addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundcolour='black', add_jobnumbers = F, setalpha = 1){
+addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundcolour='black', add_jobnumbers = F, setalpha = 1, addminmax = F){
   
   plot_to_addto <- plot_to_addto +
     geom_point(
@@ -1194,6 +1236,17 @@ addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundco
     
     
   }
+  
+  if(addminmax){
+    
+    plot_to_addto <- plot_to_addto +
+      geom_errorbar(
+        data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), GEOGRAPHY_NAME == place),
+        aes(y = INDUSTRY_NAME_REDUCED, xmin = minn, xmax = maxx),
+        width = 0.05
+      )
+    
+  }
    
   return(plot_to_addto)
   
@@ -1228,7 +1281,7 @@ p <- ggplot() +
 
 #Add a place
 p <- addplace_to_LQplot(plot_to_addto = p, place = 'Greater Manchester', shapenumber = 18,backgroundcolour = '#9ac0db', setalpha = 0.7)
-p <- addplace_to_LQplot(plot_to_addto = p, place = 'South Yorkshire', shapenumber = 16, add_jobnumbers = T)
+p <- addplace_to_LQplot(plot_to_addto = p, place = 'South Yorkshire', shapenumber = 16, add_jobnumbers = T, addminmax = T)
 p
 
 
@@ -1268,7 +1321,7 @@ for(sector2digit_grepl in SIC2digits){
   
   #Add a place
   p <- addplace_to_LQplot(plot_to_addto = p, place = 'Greater Manchester', shapenumber = 18,backgroundcolour = '#9ac0db', setalpha = 0.7)
-  p <- addplace_to_LQplot(plot_to_addto = p, place = 'South Yorkshire', shapenumber = 16, add_jobnumbers = T)
+  p <- addplace_to_LQplot(plot_to_addto = p, place = 'South Yorkshire', shapenumber = 16, add_jobnumbers = T, addminmax = T)
   
   ggsave(plot = p, filename = paste0('local/localimages/2digitSICs_BRES_LQs/',gsub(pattern = ' : ',replacement = '_', x = sector2digit_grepl),'.png'),width = 12, height = 12)
   
@@ -1283,7 +1336,8 @@ v <- itl2.lq %>%
   # filter(GEOGRAPHY_NAME=='South Yorkshire', grepl('16230', INDUSTRY_NAME))#manuf other builders’ carpentry / joinery 
   # filter(GEOGRAPHY_NAME=='South Yorkshire', grepl('24100', INDUSTRY_NAME))#manuf basic iron steel, 3500 people
   # filter(GEOGRAPHY_NAME=='South Yorkshire', grepl('52103 : Operation of warehousing and storage facilities for land trans', INDUSTRY_NAME))
-  filter(GEOGRAPHY_NAME=='South Yorkshire', grepl('58130 : Publishing of newspapers', INDUSTRY_NAME))
+  # filter(GEOGRAPHY_NAME=='South Yorkshire', grepl('58130 : Publishing of newspapers', INDUSTRY_NAME))
+  filter(GEOGRAPHY_NAME=='South Yorkshire', grepl('43320 : Joinery installation', INDUSTRY_NAME))
 
 ggplot(v, aes(x = DATE, y = LQ)) +
   geom_point() +

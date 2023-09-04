@@ -943,9 +943,11 @@ for(yeartosave in 1998:2021){
 
 
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#Linking the SIC codes across BRES/GVA----
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#Linking BRES EMPLOYMENT TO GVA----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Towards gva per job
 
 #Starting with a look at what SIC codes we've got in both.
 #Reminder: the number of categories for the GVA data is different depending on the geography scale, dropping for each smaller geography
@@ -1019,6 +1021,24 @@ gv <- gv %>% filter(GVA_INDUSTRY_CODE!='68IMP')
 
 
 
+
+
+
+#CORRECT NON MATCHING ITL2 NAMES
+#Are there also any issues with non-matching ITL2 names? 
+#NI will be missing anyway, GVA data is UK, BRES is GB, but...
+table(unique(itl2.cp$`ITL region name`) %in% unique(br$GEOGRAPHY_NAME))
+unique(itl2.cp$`ITL region name`)[!unique(itl2.cp$`ITL region name`) %in% unique(br$GEOGRAPHY_NAME)]
+unique(br$GEOGRAPHY_NAME)[!unique(br$GEOGRAPHY_NAME) %in% unique(itl2.cp$`ITL region name`)]
+
+#Yup. Have already checked geography matches elsewhere, just need a name tweak
+itl2.cp$`ITL region name`[itl2.cp$`ITL region name` == 'Northumberland, and Tyne and Wear'] <- 'Northumberland and Tyne and Wear'
+itl2.cp$`ITL region name`[itl2.cp$`ITL region name` == 'West Wales and The Valleys'] <- 'West Wales'
+
+
+
+
+
 #The BRES data at 2 digit SIC level
 bres <- readRDS('data/sectors/ITL2_fulltimeemployeecountandpercent2digitSIC_BRESopen15to21.rds') %>% 
   mutate(INDUSTRY_CODE_NUMERIC = as.numeric(INDUSTRY_CODE))
@@ -1065,6 +1085,16 @@ df <- rbind(df, expanded_rows)
 
 df <- df %>% 
   mutate(GVA_INDUSTRY_CODE_NUMERIC = as.numeric(GVA_INDUSTRY_CODE))
+
+
+#JOIN TO BRES EMPLOYMENT COUNTS
+#Reminder of employee cats in the BRES data
+## Employees: An employee is anyone aged 16 years or over that an organisation directly pays from its payroll(s), in return for carrying out a full-time or part-time job or being on a training scheme. It excludes voluntary workers, self-employed, working owners who are not paid via PAYE. 
+# Full-time employees: those working more than 30 hours per week.
+# Part-time employees: those working 30 hours or less per week.
+# Employment includes employees plus the number of working owners. BRES therefore includes self-employed workers as long as they are registered for VAT or Pay-As-You-Earn (PAYE) schemes. Self employed people not registered for these, along with HM Forces and Government Supported trainees are excluded.
+#And note, no gig economy jobs: 
+#https://www.ons.gov.uk/aboutus/transparencyandgovernance/freedomofinformationfoi/workersinthegigeconomy
 
 
 #87 in the expanded GVA, 88 in BRES
@@ -1119,19 +1149,131 @@ bres_w_gvacodes %>%
 bres_w_gvacodes <- bres_w_gvacodes %>% 
   filter(INDUSTRY_NAME!='Activities of households')
 
-
 #Keep matching sectors, join
 gva_w_jobcounts <- bres_w_gvacodes %>% 
   left_join(
     itl2.cp,
     by = c('DATE'='year','INDUSTRY_NAME'='SIC07 description','GEOGRAPHY_NAME'='ITL region name')
   ) %>% 
-  rename(JOBCOUNT = COUNT, GVA = value)
+  rename(JOBCOUNT_FT = COUNT, GVA = value)
 
 
-#GVA per job
+#GVA per FT job
 gva_w_jobcounts <- gva_w_jobcounts %>% 
-  mutate(GVA_perjob = (GVA * 1000000) / JOBCOUNT)
+  mutate(GVA_perFTjob = (GVA * 1000000) / JOBCOUNT_FT)
+
+
+
+#REPEAT FOR "EMPLOYMENT". Reminder:
+#"  "Employment" includes employees plus the number of working owners. BRES therefore includes self-employed workers as long as they are registered for VAT or Pay-As-You-Earn (PAYE) schemes. Self employed people not registered for these, along with HM Forces and Government Supported trainees are excluded."
+bres_all <- readRDS('data/sectors/ITL2_Employment_countandpercent2digitSIC_BRESopen15to21.rds') %>% 
+  mutate(INDUSTRY_CODE_NUMERIC = as.numeric(INDUSTRY_CODE))
+
+both <- bres_all %>% 
+  inner_join(
+    df,
+    by = c('INDUSTRY_CODE_NUMERIC' = 'GVA_INDUSTRY_CODE_NUMERIC')
+  )
+
+
+#Can now group by GVA industry name and sum the counts
+bres_all_w_gvacodes <- both %>% 
+  group_by(GVA_INDUSTRY_NAME, GEOGRAPHY_NAME, DATE) %>%
+  summarise(
+    COUNT = sum(COUNT, na.rm=T),
+    INDUSTRY_CODE = max(GVA_INDUSTRY_CODE)
+  )
+
+#All that needs now is the original number code merged back in, so we have those labelled
+bres_all_w_gvacodes <- bres_all_w_gvacodes %>% 
+  left_join(
+    gv,
+    by = 'GVA_INDUSTRY_NAME'
+  ) %>% 
+  select(-INDUSTRY_CODE) %>% 
+  rename(INDUSTRY_CODE = GVA_INDUSTRY_CODE, INDUSTRY_NAME = GVA_INDUSTRY_NAME)
+
+
+#Think we might have some zero job counts on at least one other sector?
+#Activities of households.
+#Remove that one too, note no jobs data there
+bres_all_w_gvacodes %>% 
+  group_by(INDUSTRY_NAME) %>% 
+  summarise(COUNT= sum(COUNT)) %>% 
+  arrange(-COUNT) %>% 
+  print(n=80)
+
+bres_all_w_gvacodes <- bres_all_w_gvacodes %>% 
+  filter(INDUSTRY_NAME!='Activities of households')
+
+#Keep matching sectors, join
+gva_w_jobcounts_EMP <- bres_all_w_gvacodes %>% 
+  left_join(
+    itl2.cp,
+    by = c('DATE'='year','INDUSTRY_NAME'='SIC07 description','GEOGRAPHY_NAME'='ITL region name')
+  ) %>% 
+  rename(JOBCOUNT_EMPLOYMENT = COUNT, GVA = value)
+
+
+#GVA per FT job
+gva_w_jobcounts_EMP <- gva_w_jobcounts_EMP %>% 
+  mutate(GVA_per_EMPLOYMENT = (GVA * 1000000) / JOBCOUNT_EMPLOYMENT)
+
+
+#Add the second lot of job numbers to the same df
+gva_w_jobcounts <- gva_w_jobcounts %>% 
+  left_join(
+    gva_w_jobcounts_EMP %>% select(INDUSTRY_NAME, GEOGRAPHY_NAME,DATE,JOBCOUNT_EMPLOYMENT,GVA_per_EMPLOYMENT),
+    by = c('INDUSTRY_NAME','GEOGRAPHY_NAME','DATE')
+  ) %>% 
+  relocate(GVA, .before = GVA_perFTjob) %>% 
+  relocate(JOBCOUNT_FT, .before = GVA_perFTjob)
+
+
+#SAVE
+saveRDS(gva_w_jobcounts, 'data/UK_GVA_with_BRES_jobcounts.rds')
+
+
+
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~
+#LOOKING AT GVA PER JOB----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Question 1: how far apart are the GVA per job ratios for 'full time employees' vs 'employment'?
+#See above for the difference...
+
+#Find ratio, then let's see the spread.
+#Note to self: this ratio is the same thing as the actual job number ratio
+# gva_w_jobcounts <- gva_w_jobcounts %>% 
+  # mutate(ratio = GVA_perFTjob / GVA_per_EMPLOYMENT)
+
+#So let's just look at the job number ratio. I have checked this before, it's very close for "all employees" (that includes PT)
+#But this...?
+gva_w_jobcounts <- gva_w_jobcounts %>% 
+  mutate(ratio = JOBCOUNT_FT / JOBCOUNT_EMPLOYMENT)
+
+#Check ratio differences for all places
+ggplot(gva_w_jobcounts, aes(x = GEOGRAPHY_NAME, y = ratio)) +
+  # geom_boxplot() +
+  geom_violin(fill = 'white') +
+  # geom_jitter(alpha = 0.01) +
+  coord_flip()
+
+
+#Sector breakdown also informative
+#E.g. basic metals and heavier sectors - number of part time very small, so difference is very small
+ggplot(gva_w_jobcounts, aes(x = fct_reorder(INDUSTRY_NAME,ratio), y = ratio)) +
+  # geom_boxplot() +
+  geom_violin(fill = 'white') +
+  # geom_jitter(alpha = 0.01) +
+  coord_flip()
+
+
+
+#Next: add in total GVA per region / total GVA per employee per region
 
 
 
@@ -1139,6 +1281,40 @@ gva_w_jobcounts <- gva_w_jobcounts %>%
 
 
 
+
+
+
+#Quick looks
+
+
+gva_m <- gva_w_jobcounts %>%
+  group_by(INDUSTRY_NAME,GEOGRAPHY_NAME) %>% 
+  arrange(DATE) %>% 
+  mutate(
+    movingav_FT = rollapply(GVA_perFTjob,3,mean,align='right',fill=NA),
+    movingav_EMP = rollapply(GVA_per_EMPLOYMENT,3,mean,align='right',fill=NA)
+    ) %>% 
+  ungroup()
+
+#NOTE: THIS IS CURRENT PRICES - BEAR IN MIND FOR CHANGE OVER TIME
+#The unsmoothed data is pretty chaotic...
+plot_ly(data = gva_m %>% filter(grepl('basic metals',INDUSTRY_NAME), JOBCOUNT_FT >= 1000), x = ~DATE, y = ~movingav_FT, color = ~GEOGRAPHY_NAME,
+# plot_ly(data = gva_m %>% filter(grepl('basic metals',INDUSTRY_NAME), JOBCOUNT_FT >= 1000), x = ~DATE, y = ~GVA_perFTjob, color = ~GEOGRAPHY_NAME,
+        text = ~paste("Place:", GEOGRAPHY_NAME,'\nFull times: ', JOBCOUNT_FT,'\nGVA: ',GVA,'\nGVA per employment: ',GVA_perFTjob),  # Add this line for hover text
+        hoverinfo = 'text',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly values by SIC", 
+         xaxis = list(title = "Year"), 
+         yaxis = list(title = "Value", type='log'),
+         # yaxis = list(title = "Value"),
+         showlegend = TRUE)
+
+
+#Why some missing data?
+#Hit zero on one year. But note also: this is going to be firms' head offices, hence the very high GVA.
+#Which is also a reminder: local units probably the better data to be using.
+chk <- gva_w_jobcounts %>% 
+  filter(GEOGRAPHY_NAME ==  'Inner London - West', grepl('basic metals',INDUSTRY_NAME))
 
 
 

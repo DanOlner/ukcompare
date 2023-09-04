@@ -408,7 +408,7 @@ loadallITL2_and_Reduce <- function(filename, industry, employment_status){
   
 }
 
-#All years
+#5 digit full timers
 itl2 <- list.files(path = "local/data/", pattern = "BRES_NUTS2", full.names = T) %>% 
   # map(loadallITL2_fulltime_and_reduce) %>% 
   map(loadallITL2_and_Reduce, industry = 'SIC 2007 subclass (5 digit)', employment_status = 'Full-time employees') %>%#Note, haven't tested this generic version 
@@ -425,6 +425,22 @@ saveRDS(itl2, 'data/sectors/ITL2_fulltimeemployeecountandpercent5digitSIC_BRESop
 
 
 
+#5 DIGIT all employees / employment
+itl2 <- list.files(path = "local/data/", pattern = "BRES_NUTS2", full.names = T) %>% 
+  # map(loadallITL2_fulltime_and_reduce) %>% 
+  map(loadallITL2_and_Reduce, industry = 'SIC 2007 subclass (5 digit)', employment_status = 'Employment') %>%#Note, haven't tested this generic version 
+  bind_rows() %>% 
+  filter(DATE > 2014)
+
+#Just in case...
+#https://stackoverflow.com/a/17292126
+itl2$INDUSTRY_NAME <- iconv(itl2$INDUSTRY_NAME, "UTF-8", "UTF-8",sub='')
+
+#Save for use elsewhere
+saveRDS(itl2, 'data/sectors/ITL2_Employment_countandpercent5digitSIC_BRESopen15to21.rds')
+
+
+
 #REPEAT FOR 2 DIGIT full time
 itl2 <- list.files(path = "local/data/", pattern = "BRES_NUTS2", full.names = T) %>% 
   # map(loadallITL2_fulltime_and_reduce) %>% 
@@ -438,6 +454,22 @@ itl2$INDUSTRY_NAME <- iconv(itl2$INDUSTRY_NAME, "UTF-8", "UTF-8",sub='')
 
 #Save for use elsewhere
 saveRDS(itl2, 'data/sectors/ITL2_fulltimeemployeecountandpercent2digitSIC_BRESopen15to21.rds')
+
+
+
+#REPEAT FOR 2 DIGIT all employees / employment
+itl2 <- list.files(path = "local/data/", pattern = "BRES_NUTS2", full.names = T) %>% 
+  # map(loadallITL2_fulltime_and_reduce) %>% 
+  map(loadallITL2_and_Reduce, industry = 'SIC 2007 division (2 digit)', employment_status = 'Employment') %>%#Note, haven't tested this generic version 
+  bind_rows() %>% 
+  filter(DATE > 2014)
+
+#Just in case...
+#https://stackoverflow.com/a/17292126
+itl2$INDUSTRY_NAME <- iconv(itl2$INDUSTRY_NAME, "UTF-8", "UTF-8",sub='')
+
+#Save for use elsewhere
+saveRDS(itl2, 'data/sectors/ITL2_Employment_countandpercent2digitSIC_BRESopen15to21.rds')
 
 
 
@@ -569,6 +601,17 @@ p <- ggplot(industrytolook %>% filter(INDUSTRY_NAME %in% industrytolook$INDUSTRY
         axis.ticks.y=element_blank())
 
 ggplotly(p, tooltip = c("GEOGRAPHY_NAME" ))
+
+
+
+#And some other tests while I'm here
+#5 digit SIC counts appear to let you get MUCH more accurate job counts than the 2-digit by themselves
+#If these numbers are correct and not random estimates - not sure about this
+#E.g. the basic metals total is 5000 exactly from 2-digit, for SY in 2021
+#From the 5 digit we can get:
+itl2.lq %>% 
+  filter(GEOGRAPHY_NAME=='South Yorkshire', grepl('basic metal', SIC_2DIGIT_NAME)) %>% 
+  summarise(jobtot = sum(COUNT))
 
 
 

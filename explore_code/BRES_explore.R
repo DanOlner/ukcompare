@@ -83,6 +83,9 @@ a <- nomis_search(name = '*business*')
 atts <- a %>% tidyr::unnest(components.attribute) %>% glimpse()
 unique(atts$name.value)
 
+#public/private? NM_190_1
+a %>% filter(grepl('Business Register and Employment Survey public/private sector  : open access',name.value))
+
 #So, what's the ID for BRES open?
 #Noting I can probably only use the API for open data, not safeguarded BRES values...
 atts %>% filter(name.value == "Business Register and Employment Survey : open access")
@@ -91,6 +94,13 @@ atts %>% filter(name.value == "Business Register and Employment Survey : open ac
 #BRES open ID
 y <- nomis_data_info("NM_189_1")
 glimpse(y)
+
+#BRES open public private
+pp <- nomis_data_info("NM_190_1")
+glimpse(pp)
+
+
+
 
 # y %>% tidyr::unnest(annotations.annotation) %>% glimpse()
 # y %>% tidyr::unnest(components.attribute) %>% glimpse()
@@ -154,6 +164,11 @@ nomis_get_metadata(id = "NM_172_1", concept = "MEASURES")
 nomis_get_metadata(id = "NM_172_1", concept = "TIME")
 
 print(nomis_get_metadata(id = "NM_172_1", concept = "geography", type = "type"), n = 40)
+
+
+nomis_get_metadata("NM_190_1")
+#Public private... TYPE438 plz
+print(nomis_get_metadata("NM_190_1", concept = "GEOGRAPHY", type = 'type'),n=40)
 
 
 #"Passing a specific type to the type parameter, in this case “TYPE460” for all post-2010 parliamentary constituencies, returns a tibble with geographic codes for those specific constituencies, which can be used to filter queries"
@@ -261,6 +276,22 @@ download_all_BRESopen_earlier <- function(year){
 }
 
 lapply(years, function(x) download_all_BRESopen_earlier(x))
+
+
+
+#PUBLIC / PRIVATE BREAKDOWN RATHER THAN SIC CODES
+#Get one year, check columns to keep
+#Very quick, not huge, might as well get all
+# chk <- nomis_get_data(id = "NM_190_1", time = "2021", geography = "TYPE438")
+
+years = c(2015:2021)
+
+download_all_BRES_PUBLICPRIVATE <- function(year){
+  z <- nomis_get_data(id = "NM_190_1", time = as.character(year), geography = "TYPE438")
+  saveRDS(z,paste0('local/data/BRES_PUBLICPRIVATE_NUTS2_',year,'.rds'))
+}
+
+lapply(years, function(x) download_all_BRES_PUBLICPRIVATE(x))
 
 
 
@@ -471,6 +502,29 @@ itl2$INDUSTRY_NAME <- iconv(itl2$INDUSTRY_NAME, "UTF-8", "UTF-8",sub='')
 #Save for use elsewhere
 saveRDS(itl2, 'data/sectors/ITL2_Employment_countandpercent2digitSIC_BRESopen15to21.rds')
 
+
+
+
+#Repeat for public/private, different function
+loadallITL2_publicprivate_and_Reduce <- function(filename, industry, employment_status){
+  
+  readRDS(filename) %>% filter(INDUSTRY_TYPE==industry, EMPLOYMENT_STATUS_NAME==employment_status,
+                               INDUSTRY_NAME!="Total", MEASURES_NAME=='Value', MEASURE_NAME=='Count') %>% 
+    select(DATE,GEOGRAPHY_NAME,GEOGRAPHY_CODE,INDUSTRY_NAME,INDUSTRY_CODE,COUNT=OBS_VALUE)
+  
+}
+
+itl2 <- list.files(path = "local/data/", pattern = "BRES_PUBLICPRIVATE_NUTS2", full.names = T) %>% 
+  map(loadallITL2_publicprivate_and_Reduce, industry = 'SIC 2007 division (2 digit)', employment_status = 'Employment') %>%#Note, haven't tested this generic version 
+  bind_rows() %>% 
+  filter(DATE > 2014)
+
+#Just in case...
+#https://stackoverflow.com/a/17292126
+itl2$INDUSTRY_NAME <- iconv(itl2$INDUSTRY_NAME, "UTF-8", "UTF-8",sub='')
+
+#Save for use elsewhere
+saveRDS(itl2, 'data/sectors/ITL2_Employment_countandpercent2digitSIC_BRESopen15to21.rds')
 
 
 
@@ -1230,11 +1284,78 @@ ggplot() +
 
 
 #TEST ADDING IN ARBITRARY PLACE OVER THE TOP E.G. TO SEE SY + MANC COMPARED
-addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundcolour='black', add_jobnumbers = F, setalpha = 1, addminmax = F){
+# addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundcolour='black', add_jobnumbers = F, setalpha = 1, addminmax = F){
+#   
+#   plot_to_addto <- plot_to_addto +
+#     geom_point(
+#       data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), GEOGRAPHY_NAME == place, difftotal > 0), 
+#       # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+#       aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal *1.75),
+#       shape = shapenumber,
+#       colour = backgroundcolour,
+#       alpha = setalpha
+#     ) +
+#     geom_point(
+#       data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), GEOGRAPHY_NAME == place, difftotal < 0), 
+#       # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+#       aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal *-1.75),
+#       shape = shapenumber,
+#       colour = backgroundcolour,
+#       alpha = setalpha
+#     ) +
+#     geom_point(
+#       data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), GEOGRAPHY_NAME == place, difftotal > 0), 
+#       # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+#       aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal),
+#       shape = shapenumber,
+#       colour = 'green',
+#       alpha = setalpha
+#     ) +
+#     geom_point(
+#       data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), GEOGRAPHY_NAME == place, difftotal < 0), 
+#       # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+#       aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal * -1),
+#       shape = shapenumber,
+#       colour = 'red',
+#       alpha = setalpha
+#     ) 
+#   
+#   
+#   if(add_jobnumbers){
+#     
+#     plot_to_addto <- plot_to_addto +  
+#       geom_text(
+#         data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), GEOGRAPHY_NAME == place), 
+#         aes(y = INDUSTRY_NAME_REDUCED, x = max(LQ) + 10, label = paste0(COUNT,', ',round(sector_regional_proportion * 100, 2),'%')),
+#         # aes(y = INDUSTRY_NAME, x = max(LQ) + 2, label = COUNT),
+#         nudge_x = 0.3, hjust = 1, alpha = 0.7, size = 3
+#       )
+#     
+#     
+#   }
+#   
+#   if(addminmax){
+#     
+#     plot_to_addto <- plot_to_addto +
+#       geom_errorbar(
+#         data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), GEOGRAPHY_NAME == place),
+#         aes(y = INDUSTRY_NAME_REDUCED, xmin = minn, xmax = maxx),
+#         width = 0.05
+#       )
+#     
+#   }
+#    
+#   return(plot_to_addto)
+#   
+# }
+
+
+
+addplace_to_LQplot <- function(df, plot_to_addto, place, shapenumber=16,backgroundcolour='black', add_jobnumbers = F, setalpha = 1, addminmax = F){
   
   plot_to_addto <- plot_to_addto +
     geom_point(
-      data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), GEOGRAPHY_NAME == place, difftotal > 0), 
+      data = df %>% filter(GEOGRAPHY_NAME == place, difftotal > 0), 
       # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
       aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal *1.75),
       shape = shapenumber,
@@ -1242,7 +1363,7 @@ addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundco
       alpha = setalpha
     ) +
     geom_point(
-      data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), GEOGRAPHY_NAME == place, difftotal < 0), 
+      data = df %>% filter(GEOGRAPHY_NAME == place, difftotal < 0), 
       # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
       aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal *-1.75),
       shape = shapenumber,
@@ -1250,7 +1371,7 @@ addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundco
       alpha = setalpha
     ) +
     geom_point(
-      data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), GEOGRAPHY_NAME == place, difftotal > 0), 
+      data = df %>% filter(GEOGRAPHY_NAME == place, difftotal > 0), 
       # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
       aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal),
       shape = shapenumber,
@@ -1258,7 +1379,7 @@ addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundco
       alpha = setalpha
     ) +
     geom_point(
-      data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), GEOGRAPHY_NAME == place, difftotal < 0), 
+      data = df %>% filter(GEOGRAPHY_NAME == place, difftotal < 0), 
       # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
       aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal * -1),
       shape = shapenumber,
@@ -1271,7 +1392,7 @@ addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundco
     
     plot_to_addto <- plot_to_addto +  
       geom_text(
-        data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), GEOGRAPHY_NAME == place), 
+        data = df %>% filter(GEOGRAPHY_NAME == place), 
         aes(y = INDUSTRY_NAME_REDUCED, x = max(LQ) + 10, label = paste0(COUNT,', ',round(sector_regional_proportion * 100, 2),'%')),
         # aes(y = INDUSTRY_NAME, x = max(LQ) + 2, label = COUNT),
         nudge_x = 0.3, hjust = 1, alpha = 0.7, size = 3
@@ -1284,7 +1405,7 @@ addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundco
     
     plot_to_addto <- plot_to_addto +
       geom_errorbar(
-        data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), GEOGRAPHY_NAME == place),
+        data = df %>% filter(GEOGRAPHY_NAME == place),
         aes(y = INDUSTRY_NAME_REDUCED, xmin = minn, xmax = maxx),
         width = 0.05
       )
@@ -1296,19 +1417,81 @@ addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundco
 }
 
 
+plotdata <- x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME))
+
+
+
+
+
+#Get list of 5 digits for SY where LQ > 1 or some other value
+#And maybe that the min was always 1 in the data
+sectors5 <- x %>% filter(
+  GEOGRAPHY_NAME=="South Yorkshire",LQ > 1, minn > 1,
+  !grepl('call centres', INDUSTRY_NAME)
+  ) %>% 
+  ungroup() %>% 
+  select(INDUSTRY_NAME) %>% 
+  pull
+
+#Add back in scientific research/dev, despite shrinking
+sectors5 <- c(
+  sectors5,
+  x %>% filter(GEOGRAPHY_NAME=="South Yorkshire") %>% 
+    ungroup() %>% 
+    # filter(grepl('Manuf',INDUSTRY_NAME)) %>% 
+    filter(grepl('Scientific research',SIC_2DIGIT_NAME)) %>%
+    select(INDUSTRY_NAME) %>% 
+    pull
+  )
+
+length(sectors5)
+
+#List of the 2 digits I want to take out of that that are less connected also added in
+plotdata <- x %>% filter(
+  INDUSTRY_NAME %in% sectors5,
+  !grepl(
+    'Wholesale trade|Air transport|Food and beverage|Legal|Public admin|Residential care|wearing apparel|Retail trade|Warehousing|Rental|materials recovery|Wholesale|Postal|Sports|Computer programming|Human health', 
+    x$SIC_2DIGIT_NAME
+  )
+  )
+
+#Remove a couple of education sectors I don't think count as connected to production, or important for it
+plotdata <- plotdata %>% 
+  filter(
+    # !grepl('Primary education|secondary education|Other education', INDUSTRY_NAME)
+    !grepl('Primary education|secondary education|Other education|higher educ', INDUSTRY_NAME)
+  )
+
+
+
+#What the tot workforce in that?
+plotdata %>% 
+  filter(GEOGRAPHY_NAME == 'South Yorkshire') %>% 
+  summarise(
+    count = sum(COUNT),
+    totperc = sum(sector_regional_proportion) * 100
+  )
+
+
+#Factor order the facets
+plotdata <- plotdata %>% 
+  mutate(
+    SIC_2DIGIT_NAME = factor(SIC_2DIGIT_NAME),
+    SIC_2DIGIT_NAME = fct_reorder(SIC_2DIGIT_NAME,as.numeric(SIC_2DIGIT_CODE))
+    )
+
 
 #Base plot
 p <- ggplot() +
   geom_point(
-    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), difftotal > 0), 
-    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    data = plotdata %>% filter(difftotal > 0), 
     aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal),
     alpha = 0.1,
     shape = 16,
     colour = 'green'
   ) +
   geom_point(
-    data = x %>% filter(grepl(sector2digit_grepl,SIC_2DIGIT_NAME), difftotal < 0), 
+    data = plotdata %>% filter(difftotal < 0), 
     # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
     aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal * -1),
     alpha = 0.1,
@@ -1319,13 +1502,21 @@ p <- ggplot() +
   scale_x_continuous(trans = "log10") +
   geom_vline(xintercept = 1, colour = 'blue') +
   guides(size = F) +
-  facet_wrap(~SIC_2DIGIT_NAME, ncol = 1, scales = 'free_y')#If one sector only, adds name anyway, still useful
+  facet_wrap(~SIC_2DIGIT_NAME, ncol = 3, scales = 'free_y', dir = 'v')#If one sector only, adds name anyway, still useful
 
 
 #Add a place
-p <- addplace_to_LQplot(plot_to_addto = p, place = 'Greater Manchester', shapenumber = 18,backgroundcolour = '#9ac0db', setalpha = 0.7)
-p <- addplace_to_LQplot(plot_to_addto = p, place = 'South Yorkshire', shapenumber = 16, add_jobnumbers = T, addminmax = T)
+p <- addplace_to_LQplot(df = plotdata, plot_to_addto = p, place = 'Greater Manchester', shapenumber = 18,backgroundcolour = '#9ac0db', setalpha = 0.7)
+p <- addplace_to_LQplot(df = plotdata, plot_to_addto = p, place = 'South Yorkshire', shapenumber = 16, add_jobnumbers = T, addminmax = T)
 p
+
+ggsave(plot = p, filename = 'local/localimages/sy_5digitLqmorethan1.png', height=15, width=24)
+
+
+
+
+
+
 
 
 
@@ -1333,7 +1524,7 @@ p
 SIC2digits <- unique(x$SIC_2DIGIT_NAME)
 
 #Keep ones where LQ for this year / 2 digit SIC is at least 1 for one 5-digit
-SIC2digits <- x %>% filter(LQ > 1, GEOGRAPHY_NAME == 'South Yorkshire') %>% select(SIC_2DIGIT_NAME) %>% pull() %>% unique
+# SIC2digits <- x %>% filter(LQ > 1, GEOGRAPHY_NAME == 'South Yorkshire') %>% select(SIC_2DIGIT_NAME) %>% pull() %>% unique
 
 for(sector2digit_grepl in SIC2digits){
   
@@ -1370,6 +1561,12 @@ for(sector2digit_grepl in SIC2digits){
   
   
 }
+
+
+
+
+
+
 
 
 
@@ -2028,7 +2225,6 @@ plot_ly(data = x, x = ~DATE, y = ~percent, color = ~INDUSTRY_NAME,
          yaxis = list(title = "Value", type='log'),
          # yaxis = list(title = "Value"),
          showlegend = F)
-
 
 
 

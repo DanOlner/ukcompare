@@ -649,6 +649,11 @@ plot_ly(data = sy %>% filter(year==2021), x = ~LQ, y = ~sector_regional_proporti
 #LQ/ITL2 CHANGE CHARTS----
 #~~~~~~~~~~~~~~~~~~~~~~~~~
 
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~
+#LQ/ITL2 CHANGE CHARTS----
+#~~~~~~~~~~~~~~~~~~~~~~~~~
+
 #Originally made for BRES data, repeat code that adds change over time (via OLS) as colour
 
 #Create a function that fits lm and returns slope
@@ -939,8 +944,33 @@ for(yeartosave in 1998:2021){
 
 
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#GETTING BRES EMPLOYMENT NUMBERS FROM 5 DIGIT SUMS----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+#The point: 5 digit SICs in BRES have more granular employee count numbers
+#That can be summed to get finer 2 digit SIC sums
 
+#Structure of dataset will be the same for doing both, so can function that up can't I?
+
+add_jobcount_from5digit_summedTo2digit <- function(df){
+  
+  #GET SIC lookup
+  SIClookup <- read_csv('data/SIClookup.csv')
+  
+  df <- df %>% 
+    left_join(SIClookup %>% select(-SIC_5DIGIT_NAME), by = c('INDUSTRY_CODE' = 'SIC_5DIGIT_CODE'))
+  
+  #Get per region / per year / per 2 digit sector job count sums from 5 digit
+  df %>% 
+    group_by(DATE,GEOGRAPHY_NAME,SIC_2DIGIT_CODE) %>% 
+    summarise(COUNT = sum(COUNT))
+  
+}
+
+bres_FT_from5digit <- add_jobcount_from5digit_summedTo2digit(readRDS('data/sectors/ITL2_fulltimeemployeecountandpercent5digitSIC_BRESopen15to21.rds'))
+
+bres_EMPLOYMENT_from5digit <- add_jobcount_from5digit_summedTo2digit(readRDS('data/sectors/ITL2_Employment_countandpercent5digitSIC_BRESopen15to21.rds'))
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1043,6 +1073,17 @@ itl2.cp$`ITL region name`[itl2.cp$`ITL region name` == 'West Wales and The Valle
 bres <- readRDS('data/sectors/ITL2_fulltimeemployeecountandpercent2digitSIC_BRESopen15to21.rds') %>% 
   mutate(INDUSTRY_CODE_NUMERIC = as.numeric(INDUSTRY_CODE))
 
+#Add in the 5-digit-summed job counts
+#Check industry code match... tick
+table(bres$INDUSTRY_CODE %in% bres_FT_from5digit$SIC_2DIGIT_CODE)
+
+bres <- bres %>% 
+  left_join(
+    bres_FT_from5digit %>% rename(COUNT_5DIGIT = COUNT),
+    by = c('DATE','GEOGRAPHY_NAME','INDUSTRY_CODE'='SIC_2DIGIT_CODE')
+  )
+
+
 #PLAN:
 #if we mark the bres categories with group names
 #Such that ones that need collating are in the same group
@@ -1124,6 +1165,7 @@ bres_w_gvacodes <- both %>%
   group_by(GVA_INDUSTRY_NAME, GEOGRAPHY_NAME, DATE) %>%
   summarise(
     COUNT = sum(COUNT, na.rm=T),
+    COUNT_5DIGIT = sum(COUNT_5DIGIT, na.rm=T),
     INDUSTRY_CODE = max(GVA_INDUSTRY_CODE)
     )
 
@@ -1155,12 +1197,19 @@ gva_w_jobcounts <- bres_w_gvacodes %>%
     itl2.cp,
     by = c('DATE'='year','INDUSTRY_NAME'='SIC07 description','GEOGRAPHY_NAME'='ITL region name')
   ) %>% 
-  rename(JOBCOUNT_FT = COUNT, GVA = value)
+  rename(
+    JOBCOUNT_FT = COUNT, 
+    JOBCOUNT_FT_5DIGIT = COUNT_5DIGIT, 
+    GVA = value
+    )
 
 
 #GVA per FT job
 gva_w_jobcounts <- gva_w_jobcounts %>% 
-  mutate(GVA_perFTjob = (GVA * 1000000) / JOBCOUNT_FT)
+  mutate(
+    GVA_perFTjob = (GVA * 1000000) / JOBCOUNT_FT,
+    GVA_perFTjob_5digit = (GVA * 1000000) / JOBCOUNT_FT_5DIGIT
+    )
 
 
 
@@ -1168,6 +1217,17 @@ gva_w_jobcounts <- gva_w_jobcounts %>%
 #"  "Employment" includes employees plus the number of working owners. BRES therefore includes self-employed workers as long as they are registered for VAT or Pay-As-You-Earn (PAYE) schemes. Self employed people not registered for these, along with HM Forces and Government Supported trainees are excluded."
 bres_all <- readRDS('data/sectors/ITL2_Employment_countandpercent2digitSIC_BRESopen15to21.rds') %>% 
   mutate(INDUSTRY_CODE_NUMERIC = as.numeric(INDUSTRY_CODE))
+
+#Add in the 5-digit-summed job counts
+#Check industry code match... tick
+table(bres_all$INDUSTRY_CODE %in% bres_EMPLOYMENT_from5digit$SIC_2DIGIT_CODE)
+
+bres_all <- bres_all %>% 
+  left_join(
+    bres_EMPLOYMENT_from5digit %>% rename(COUNT_5DIGIT = COUNT),
+    by = c('DATE','GEOGRAPHY_NAME','INDUSTRY_CODE'='SIC_2DIGIT_CODE')
+  )
+
 
 both <- bres_all %>% 
   inner_join(
@@ -1181,6 +1241,7 @@ bres_all_w_gvacodes <- both %>%
   group_by(GVA_INDUSTRY_NAME, GEOGRAPHY_NAME, DATE) %>%
   summarise(
     COUNT = sum(COUNT, na.rm=T),
+    COUNT_5DIGIT = sum(COUNT_5DIGIT, na.rm=T),
     INDUSTRY_CODE = max(GVA_INDUSTRY_CODE)
   )
 
@@ -1199,7 +1260,10 @@ bres_all_w_gvacodes <- bres_all_w_gvacodes %>%
 #Remove that one too, note no jobs data there
 bres_all_w_gvacodes %>% 
   group_by(INDUSTRY_NAME) %>% 
-  summarise(COUNT= sum(COUNT)) %>% 
+  summarise(
+    COUNT= sum(COUNT, na.rm=T),
+    COUNT_5DIGIT = sum(COUNT_5DIGIT, na.rm=T),
+    ) %>% 
   arrange(-COUNT) %>% 
   print(n=80)
 
@@ -1212,26 +1276,33 @@ gva_w_jobcounts_EMP <- bres_all_w_gvacodes %>%
     itl2.cp,
     by = c('DATE'='year','INDUSTRY_NAME'='SIC07 description','GEOGRAPHY_NAME'='ITL region name')
   ) %>% 
-  rename(JOBCOUNT_EMPLOYMENT = COUNT, GVA = value)
+  rename(
+    JOBCOUNT_EMPLOYMENT = COUNT, 
+    JOBCOUNT_EMPLOYMENT_5DIGIT = COUNT_5DIGIT, 
+    GVA = value)
 
 
 #GVA per FT job
 gva_w_jobcounts_EMP <- gva_w_jobcounts_EMP %>% 
-  mutate(GVA_per_EMPLOYMENT = (GVA * 1000000) / JOBCOUNT_EMPLOYMENT)
+  mutate(
+    GVA_per_EMPLOYMENT = (GVA * 1000000) / JOBCOUNT_EMPLOYMENT,
+    GVA_per_EMPLOYMENT_5digit = (GVA * 1000000) / JOBCOUNT_EMPLOYMENT_5DIGIT
+    )
 
 
 #Add the second lot of job numbers to the same df
 gva_w_jobcounts <- gva_w_jobcounts %>% 
   left_join(
-    gva_w_jobcounts_EMP %>% select(INDUSTRY_NAME, GEOGRAPHY_NAME,DATE,JOBCOUNT_EMPLOYMENT,GVA_per_EMPLOYMENT),
+    gva_w_jobcounts_EMP %>% select(INDUSTRY_NAME, GEOGRAPHY_NAME,DATE,JOBCOUNT_EMPLOYMENT,JOBCOUNT_EMPLOYMENT_5DIGIT,GVA_per_EMPLOYMENT,GVA_per_EMPLOYMENT_5digit),
     by = c('INDUSTRY_NAME','GEOGRAPHY_NAME','DATE')
   ) %>% 
   relocate(GVA, .before = GVA_perFTjob) %>% 
-  relocate(JOBCOUNT_FT, .before = GVA_perFTjob)
+  relocate(JOBCOUNT_FT, .before = GVA_perFTjob) %>% 
+  relocate(JOBCOUNT_FT_5DIGIT, .before = GVA_perFTjob)
 
 
 #SAVE
-saveRDS(gva_w_jobcounts, 'data/UK_GVA_with_BRES_jobcounts.rds')
+saveRDS(gva_w_jobcounts, 'data/UK_GVA_with_BRES_jobcounts_and_jobcounts_summedfrom5digitSIC.rds')
 
 
 
@@ -1253,10 +1324,14 @@ saveRDS(gva_w_jobcounts, 'data/UK_GVA_with_BRES_jobcounts.rds')
 #So let's just look at the job number ratio. I have checked this before, it's very close for "all employees" (that includes PT)
 #But this...?
 gva_w_jobcounts <- gva_w_jobcounts %>% 
-  mutate(ratio = JOBCOUNT_FT / JOBCOUNT_EMPLOYMENT)
+  mutate(
+    ratio = JOBCOUNT_FT / JOBCOUNT_EMPLOYMENT,
+    ratio5 = JOBCOUNT_FT_5DIGIT / JOBCOUNT_EMPLOYMENT_5DIGIT
+    )
 
 #Check ratio differences for all places
 ggplot(gva_w_jobcounts, aes(x = GEOGRAPHY_NAME, y = ratio)) +
+# ggplot(gva_w_jobcounts, aes(x = GEOGRAPHY_NAME, y = ratio5)) +
   # geom_boxplot() +
   geom_violin(fill = 'white') +
   # geom_jitter(alpha = 0.01) +
@@ -1265,7 +1340,8 @@ ggplot(gva_w_jobcounts, aes(x = GEOGRAPHY_NAME, y = ratio)) +
 
 #Sector breakdown also informative
 #E.g. basic metals and heavier sectors - number of part time very small, so difference is very small
-ggplot(gva_w_jobcounts, aes(x = fct_reorder(INDUSTRY_NAME,ratio), y = ratio)) +
+# ggplot(gva_w_jobcounts, aes(x = fct_reorder(INDUSTRY_NAME,ratio), y = ratio)) +
+ggplot(gva_w_jobcounts, aes(x = fct_reorder(INDUSTRY_NAME,ratio5), y = ratio5)) +
   # geom_boxplot() +
   geom_violin(fill = 'white') +
   # geom_jitter(alpha = 0.01) +
@@ -1291,16 +1367,18 @@ gva_m <- gva_w_jobcounts %>%
   group_by(INDUSTRY_NAME,GEOGRAPHY_NAME) %>% 
   arrange(DATE) %>% 
   mutate(
-    movingav_FT = rollapply(GVA_perFTjob,3,mean,align='right',fill=NA),
-    movingav_EMP = rollapply(GVA_per_EMPLOYMENT,3,mean,align='right',fill=NA)
+    movingav_FT = rollapply(GVA_perFTjob_5digit,3,mean,align='right',fill=NA),
+    movingav_EMP = rollapply(GVA_per_EMPLOYMENT_5digit,3,mean,align='right',fill=NA)
     ) %>% 
   ungroup()
 
 #NOTE: THIS IS CURRENT PRICES - BEAR IN MIND FOR CHANGE OVER TIME
 #The unsmoothed data is pretty chaotic...
 plot_ly(data = gva_m %>% filter(grepl('basic metals',INDUSTRY_NAME), JOBCOUNT_FT >= 1000), x = ~DATE, y = ~movingav_FT, color = ~GEOGRAPHY_NAME,
-# plot_ly(data = gva_m %>% filter(grepl('basic metals',INDUSTRY_NAME), JOBCOUNT_FT >= 1000), x = ~DATE, y = ~GVA_perFTjob, color = ~GEOGRAPHY_NAME,
-        text = ~paste("Place:", GEOGRAPHY_NAME,'\nFull times: ', JOBCOUNT_FT,'\nGVA: ',GVA,'\nGVA per employment: ',GVA_perFTjob),  # Add this line for hover text
+# plot_ly(data = gva_m %>% filter(grepl('basic metals',INDUSTRY_NAME), JOBCOUNT_FT >= 1000), x = ~DATE, y = ~movingav_EMP, color = ~GEOGRAPHY_NAME,
+# plot_ly(data = gva_m %>% filter(grepl('basic metals',INDUSTRY_NAME), JOBCOUNT_FT >= 1000), x = ~DATE, y = ~GVA_perFTjob_5digit, color = ~GEOGRAPHY_NAME,
+# plot_ly(data = gva_m %>% filter(grepl('basic metals',INDUSTRY_NAME), JOBCOUNT_FT >= 1000), x = ~DATE, y = ~GVA_per_EMPLOYMENT_5digit, color = ~GEOGRAPHY_NAME,
+        text = ~paste("Place:", GEOGRAPHY_NAME,'\nFull times: ', JOBCOUNT_FT_5DIGIT,'\nGVA: ',GVA,'\nGVA per employment: ',GVA_perFTjob_5digit),  # Add this line for hover text
         hoverinfo = 'text',
         type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
   layout(title = "Yearly values by SIC", 
@@ -1315,6 +1393,270 @@ plot_ly(data = gva_m %>% filter(grepl('basic metals',INDUSTRY_NAME), JOBCOUNT_FT
 #Which is also a reminder: local units probably the better data to be using.
 chk <- gva_w_jobcounts %>% 
   filter(GEOGRAPHY_NAME ==  'Inner London - West', grepl('basic metals',INDUSTRY_NAME))
+
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#GVA per worker sorta-LQ----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Test in steps as this is not standard LQing, not doing the same thing.
+
+#From here, just going to use the 5 digits as they're more accurate.
+gva_jobs5 <- gva_w_jobcounts %>% 
+  select(-JOBCOUNT_FT,-GVA_perFTjob,-JOBCOUNT_EMPLOYMENT,-GVA_per_EMPLOYMENT,-ratio) %>% 
+  rename(JOBCOUNT_FT=JOBCOUNT_FT_5DIGIT,GVA_perFTjob=GVA_perFTjob_5digit,JOBCOUNT_EMPLOYMENT=JOBCOUNT_EMPLOYMENT_5DIGIT,GVA_per_EMPLOYMENT=GVA_per_EMPLOYMENT_5digit,ratio=ratio5)
+
+#MEAN GVA PER REGION, with ratio of that to each region's individual sectors
+gva_jobs5 <- gva_jobs5 %>%
+  group_by(DATE,GEOGRAPHY_NAME) %>% 
+  mutate(
+    mean_GVA_perFT = (sum(GVA,na.rm=T)/sum(JOBCOUNT_FT,na.rm=T))*1000000,
+    mean_GVA_perEMP = (sum(GVA,na.rm=T)/sum(JOBCOUNT_EMPLOYMENT,na.rm=T))*1000000,
+    ratio_GVA_perFT = GVA_perFTjob / mean_GVA_perFT,
+    ratio_GVA_perEMP = GVA_per_EMPLOYMENT / mean_GVA_perEMP
+    )
+
+
+#Actually, let's just do the full alt-LQ for this
+#Reminder of what we're aiming for here:
+#Regional ratio of GVA per sector to average GVA in that region, ratio of 1 will be average
+#Same ratio for national level
+#Ratio of ratios, equivalent to LQ but probably needs different name
+
+#Not done yet, might be overkill, too confusing.
+#We already have GVA per worker, should be enough.
+
+
+#Add in GVA per job as a proportion of GB total GVA (for the present sectors, missing imputed rent)
+#For an easy comparison over time option
+#That value will be "% or proportion this one job adds to the total".
+#Which is going to be tiny, so may want to scale up
+gva_jobs5 <- gva_jobs5 %>% 
+  group_by(DATE) %>% 
+  mutate(
+    total_GB_GVA_peryear = sum(GVA, na.rm=T),
+    GVA_aspercentofGBtotal_perFTjob = ((GVA_perFTjob / 1000000) / total_GB_GVA_peryear) * 100,#had been scaled up to pounds
+    GVA_aspercentofGBtotal_perEMPLOYMENT = ((GVA_per_EMPLOYMENT / 1000000) / total_GB_GVA_peryear) * 100#had been scaled up to pounds
+    )
+
+
+
+
+#Check!
+ggplot(
+  gva_jobs5 %>% filter(DATE==2021),
+  aes(x = GEOGRAPHY_NAME, y = ratio_GVA_perFT)
+) +
+  geom_boxplot() +
+  # geom_violin(fill = 'white') +
+  scale_y_log10() +
+  coord_flip() +
+  geom_hline(yintercept = 1)
+
+
+#Just look at one or two of those directly...
+#For SY, couple of things to note
+#Warehousing, tiny GVA, huge numbers
+#Many manuf sectors at or below 1
+gva_jobs5 %>% 
+  filter(GEOGRAPHY_NAME=='South Yorkshire',DATE==2021) %>% 
+  select(INDUSTRY_NAME,GVA,JOBCOUNT_FT,GVA_perFTjob,mean_GVA_perFT,ratio_GVA_perFT,
+         JOBCOUNT_EMPLOYMENT,GVA_per_EMPLOYMENT,mean_GVA_perEMP,ratio_GVA_perEMP) %>% 
+  arrange(-ratio_GVA_perFT) %>% 
+  View
+
+gva_jobs5 %>% 
+  filter(GEOGRAPHY_NAME=='Greater Manchester',DATE==2021) %>% 
+  select(INDUSTRY_NAME,GVA,JOBCOUNT_FT,GVA_perFTjob,mean_GVA_perFT,ratio_GVA_perFT,
+         JOBCOUNT_EMPLOYMENT,GVA_per_EMPLOYMENT,mean_GVA_perEMP,ratio_GVA_perEMP) %>% 
+  arrange(-ratio_GVA_perFT) %>% 
+  View
+
+
+
+
+gva_m <- gva_jobs5 %>%
+  group_by(INDUSTRY_NAME,GEOGRAPHY_NAME) %>% 
+  arrange(DATE) %>% 
+  mutate(
+    movingav_FT = rollapply(ratio_GVA_perFT,3,mean,align='right',fill=NA),
+    movingav_EMP = rollapply(ratio_GVA_perEMP,3,mean,align='right',fill=NA)
+  ) %>% 
+  ungroup()
+
+
+
+#Let's see how ratios INTERNALLY RELATIVE TO REGION have changed
+# plot_ly(data = gva_m %>% filter(GEOGRAPHY_NAME=='South Yorkshire', JOBCOUNT_FT >= 500), x = ~DATE, y = ~movingav_FT, color = ~INDUSTRY_NAME,
+plot_ly(data = gva_m %>% filter(GEOGRAPHY_NAME=='South Yorkshire', JOBCOUNT_FT >= 500, !grepl('pension funding',INDUSTRY_NAME)), x = ~DATE, y = ~movingav_FT, color = ~INDUSTRY_NAME,#remove insurance
+        text = ~paste("Sector:", INDUSTRY_NAME,'\nFull times: ', JOBCOUNT_FT,'\nGVA: ',GVA,'\nGVA per employment: ',GVA_perFTjob),  # Add this line for hover text
+        hoverinfo = 'text',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly values by SIC", 
+         xaxis = list(title = "Year"), 
+         yaxis = list(title = "Value", type='log'),
+         # yaxis = list(title = "Value"),
+         showlegend = F)
+
+
+
+
+#Test plots for GVA per worker for a single year
+#All sectors, all places, adding in SY.
+#Without doing the growth thing for now, let's just see the spread
+#Good ol' "mark one place" strategy.
+place = 'South Yorkshire'
+place2 = 'Greater Manchester'
+
+gvax <- gva_jobs5 %>% filter(DATE == 2021) %>% mutate(flaggedplace = ifelse(GEOGRAPHY_NAME==place, 'A', 'B'))
+
+#Ordering by the flagged place, bit awkward
+gvax$INDUSTRY_NAME <- factor(gvax$INDUSTRY_NAME)
+gvax$INDUSTRY_NAME <- fct_relevel(
+  gvax$INDUSTRY_NAME, 
+  unique(as.character(gvax$INDUSTRY_NAME))[order(gvax %>% filter(GEOGRAPHY_NAME==place) %>%ungroup() %>% select(GVA_perFTjob) %>% pull(),decreasing = T)]
+)
+
+ggplot(
+  gvax %>% filter(JOBCOUNT_FT >= 500),
+  aes(y = INDUSTRY_NAME, x = GVA_perFTjob, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace)
+  ) +
+  geom_point() +
+  scale_x_continuous(limits = c(0,400000)) +
+  scale_size_manual(values = c(4,2)) +
+  scale_alpha_manual(values = c(1,0.2)) +
+  scale_shape_manual(values = c(17,16)) +
+  scale_colour_manual(values = c('red','black'))
+  # geom_vline(xintercept = 1, colour = 'blue') 
+  # facet_wrap(~SIC_2DIGIT_NAME,ncol = 8, scales = 'free_y') +
+  # theme(axis.text.y=element_blank(), #remove x axis labels
+        # axis.ticks.y=element_blank())
+
+
+
+#Using proportions to national GVA total should look identical, right?
+#Right. But can now repeat for all years and look for change / volatility
+ggplot(
+  gvax %>% filter(JOBCOUNT_FT >= 500),
+  aes(y = INDUSTRY_NAME, x = GVA_aspercentofGBtotal_perFTjob, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace)
+) +
+  geom_point() +
+  scale_x_continuous(limits = c(0,0.000024)) +
+  scale_size_manual(values = c(4,2)) +
+  scale_alpha_manual(values = c(1,0.2)) +
+  scale_shape_manual(values = c(17,16)) +
+  scale_colour_manual(values = c('red','black'))
+
+
+#OK, so now we're happy that the proportions work
+#Want to see what the volatility is like with these numbers over time before proceeding with any change analysis
+
+#Keep one order... this is currently 2021, from above
+ordertouse <- unique(as.character(gvax$INDUSTRY_NAME))[order(gvax %>% filter(GEOGRAPHY_NAME==place) %>%ungroup() %>% select(GVA_perFTjob) %>% pull(),decreasing = T)]
+
+for(filteryear in 2015:2021){
+  
+  gvaxloop <- gva_jobs5 %>% filter(DATE == filteryear) %>% mutate(flaggedplace = ifelse(GEOGRAPHY_NAME==place, 'A', 'B'))
+  
+  #Ordering by the flagged place, bit awkward
+  gvaxloop$INDUSTRY_NAME <- factor(gvaxloop$INDUSTRY_NAME)
+  gvaxloop$INDUSTRY_NAME <- fct_relevel(
+    gvaxloop$INDUSTRY_NAME, 
+    ordertouse
+  )
+  
+  ggplot(
+    gvaxloop %>% filter(JOBCOUNT_FT >= 500),
+        aes(y = INDUSTRY_NAME, x = GVA_aspercentofGBtotal_perFTjob, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace)
+  ) +
+    geom_point() +
+    scale_x_continuous(limits = c(0,0.000024)) +
+    scale_size_manual(values = c(4,2)) +
+    scale_alpha_manual(values = c(1,0.2)) +
+    scale_shape_manual(values = c(17,16)) +
+    scale_colour_manual(values = c('red','black')) +
+    ggtitle(filteryear)
+  
+  
+  ggsave(filename = paste0('local/localimages/GVA_perworker_proportions/',filteryear,'.png'),width = 12, height = 12)
+  
+}
+
+
+
+
+#Quick dirty version for adding arbitrary places
+addplace <- function(p, df, place, countcutoff = 0, colourp, shapep){
+  
+  p <- p + geom_point(
+    data = df %>% filter(GEOGRAPHY_NAME == place, JOBCOUNT_FT >= countcutoff),
+    aes(y = INDUSTRY_NAME, x = GVA_aspercentofGBtotal_perFTjob), 
+    shape = shapep, size = 4, colour = colourp
+  )
+  
+}
+
+#Base plot
+countcutoff = 500
+
+p <- ggplot() +
+  geom_point(
+    data = gvax %>% filter(JOBCOUNT_FT >= countcutoff),
+    aes(y = INDUSTRY_NAME, x = GVA_aspercentofGBtotal_perFTjob),
+    alpha = 0.2, size = 2, colour = 'black'
+    ) +
+  scale_x_continuous(limits = c(0,0.000024)) +
+  ggtitle(2021)
+
+
+p <- addplace(p, gvax, place = 'South Yorkshire', countcutoff = countcutoff, colourp = 'red', shapep = 16)
+# p <- addplace(p, gvax, place = 'Greater Manchester', countcutoff = countcutoff, colourp = 'blue', shapep = 17)
+p <- addplace(p, gvax, place = 'Inner London - East', countcutoff = countcutoff, colourp = 'blue', shapep = 17)
+p
+
+
+
+#Repeat to look at all years
+for(filteryear in 2015:2021){
+  
+  gvaxloop <- gva_jobs5 %>% filter(DATE == filteryear) 
+  
+  #Ordering by the flagged place, bit awkward
+  gvaxloop$INDUSTRY_NAME <- factor(gvaxloop$INDUSTRY_NAME)
+  gvaxloop$INDUSTRY_NAME <- fct_relevel(
+    gvaxloop$INDUSTRY_NAME, 
+    ordertouse
+  )
+  
+  #Base plot
+  countcutoff = 500
+  
+  p <- ggplot() +
+    geom_point(
+      data = gvaxloop %>% filter(JOBCOUNT_FT >= countcutoff),
+      aes(y = INDUSTRY_NAME, x = GVA_aspercentofGBtotal_perFTjob),
+      alpha = 0.2, size = 2, colour = 'black'
+    ) +
+    scale_x_continuous(limits = c(0,0.000024)) +
+    ggtitle(filteryear)
+  
+  
+  p <- addplace(p, gvaxloop, place = 'South Yorkshire', countcutoff = countcutoff, colourp = 'red', shapep = 16)
+  # p <- addplace(p, gvaxloop, place = 'Greater Manchester', countcutoff = countcutoff, colourp = 'blue', shapep = 17)
+  # p <- addplace(p, gvaxloop, place = 'Inner London - East', countcutoff = countcutoff, colourp = 'blue', shapep = 17)
+  p <- addplace(p, gvaxloop, place = 'West Yorkshire', countcutoff = countcutoff, colourp = 'blue', shapep = 17)
+  
+  ggsave(plot = p, filename = paste0('local/localimages/GVA_perworker_proportions/',filteryear,'.png'),width = 12, height = 12)
+  
+}
+
+
+
+
+
+
 
 
 

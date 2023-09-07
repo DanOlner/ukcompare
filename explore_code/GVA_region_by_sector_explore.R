@@ -5,7 +5,9 @@ library(sf)
 library(tmap)
 library(plotly)
 library(magick)
+source('functions/misc_functions.R')
 options(scipen = 99)
+
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #LOAD AND INITIAL PROCESS----
@@ -645,9 +647,6 @@ plot_ly(data = sy %>% filter(year==2021), x = ~LQ, y = ~sector_regional_proporti
 
 
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~
-#LQ/ITL2 CHANGE CHARTS----
-#~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -758,7 +757,6 @@ x <- x %>%
   )
 
 
-
 #Factor
 x$`SIC07 description` <- factor(x$`SIC07 description`)
 x$`SIC07 description` <- fct_relevel(
@@ -817,7 +815,7 @@ addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundco
     plot_to_addto <- plot_to_addto +  
       geom_text(
         data = x %>% filter(`ITL region name` == place), 
-        aes(y = `SIC07 description`, x = max(LQ,na.rm = T)+20, label = paste0('£',value,'M, ',round(sector_regional_proportion * 100, 2),'%')),
+        aes(y = `SIC07 description`, x = 20, label = paste0('£',value,'M, ',round(sector_regional_proportion * 100, 2),'%')),
         # aes(y = INDUSTRY_NAME, x = max(LQ) + 2, label = COUNT),
         nudge_x = 0.3, hjust = 1, alpha = 0.7, size = 3
       )
@@ -841,6 +839,34 @@ addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundco
 
 
 
+
+place1 = 'South Yorkshire'
+place2 = 'Greater Manchester'
+
+place1 = 'Greater Manchester'
+place2 = 'South Yorkshire'
+
+place1 = 'West Yorkshire'
+place2 = 'South Yorkshire'
+
+place1 = 'Leicestershire, Rutland and Northamptonshire'
+place2 = 'South Yorkshire'
+
+place1 = 'Dorset and Somerset'
+place2 = 'South Yorkshire'
+
+place1 = 'West Midlands'
+place2 = 'South Yorkshire'
+
+
+#Factor
+x$`SIC07 description` <- factor(x$`SIC07 description`)
+x$`SIC07 description` <- fct_relevel(
+  x$`SIC07 description`, 
+  unique(as.character(x$`SIC07 description`))[order(x %>% filter(`ITL region name`==place1) %>%ungroup() %>% select(LQ) %>% pull(),decreasing = T)]
+)
+
+
 #Base plot
 p <- ggplot() +
   geom_point(
@@ -860,18 +886,19 @@ p <- ggplot() +
     colour = 'red'
   )  +
   scale_size_continuous(range = c(1,17)) +
-  scale_x_continuous(trans = "log10") +
+  scale_x_continuous(trans = "log10", limits = c(0.001, 51)) +
   geom_vline(xintercept = 1, colour = 'blue') +
   guides(size = F) 
 
 
+
 #Add a place
-p <- addplace_to_LQplot(plot_to_addto = p, place = 'Greater Manchester', shapenumber = 18,backgroundcolour = '#9ac0db', setalpha = 0.7)
-p <- addplace_to_LQplot(plot_to_addto = p, place = 'South Yorkshire', shapenumber = 16, add_gva = T, addminmax = T)
+p <- addplace_to_LQplot(plot_to_addto = p, place = place2, shapenumber = 18,backgroundcolour = '#9ac0db', setalpha = 0.7)
+p <- addplace_to_LQplot(plot_to_addto = p, place = place1, shapenumber = 16, add_gva = T, addminmax = T)
 p
 
 
-
+ggsave(plot = p, filename = paste0('local/localimages/gva_',place1,'_v_',place2,'_plot.png'), width = 12, height = 12)
 
 
 
@@ -1305,6 +1332,61 @@ gva_w_jobcounts <- gva_w_jobcounts %>%
 saveRDS(gva_w_jobcounts, 'data/UK_GVA_with_BRES_jobcounts_and_jobcounts_summedfrom5digitSIC.rds')
 
 
+#Just some sanity checks
+#Absolutely nothing far off the line here
+ggplot(gva_w_jobcounts, aes(x = JOBCOUNT_FT, y = JOBCOUNT_FT_5DIGIT)) +
+  geom_point(alpha=0.05) +
+  facet_wrap(~DATE)
+
+
+#But I'm seeing some unrealistic volality across years?
+#Which may purely be a BRES sampling issue, but...?
+#Let's check on per year differences
+#Probably worth picking out ones with largest SD per sector/place for the log diffs
+#Just to see what we're looking at here
+diffz <- gva_w_jobcounts %>% 
+  arrange(DATE) %>% 
+  group_by(INDUSTRY_NAME,GEOGRAPHY_NAME) %>% 
+  mutate(
+    logchange = log(JOBCOUNT_FT_5DIGIT) - log(lag(JOBCOUNT_FT_5DIGIT)),
+    change = JOBCOUNT_FT_5DIGIT - lag(JOBCOUNT_FT_5DIGIT),
+    sd = sd(logchange, na.rm=T)
+    )
+
+#NOne 5 digit version  
+diffz <- gva_w_jobcounts %>% 
+  arrange(DATE) %>% 
+  group_by(INDUSTRY_NAME,GEOGRAPHY_NAME) %>% 
+  mutate(
+    logchange = log(JOBCOUNT_FT) - log(lag(JOBCOUNT_FT)),
+    change = JOBCOUNT_FT - lag(JOBCOUNT_FT),
+    sd = sd(logchange, na.rm=T)
+    )
+  
+
+#Check!
+# diffz %>% filter(GEOGRAPHY_NAME == 'South Yorkshire') %>% View
+
+# 
+# ggplot(diffz, aes(x = DATE, y = change)) +
+#   geom_point(alpha=0.3) +
+#   # scale_y_continuous(trans = "log") +
+#   facet_wrap(~INDUSTRY_NAME, scales = 'free_y')
+
+
+#How back for some of the top SDs? 
+topsds <- unique(diffz$sd)[order(unique(diffz$sd),decreasing = T)]
+
+# ggplot(diffz %>% ungroup() %>% filter(sd %in% topsds[(2784-9):2784]), 
+ggplot(diffz %>% ungroup() %>% filter(sd %in% topsds[runif(50,min=1,max=2784)]), 
+# ggplot(diffz %>% ungroup() %>% filter(sd %in% topsds[1:50]), 
+       aes(x = DATE, y = JOBCOUNT_FT, colour = INDUSTRY_NAME)
+       ) +
+  geom_line() +
+  facet_wrap(~GEOGRAPHY_NAME, scales='free_y') +
+  guides(colour=F)
+
+
 
 
 
@@ -1397,11 +1479,11 @@ chk <- gva_w_jobcounts %>%
 
 
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#GVA per worker sorta-LQ----
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#Test in steps as this is not standard LQing, not doing the same thing.
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#GVA per worker comparisons----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 
 #From here, just going to use the 5 digits as they're more accurate.
 gva_jobs5 <- gva_w_jobcounts %>% 
@@ -1417,16 +1499,6 @@ gva_jobs5 <- gva_jobs5 %>%
     ratio_GVA_perFT = GVA_perFTjob / mean_GVA_perFT,
     ratio_GVA_perEMP = GVA_per_EMPLOYMENT / mean_GVA_perEMP
     )
-
-
-#Actually, let's just do the full alt-LQ for this
-#Reminder of what we're aiming for here:
-#Regional ratio of GVA per sector to average GVA in that region, ratio of 1 will be average
-#Same ratio for national level
-#Ratio of ratios, equivalent to LQ but probably needs different name
-
-#Not done yet, might be overkill, too confusing.
-#We already have GVA per worker, should be enough.
 
 
 #Add in GVA per job as a proportion of GB total GVA (for the present sectors, missing imputed rent)
@@ -1490,8 +1562,9 @@ gva_m <- gva_jobs5 %>%
 
 #Let's see how ratios INTERNALLY RELATIVE TO REGION have changed
 # plot_ly(data = gva_m %>% filter(GEOGRAPHY_NAME=='South Yorkshire', JOBCOUNT_FT >= 500), x = ~DATE, y = ~movingav_FT, color = ~INDUSTRY_NAME,
-plot_ly(data = gva_m %>% filter(GEOGRAPHY_NAME=='South Yorkshire', JOBCOUNT_FT >= 500, !grepl('pension funding',INDUSTRY_NAME)), x = ~DATE, y = ~movingav_FT, color = ~INDUSTRY_NAME,#remove insurance
-        text = ~paste("Sector:", INDUSTRY_NAME,'\nFull times: ', JOBCOUNT_FT,'\nGVA: ',GVA,'\nGVA per employment: ',GVA_perFTjob),  # Add this line for hover text
+plot_ly(data = gva_m %>% filter(GEOGRAPHY_NAME=='South Yorkshire', JOBCOUNT_FT >= 500, !grepl('pension funding',INDUSTRY_NAME)), x = ~DATE, y = ~ratio_GVA_perFT, color = ~INDUSTRY_NAME,#remove insurance
+# plot_ly(data = gva_m %>% filter(GEOGRAPHY_NAME=='South Yorkshire', JOBCOUNT_FT >= 500, !grepl('pension funding',INDUSTRY_NAME)), x = ~DATE, y = ~movingav_FT, color = ~INDUSTRY_NAME,#remove insurance
+        text = ~paste("Sector:", INDUSTRY_NAME,'\nFull times: ', JOBCOUNT_FT,'\nGVA: ',GVA,'\nGVA per employment: ',GVA_perFTjob, '\nRatio to av: ', ratio_GVA_perFT),  # Add this line for hover text
         hoverinfo = 'text',
         type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
   layout(title = "Yearly values by SIC", 
@@ -1508,7 +1581,6 @@ plot_ly(data = gva_m %>% filter(GEOGRAPHY_NAME=='South Yorkshire', JOBCOUNT_FT >
 #Without doing the growth thing for now, let's just see the spread
 #Good ol' "mark one place" strategy.
 place = 'South Yorkshire'
-place2 = 'Greater Manchester'
 
 gvax <- gva_jobs5 %>% filter(DATE == 2021) %>% mutate(flaggedplace = ifelse(GEOGRAPHY_NAME==place, 'A', 'B'))
 
@@ -1651,6 +1723,187 @@ for(filteryear in 2015:2021){
   ggsave(plot = p, filename = paste0('local/localimages/GVA_perworker_proportions/',filteryear,'.png'),width = 12, height = 12)
   
 }
+
+
+
+#Get slopes for GVA per FT job
+FT_slopes <- compute_slope_or_zero(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_NAME, y = "GVA_aspercentofGBtotal_perFTjob", x = "DATE")
+
+#... and EMPLOYMENT
+EMP_slopes <- compute_slope_or_zero(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_NAME, y = "GVA_aspercentofGBtotal_perEMPLOYMENT", x = "DATE")
+
+
+
+#Add both of those slope types to the single year data
+gvax <- gvax %>% 
+  left_join(
+    EMP_slopes %>% rename(slope_EMP = slope),
+    by = c('INDUSTRY_NAME','GEOGRAPHY_NAME')
+  ) %>% 
+  left_join(
+    FT_slopes %>% rename(slope_FT = slope),
+    by = c('INDUSTRY_NAME','GEOGRAPHY_NAME')
+  )
+
+#Out of interest... huh, high but way off perfect
+cor(gvax$slope_EMP,gvax$slope_FT)
+
+#Add groupings to that. Recall, it's not that many sectors (70) so not too many groups required
+gvax <- gvax %>% 
+  group_by(GEOGRAPHY_NAME) %>% 
+  mutate(
+    FTslope_group = as.integer(cut_number(slope_FT,5)),
+    EMPslope_group = as.integer(cut_number(slope_EMP,5))
+    ) %>% 
+  ungroup()
+
+
+#Get over time data from that...
+place = 'South Yorkshire'
+place = 'Greater Manchester'
+
+industries = gvax %>% filter(GEOGRAPHY_NAME == place, FTslope_group %in% c(5)) %>% select(INDUSTRY_NAME) %>% pull()
+industries = gvax %>% filter(GEOGRAPHY_NAME == place, FTslope_group %in% c(3)) %>% select(INDUSTRY_NAME) %>% pull()
+industries = gvax %>% filter(GEOGRAPHY_NAME == place, FTslope_group %in% c(1)) %>% select(INDUSTRY_NAME) %>% pull()
+
+x <- gva_jobs5 %>% filter(GEOGRAPHY_NAME == place, INDUSTRY_NAME %in% industries) %>% ungroup()
+
+y <- x %>% 
+  group_by(INDUSTRY_NAME) %>% 
+  arrange(DATE) %>% 
+  mutate(
+    movingav = rollapply(GVA_aspercentofGBtotal_perFTjob,3,mean,align='right',fill=NA)
+  )
+
+
+
+#Get min max values over time as well, to add as bars so range of sector is easy to see
+minmaxes <- gva_jobs5 %>% 
+  group_by(GEOGRAPHY_NAME,INDUSTRY_NAME) %>% 
+  summarise(
+    minn_ft = min(GVA_aspercentofGBtotal_perFTjob),
+    maxx_ft = max(GVA_aspercentofGBtotal_perFTjob)
+  )
+
+x <- x %>% 
+  left_join(
+    minmaxes,
+    by = c("GEOGRAPHY_NAME","INDUSTRY_NAME")
+  )
+
+
+
+
+
+
+# plot_ly(data = y %>% filter(JOBCOUNT_FT >=500), x = ~DATE, y = ~movingav, color = ~INDUSTRY_NAME,
+# plot_ly(data = y, x = ~DATE, y = ~movingav, color = ~INDUSTRY_NAME,
+plot_ly(data = y %>% filter(JOBCOUNT_FT >=500,INDUSTRY_NAME!='Insurance and pension funding'), x = ~DATE, y = ~GVA_aspercentofGBtotal_perFTjob, color = ~INDUSTRY_NAME,
+# plot_ly(data = y %>% filter(JOBCOUNT_FT >=500,INDUSTRY_NAME!='Insurance and pension funding'), x = ~DATE, y = ~movingav, color = ~INDUSTRY_NAME,
+# plot_ly(data = x, x = ~DATE, y = ~GVA_aspercentofGBtotal_perFTjob, color = ~INDUSTRY_NAME, 
+        text = ~paste("Sector:", INDUSTRY_NAME, "\nGVA % per job: ",GVA_aspercentofGBtotal_perFTjob,'\nFT JOBs: ',JOBCOUNT_FT),  # Add this line for hover text
+        hoverinfo = 'text',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly percents by SIC", 
+         xaxis = list(title = "Year"), 
+         yaxis = list(title = "Value", type='log'),
+         # yaxis = list(title = "Value"),
+         showlegend = F)
+
+
+
+#Hmm, think there might be an issue with the volality of the job numbers...
+plot_ly(data = x, x = ~DATE, y = ~JOBCOUNT_FT, color = ~INDUSTRY_NAME,
+        # plot_ly(data = x, x = ~DATE, y = ~GVA_aspercentofGBtotal_perFTjob, color = ~INDUSTRY_NAME, 
+        text = ~paste("Sector:", INDUSTRY_NAME, "\nGVA % per job: ",GVA_aspercentofGBtotal_perFTjob,'\nFT JOBs: ',JOBCOUNT_FT),  # Add this line for hover text
+        hoverinfo = 'text',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly percents by SIC", 
+         xaxis = list(title = "Year"), 
+         yaxis = list(title = "Value", type='log'),
+         # yaxis = list(title = "Value"),
+         showlegend = F)
+
+
+
+
+
+#Look at all
+x <- gva_jobs5 %>% filter(DATE==2021)
+
+# y <- x %>% 
+#   group_by(INDUSTRY_NAME) %>% 
+#   arrange(DATE) %>% 
+#   mutate(
+#     movingav = rollapply(GVA_aspercentofGBtotal_perFTjob,3,mean,align='right',fill=NA)
+#   )
+
+
+
+#Get min max values over time as well, to add as bars so range of sector is easy to see
+minmaxes <- gva_jobs5 %>% 
+  group_by(GEOGRAPHY_NAME,INDUSTRY_NAME) %>% 
+  summarise(
+    minn_ft = min(GVA_aspercentofGBtotal_perFTjob),
+    maxx_ft = max(GVA_aspercentofGBtotal_perFTjob)
+  )
+
+x <- x %>% 
+  left_join(
+    minmaxes,
+    by = c("GEOGRAPHY_NAME","INDUSTRY_NAME")
+  )
+
+
+#Look at one sector, all places, compare full range
+ggplot(x,
+       aes(y = GEOGRAPHY_NAME)) +
+  geom_errorbar(aes(y = GEOGRAPHY_NAME, xmin = minn_ft, xmax = maxx_ft)) +
+  facet_wrap(~INDUSTRY_NAME)
+
+place='South Yorkshire'
+
+#Ooo, think we need to order those and look at all
+for(i in unique(gva_jobs5$INDUSTRY_NAME)){
+  
+  y <- x %>% filter(INDUSTRY_NAME == i, JOBCOUNT_FT >= 500) %>% 
+    rowwise() %>% 
+    mutate(meanminmax = mean(c(minn_ft,maxx_ft))) %>% 
+    ungroup() %>% 
+    mutate(
+      flaggedplace = ifelse(GEOGRAPHY_NAME==place, 'A', 'B'),
+      GEOGRAPHY_NAME = factor(GEOGRAPHY_NAME),
+      GEOGRAPHY_NAME = fct_reorder(GEOGRAPHY_NAME, meanminmax)
+      ) 
+    
+  
+  
+  p <- ggplot(y,
+         aes(y = GEOGRAPHY_NAME, colour = flaggedplace)) +
+    geom_errorbar(aes(y = GEOGRAPHY_NAME, xmin = minn_ft, xmax = maxx_ft)) +
+    facet_wrap(~INDUSTRY_NAME) +
+    guides(colour=F) 
+  
+  if(length(y %>% filter(GEOGRAPHY_NAME == place) %>% select(minn_ft) %>% pull) !=0)
+  {
+    p <- p +
+      geom_vline(xintercept = y %>% filter(GEOGRAPHY_NAME == place) %>% select(minn_ft) %>% pull, alpha = 0.3)
+  }
+  
+  if(length(y %>% filter(GEOGRAPHY_NAME == place) %>% select(maxx_ft) %>% pull) !=0)
+  {
+    p <- p +
+      geom_vline(xintercept = y %>% filter(GEOGRAPHY_NAME == place) %>% select(maxx_ft) %>% pull, alpha = 0.3)
+  }
+  
+  ggsave(plot = p, filename = paste0('local/localimages/GVA_perc_minmax/',i,'.png'), width = 8, height = 8)
+  
+}
+
+
+
+
+
 
 
 

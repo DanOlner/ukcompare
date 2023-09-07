@@ -5,6 +5,7 @@ library(sf)
 library(tmap)
 library(plotly)
 library(magick)
+library(cowplot)
 source('functions/misc_functions.R')
 options(scipen = 99)
 
@@ -1899,6 +1900,113 @@ for(i in unique(gva_jobs5$INDUSTRY_NAME)){
   ggsave(plot = p, filename = paste0('local/localimages/GVA_perc_minmax/',i,'.png'), width = 8, height = 8)
   
 }
+
+
+
+
+#Want to pick a few of those sectors out for direct side by side comparison.
+#So, turn round / facet.
+#Changing order of places will still happen but actual job GVA range will be visible
+#Which sectors to pick? Stick to some of the key manuf ones first, let's see about those
+#Which are?
+sectors <- unique(x$INDUSTRY_NAME)[grepl('basic metals|fabricated metal|machinery and equipment', unique(x$INDUSTRY_NAME))]
+
+
+y <- x %>% filter(INDUSTRY_NAME %in% sectors, JOBCOUNT_FT >= 500) %>% 
+  # y <- x %>% filter(INDUSTRY_NAME %in% sectors, JOBCOUNT_FT >= 500) %>% 
+  rowwise() %>% 
+  mutate(meanminmax = mean(c(minn_ft,maxx_ft))) %>% 
+  ungroup() %>% 
+  # group_by(INDUSTRY_NAME) %>% 
+  mutate(
+    flaggedplace = ifelse(GEOGRAPHY_NAME==place, 'A', 'B'),
+    GEOG_NAME_SHORTENED = substr(GEOGRAPHY_NAME, start = 1, stop = 10),
+    GEOG_NAME_SHORTENED = factor(GEOG_NAME_SHORTENED),
+    GEOG_NAME_SHORTENED = fct_reorder(GEOG_NAME_SHORTENED, meanminmax)
+  ) 
+
+p <- ggplot(y,
+            aes(y = GEOG_NAME_SHORTENED, colour = flaggedplace)) +
+  geom_errorbar(aes(y = GEOG_NAME_SHORTENED, xmin = minn_ft, xmax = maxx_ft)) +
+  facet_wrap(~INDUSTRY_NAME, nrow = 1, scales = 'free_x') +
+  guides(colour='none') +
+  coord_flip() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+if(length(y %>% filter(GEOG_NAME_SHORTENED == place) %>% select(minn_ft) %>% pull) !=0){
+  p <- p +
+    geom_vline(xintercept = y %>% filter(GEOG_NAME_SHORTENED == place) %>% select(minn_ft) %>% pull, alpha = 0.3)
+}
+
+if(length(y %>% filter(GEOG_NAME_SHORTENED == place) %>% select(maxx_ft) %>% pull) !=0){
+  p <- p +
+    geom_vline(xintercept = y %>% filter(GEOG_NAME_SHORTENED == place) %>% select(maxx_ft) %>% pull, alpha = 0.3)
+}
+
+p
+
+# ggsave(plot = p, filename = paste0('local/localimages/GVA_perc_minmax/',sectors,'.png'), width = 15, height = 8)
+
+#That's being horrible. Let's cowplot that instead
+#Get three separate ones
+sectors <- unique(x$INDUSTRY_NAME)[grepl('basic metals|fabricated metal|machinery and equipment', unique(x$INDUSTRY_NAME))]
+sectors <- unique(x$INDUSTRY_NAME)[grepl('research and development|food products|non-metallic', unique(x$INDUSTRY_NAME))]
+
+
+sectors <- unique(x$INDUSTRY_NAME)
+
+
+#Get list of plots
+spanplot <- function(sector){
+  
+  y <- x %>% filter(INDUSTRY_NAME %in% sector, JOBCOUNT_FT >= 250) %>% 
+    # y <- x %>% filter(INDUSTRY_NAME %in% sectors, JOBCOUNT_FT >= 500) %>% 
+    rowwise() %>% 
+    mutate(meanminmax = mean(c(minn_ft,maxx_ft))) %>% 
+    ungroup() %>% 
+    # group_by(INDUSTRY_NAME) %>% 
+    mutate(
+      flaggedplace = ifelse(GEOGRAPHY_NAME==place, 'A', 'B'),
+      GEOG_NAME_SHORTENED = substr(GEOGRAPHY_NAME, start = 1, stop = 10),
+      GEOG_NAME_SHORTENED = factor(GEOG_NAME_SHORTENED),
+      GEOG_NAME_SHORTENED = fct_reorder(GEOG_NAME_SHORTENED, meanminmax)
+    ) 
+  
+  p <- ggplot(y,
+              aes(y = GEOG_NAME_SHORTENED, colour = flaggedplace)) +
+    geom_errorbar(aes(y = GEOG_NAME_SHORTENED, xmin = minn_ft, xmax = maxx_ft)) +
+    facet_wrap(~INDUSTRY_NAME, nrow = 1, scales = 'free_x') +
+    guides(colour='none') +
+    scale_x_continuous(limits = c(0,0.0000125)) +
+    coord_flip() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+    ylab('')
+  
+  
+  if(length(y %>% filter(GEOGRAPHY_NAME == place) %>% select(minn_ft) %>% pull) !=0){
+    p <- p +
+      geom_vline(xintercept = y %>% filter(GEOGRAPHY_NAME == place) %>% select(minn_ft) %>% pull, alpha = 0.3)
+  }
+  
+  if(length(y %>% filter(GEOGRAPHY_NAME == place) %>% select(maxx_ft) %>% pull) !=0){
+    p <- p +
+      geom_vline(xintercept = y %>% filter(GEOGRAPHY_NAME == place) %>% select(maxx_ft) %>% pull, alpha = 0.3)
+  }
+  
+  p
+  
+}
+
+plotz <- lapply(sectors, function(x) spanplot(x))
+
+cp <- plot_grid(plotlist = plotz, nrow = 5)
+
+save_plot(plot = cp, filename = paste0('local/localimages/GVA_perc_minmax/',paste(sectors, collapse = '_'),'.png'), base_height = 6, base_width = 18)
+
+#For large plot
+save_plot(plot = cp, filename = paste0('local/localimages/GVA_perc_minmax/',paste(sectors, collapse = '_'),'.png'), base_height = 25, base_width = 50, limitsize=F)
+
 
 
 

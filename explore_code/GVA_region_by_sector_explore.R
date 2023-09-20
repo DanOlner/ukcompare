@@ -1767,9 +1767,9 @@ industries = gvax %>% filter(GEOGRAPHY_NAME == place, FTslope_group %in% c(5)) %
 industries = gvax %>% filter(GEOGRAPHY_NAME == place, FTslope_group %in% c(3)) %>% select(INDUSTRY_NAME) %>% pull()
 industries = gvax %>% filter(GEOGRAPHY_NAME == place, FTslope_group %in% c(1)) %>% select(INDUSTRY_NAME) %>% pull()
 
-x <- gva_jobs5 %>% filter(GEOGRAPHY_NAME == place, INDUSTRY_NAME %in% industries) %>% ungroup()
+xg <- gva_jobs5 %>% filter(GEOGRAPHY_NAME == place, INDUSTRY_NAME %in% industries) %>% ungroup()
 
-y <- x %>% 
+y <- xg %>% 
   group_by(INDUSTRY_NAME) %>% 
   arrange(DATE) %>% 
   mutate(
@@ -1786,7 +1786,7 @@ minmaxes <- gva_jobs5 %>%
     maxx_ft = max(GVA_aspercentofGBtotal_perFTjob)
   )
 
-x <- x %>% 
+xg <- xg %>% 
   left_join(
     minmaxes,
     by = c("GEOGRAPHY_NAME","INDUSTRY_NAME")
@@ -1814,7 +1814,7 @@ plot_ly(data = y %>% filter(JOBCOUNT_FT >=500,INDUSTRY_NAME!='Insurance and pens
 
 
 #Hmm, think there might be an issue with the volality of the job numbers...
-plot_ly(data = x, x = ~DATE, y = ~JOBCOUNT_FT, color = ~INDUSTRY_NAME,
+plot_ly(data = xg, x = ~DATE, y = ~JOBCOUNT_FT, color = ~INDUSTRY_NAME,
         # plot_ly(data = x, x = ~DATE, y = ~GVA_aspercentofGBtotal_perFTjob, color = ~INDUSTRY_NAME, 
         text = ~paste("Sector:", INDUSTRY_NAME, "\nGVA % per job: ",GVA_aspercentofGBtotal_perFTjob,'\nFT JOBs: ',JOBCOUNT_FT),  # Add this line for hover text
         hoverinfo = 'text',
@@ -1830,7 +1830,7 @@ plot_ly(data = x, x = ~DATE, y = ~JOBCOUNT_FT, color = ~INDUSTRY_NAME,
 
 
 #Look at all
-x <- gva_jobs5 %>% filter(DATE==2021)
+xg <- gva_jobs5 %>% filter(DATE==2021)
 
 # y <- x %>% 
 #   group_by(INDUSTRY_NAME) %>% 
@@ -1849,7 +1849,7 @@ minmaxes <- gva_jobs5 %>%
     maxx_ft = max(GVA_aspercentofGBtotal_perFTjob)
   )
 
-x <- x %>% 
+xg <- xg %>% 
   left_join(
     minmaxes,
     by = c("GEOGRAPHY_NAME","INDUSTRY_NAME")
@@ -1857,7 +1857,7 @@ x <- x %>%
 
 
 #Look at one sector, all places, compare full range
-ggplot(x,
+ggplot(xg,
        aes(y = GEOGRAPHY_NAME)) +
   geom_errorbar(aes(y = GEOGRAPHY_NAME, xmin = minn_ft, xmax = maxx_ft)) +
   facet_wrap(~INDUSTRY_NAME)
@@ -1867,7 +1867,7 @@ place='South Yorkshire'
 #Ooo, think we need to order those and look at all
 for(i in unique(gva_jobs5$INDUSTRY_NAME)){
   
-  y <- x %>% filter(INDUSTRY_NAME == i, JOBCOUNT_FT >= 500) %>% 
+  y <- xg %>% filter(INDUSTRY_NAME == i, JOBCOUNT_FT >= 500) %>% 
     rowwise() %>% 
     mutate(meanminmax = mean(c(minn_ft,maxx_ft))) %>% 
     ungroup() %>% 
@@ -1909,10 +1909,10 @@ for(i in unique(gva_jobs5$INDUSTRY_NAME)){
 #Changing order of places will still happen but actual job GVA range will be visible
 #Which sectors to pick? Stick to some of the key manuf ones first, let's see about those
 #Which are?
-sectors <- unique(x$INDUSTRY_NAME)[grepl('basic metals|fabricated metal|machinery and equipment', unique(x$INDUSTRY_NAME))]
+sectors <- unique(xg$INDUSTRY_NAME)[grepl('basic metals|fabricated metal|machinery and equipment', unique(xg$INDUSTRY_NAME))]
 
 
-y <- x %>% filter(INDUSTRY_NAME %in% sectors, JOBCOUNT_FT >= 500) %>% 
+y <- xg %>% filter(INDUSTRY_NAME %in% sectors, JOBCOUNT_FT >= 500) %>% 
   # y <- x %>% filter(INDUSTRY_NAME %in% sectors, JOBCOUNT_FT >= 500) %>% 
   rowwise() %>% 
   mutate(meanminmax = mean(c(minn_ft,maxx_ft))) %>% 
@@ -1950,17 +1950,17 @@ p
 
 #That's being horrible. Let's cowplot that instead
 #Get three separate ones
-sectors <- unique(x$INDUSTRY_NAME)[grepl('basic metals|fabricated metal|machinery and equipment', unique(x$INDUSTRY_NAME))]
-sectors <- unique(x$INDUSTRY_NAME)[grepl('research and development|food products|non-metallic', unique(x$INDUSTRY_NAME))]
+sectors <- unique(xg$INDUSTRY_NAME)[grepl('basic metals|fabricated metal|machinery and equipment', unique(xg$INDUSTRY_NAME))]
+sectors <- unique(xg$INDUSTRY_NAME)[grepl('research and development|food products|non-metallic', unique(xg$INDUSTRY_NAME))]
 
 
-sectors <- unique(x$INDUSTRY_NAME)
+sectors <- unique(xg$INDUSTRY_NAME)
 
 
 #Get list of plots
 spanplot <- function(sector){
   
-  y <- x %>% filter(INDUSTRY_NAME %in% sector, JOBCOUNT_FT >= 250) %>% 
+  y <- xg %>% filter(INDUSTRY_NAME %in% sector, JOBCOUNT_FT >= 250) %>% 
     # y <- x %>% filter(INDUSTRY_NAME %in% sectors, JOBCOUNT_FT >= 500) %>% 
     rowwise() %>% 
     mutate(meanminmax = mean(c(minn_ft,maxx_ft))) %>% 
@@ -2000,7 +2000,7 @@ spanplot <- function(sector){
 
 plotz <- lapply(sectors, function(x) spanplot(x))
 
-cp <- plot_grid(plotlist = plotz, nrow = 5)
+cp <- plot_grid(plotlist = plotz, nrow = 1)
 
 save_plot(plot = cp, filename = paste0('local/localimages/GVA_perc_minmax/',paste(sectors, collapse = '_'),'.png'), base_height = 6, base_width = 18)
 

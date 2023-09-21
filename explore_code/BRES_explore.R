@@ -1049,7 +1049,7 @@ x$INDUSTRY_NAME_REDUCED <- fct_relevel(
 
 #Save that 2021 x for later!
 saveRDS(x, 'local/x_2021.rds')
-
+x <- readRDS('local/x_2021.rds')
 
 #NOTE: REGIONAL PROPORTION OF JOBS WILL GO UP LEFT TO RIGHT, LARGEST ON RIGHT. DON'T NEED TO PLOT THAT, IT'S LINEAR FOR SPECIFIC SECTORS BAKED INTO LQ MATHS
 ggplot() +
@@ -1425,7 +1425,7 @@ addplace_to_LQplot <- function(df, plot_to_addto, place, shapenumber=16,backgrou
 
 
 #FUNCTION FOR SAVING FACETTED SUBPLOTS OF THE ABOVE TO LOOK TOGETHER
-savesubplots <- function(sic5filterlist,sic2grepl_remove = '', filename, plot_title = ''){
+savesubplots <- function(sic5filterlist,sic2grepl_remove = '', filename, plot_title = '', facet_ncol = 3, plotheight = 13, plotwidth = 22){
   
   plotdata <- x %>% filter(
     INDUSTRY_NAME %in% sic5filterlist
@@ -1481,7 +1481,7 @@ savesubplots <- function(sic5filterlist,sic2grepl_remove = '', filename, plot_ti
     scale_x_continuous(trans = "log10") +
     geom_vline(xintercept = 1, colour = 'blue') +
     guides(size = F) +
-    facet_wrap(~SIC_2DIGIT_NAME, ncol = 3, scales = 'free_y', dir = 'v')#If one sector only, adds name anyway, still useful
+    facet_wrap(~SIC_2DIGIT_NAME, ncol = facet_ncol, scales = 'free_y', dir = 'v')#If one sector only, adds name anyway, still useful
   
   
   #Add a place
@@ -1499,7 +1499,7 @@ savesubplots <- function(sic5filterlist,sic2grepl_remove = '', filename, plot_ti
     theme(plot.title = element_text(face = 'bold'))
     # theme(plot.title = element_text(hjust = 0.5, face = 'bold'))
   
-  ggsave(plot = p, filename =paste0('local/localimages/',filename,'.png'), height=13, width=22)
+  ggsave(plot = p, filename =paste0('local/localimages/',filename,'.png'), height = plotheight, width = plotwidth)
   
   #Might want to use this subset elsewhere
   return(plotdata)
@@ -1515,6 +1515,7 @@ x <- x %>%
 
 #GROUPING THAT CAPTURES MOST OF MANUF PLUS RELATED SECTORS
 #THAT ARE PROPORTIONALLY LARGER IN SY
+#MANUALLY PULLING OUT SOME 2 DIGIT SECTORS PROB NOT RELEVANT
 returnplotdata <- savesubplots(
   sic5filterlist = c(
     x %>% filter(GEOGRAPHY_NAME=="South Yorkshire") %>% #Keep scientific research, though LQ < 1
@@ -1536,125 +1537,250 @@ returnplotdata <- savesubplots(
     )
 
 
-
-#SAME GROUPING BUT FOCUS ON "LQ<1 BUT GROWING A LOT"
+#SAME AGAIN BUT ONLY LQ GROWING OVER CERTAIN SIZE
 returnplotdata <- savesubplots(
+  sic5filterlist = x %>% filter(
+    GEOGRAPHY_NAME=="South Yorkshire",LQ > 1, minn > 1, difftotal > 0, sector_regional_proportion * 100 > 0.05,
+    !grepl('call centres|Primary education|secondary education|Other education', INDUSTRY_NAME)
+  ) %>% 
+    ungroup() %>% 
+    select(INDUSTRY_NAME) %>% 
+    pull,
+  sic2grepl_remove = 'Wholesale trade|Air transport|Food and beverage|Legal|Public admin|Residential care|wearing apparel|Retail trade|Warehousing|Rental|materials recovery|Wholesale|Postal|Sports|Computer programming|Human health',
+  filename = 'SY_5digit_manufacturing_n_related_LQmorethan1_neverlessthan1_slope_morethan_0_b',
+  # filename = 'SY_5digit_manufacturing_n_related_LQmorethan1_neverlessthan1_slope_zscore_morethan_0point5',
+  plot_title = 'Custom collection of manufacturing and related, LQ > 1 and never less than 1 over date range.\nJob proportion > 0.05%. ONLY GROWING (slope > 0)',
+  facet_ncol = 2,
+  plotheight = 11,
+  plotwidth = 15
+    )
+
+
+
+#SAME GROUPING BUT FOCUS ON "LQ<1 BUT GROWING"
+#Not v interesting, as it turns out
+savesubplots(
   sic5filterlist = 
     x %>% filter(
-      GEOGRAPHY_NAME=="South Yorkshire",LQ < 1, slope_zscore > 0.5, sector_regional_proportion * 100 > 0.05,
+      GEOGRAPHY_NAME=="South Yorkshire",LQ < 1, difftotal > 0, sector_regional_proportion * 100 > 0.05,
       !grepl('call centres|Primary education|secondary education|Other education', INDUSTRY_NAME)
     ) %>% 
       ungroup() %>% 
       select(INDUSTRY_NAME) %>% 
       pull,
   sic2grepl_remove = 'Wholesale trade|Air transport|Food and beverage|Legal|Public admin|Residential care|wearing apparel|Retail trade|Warehousing|Rental|materials recovery|Wholesale|Postal|Sports|Computer programming|Human health',
-  filename = 'SY_5digit_manufacturing_n_related_LQ_LESSthan1_slope_zscore_morethan0point5',
-  plot_title = 'Custom collection of manufacturing and related, LQ < 1 but growing (z score > 0.5). Job proportion > 0.05%'
+  filename = 'SY_5digit_manufacturing_n_related_LQ_LESSthan1_slope__morethan0',
+  plot_title = 'Custom collection of manufacturing and related, LQ < 1 but growing (slope > 0). Job proportion > 0.05%'
+)
+#Compare that to just slope > 0
+savesubplots(
+  sic5filterlist = 
+    x %>% filter(
+      GEOGRAPHY_NAME=="South Yorkshire",LQ < 1, difftotal > 0, sector_regional_proportion * 100 > 0.05,
+      !grepl('call centres|Primary education|secondary education|Other education', INDUSTRY_NAME)
+    ) %>% 
+      ungroup() %>% 
+      select(INDUSTRY_NAME) %>% 
+      pull,
+  sic2grepl_remove = 'Wholesale trade|Air transport|Food and beverage|Legal|Public admin|Residential care|wearing apparel|Retail trade|Warehousing|Rental|materials recovery|Wholesale|Postal|Sports|Computer programming|Human health',
+  filename = 'SY_5digit_manufacturing_n_related_LQ_LESSthan1_slope_morethan0',
+  plot_title = 'Custom collection of manufacturing and related, LQ < 1 but growing (slope > 0). Job proportion > 0.05%'
 )
 
 
 
 
 
+#ALL OTHER LQ > 1 / ALWAYS > 1, NOT MANUF FOCUSED
+#i.e. the 5 digit opposite of the first one above
+returnplotdata2 <- savesubplots(
+  sic5filterlist = 
+    x %>% filter(
+      GEOGRAPHY_NAME=="South Yorkshire",LQ > 1, minn > 1, sector_regional_proportion * 100 > 0.05,
+      !INDUSTRY_NAME %in% unique(returnplotdata$INDUSTRY_NAME)
+    ) %>% 
+      ungroup() %>% 
+      select(INDUSTRY_NAME) %>% 
+      pull,
+  filename = 'SY_5digit_ALLOTHER_NOT_MANUF_LQmorethan1_neverlessthan1',
+  plot_title = 'All other sectors not in the custom collection of manufacturing and related, LQ > 1 and never less than 1 over date range. Job proportion > 0.05%'
+)
+
+
+#SAME AGAIN BUT ONLY GROWING slope > 0
+returnplotdata2 <- savesubplots(
+  sic5filterlist = 
+    x %>% filter(
+      GEOGRAPHY_NAME=="South Yorkshire",LQ > 1, minn > 1, difftotal > 0, sector_regional_proportion * 100 > 0.05,
+      !INDUSTRY_NAME %in% unique(returnplotdata$INDUSTRY_NAME)
+    ) %>% 
+      ungroup() %>% 
+      select(INDUSTRY_NAME) %>% 
+      pull,
+  filename = 'SY_5digit_ALLOTHER_NOT_MANUF_LQmorethan1_neverlessthan1_slope_morethan0_b',
+  plot_title = 'All other sectors LQ > 1 and never less than 1 over date range.\nJob proportion > 0.05%. ONLY GROWING (slope > 0)',
+  facet_ncol = 2,
+  plotheight = 11,
+  plotwidth = 15
+)
+
+
+#SAME AGAIN (nom-manuf) BUT LQ < 1 AND growing ones
+savesubplots(
+  sic5filterlist = 
+    x %>% filter(
+      GEOGRAPHY_NAME=="South Yorkshire",LQ < 1, difftotal > 0, sector_regional_proportion * 100 > 0.05,
+      !INDUSTRY_NAME %in% unique(returnplotdata$INDUSTRY_NAME)
+    ) %>% 
+      ungroup() %>% 
+      select(INDUSTRY_NAME) %>% 
+      pull,
+  filename = 'SY_5digit_ALLOTHER_NOT_MANUF_LQLESSTHAN1_slope_MORETHAN_0',
+  plot_title = 'All other sectors not in the custom collection of manufacturing and related\nLQ < 1. Job proportion > 0.05%. ONLY GROWING (slope > 0)'
+)
 
 
 
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#PLOT REGIONAL VS GB PROPORTION ON DIAG PLOT----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+place1 = 'South Yorkshire'
 
-
-#Get list of 5 digits for SY where LQ > 1 or some other value
-#And maybe that the min was always 1 in the data
-sectors5 <- x %>% filter(
-  GEOGRAPHY_NAME=="South Yorkshire",LQ > 1, minn > 1,
-  !grepl('call centres', INDUSTRY_NAME)
-  ) %>% 
-  ungroup() %>% 
-  select(INDUSTRY_NAME) %>% 
-  pull
-
-#Add back in scientific research/dev, despite shrinking
-sectors5 <- c(
-  sectors5,
-  x %>% filter(GEOGRAPHY_NAME=="South Yorkshire") %>% 
-    ungroup() %>% 
-    # filter(grepl('Manuf',INDUSTRY_NAME)) %>% 
-    filter(grepl('Scientific research',SIC_2DIGIT_NAME)) %>%
-    select(INDUSTRY_NAME) %>% 
-    pull
-  )
-
-length(sectors5)
-
-#List of the 2 digits I want to take out of that that are less connected also added in
-plotdata <- x %>% filter(
-  INDUSTRY_NAME %in% sectors5,
-  !grepl(
-    'Wholesale trade|Air transport|Food and beverage|Legal|Public admin|Residential care|wearing apparel|Retail trade|Warehousing|Rental|materials recovery|Wholesale|Postal|Sports|Computer programming|Human health', 
-    SIC_2DIGIT_NAME
-  )
-  )
-
-#Remove a couple of education sectors I don't think count as connected to production, or important for it
-plotdata <- plotdata %>% 
-  filter(
-    # !grepl('Primary education|secondary education|Other education', INDUSTRY_NAME)
-    !grepl('Primary education|secondary education|Other education|higher educ', INDUSTRY_NAME)
-  )
-
-
-
-#What the tot workforce in that?
-plotdata %>% 
-  filter(GEOGRAPHY_NAME == 'South Yorkshire') %>% 
-  summarise(
-    count = sum(COUNT),
-    totperc = sum(sector_regional_proportion) * 100
-  )
-
-
-#Factor order the facets
-plotdata <- plotdata %>% 
+uk_regional_props_minus_targetregion.bres <- itl2.lq %>%
+  filter(GEOGRAPHY_NAME != place1) %>% 
+  group_by(GEOGRAPHY_NAME, DATE) %>% 
   mutate(
-    SIC_2DIGIT_NAME = factor(SIC_2DIGIT_NAME),
-    SIC_2DIGIT_NAME = fct_reorder(SIC_2DIGIT_NAME,as.numeric(SIC_2DIGIT_CODE))
+    region_totalsize = sum(COUNT, na.rm = T),#a. Current employment per region per year, for regional denominator
+    sector_regional_proportion = COUNT / region_totalsize#b. regional sector proportion.
+  ) %>% 
+  group_by(DATE, INDUSTRY_NAME) %>% 
+  mutate(
+    uk_sectorsize = sum(COUNT, na.rm = T),#c. Summed current prices for EACH SECTOR, UK-wide
+  ) %>% 
+  group_by(DATE) %>% 
+  mutate(
+    uk_totalsize = sum(COUNT, na.rm = T),#d. Summed current prices for WHOLE UK per year, for UK denominator
+    sector_uk_proportion_minustargetITL = uk_sectorsize / uk_totalsize#e. UK-level sector proportion
+  )
+
+
+#Add back in to a copy of the main itl df, so it can be smoothed
+itl2.lq.w.sector_uk_proportion_minustargetITL <- itl2.lq %>% 
+  left_join(
+    uk_regional_props_minus_targetregion.bres %>% 
+      select(INDUSTRY_NAME, DATE,sector_uk_proportion_minustargetITL) %>% 
+      distinct(INDUSTRY_NAME,DATE,sector_uk_proportion_minustargetITL),
+    by = c('INDUSTRY_NAME', 'DATE')
+  )
+
+#Check, should be slightly different
+cor(itl2.lq.w.sector_uk_proportion_minustargetITL$sector_uk_proportion,itl2.lq.w.sector_uk_proportion_minustargetITL$sector_uk_proportion_minustargetITL, use = 'complete.obs')
+
+
+
+
+twoy <- itl2.lq.w.sector_uk_proportion_minustargetITL %>% 
+  ungroup() %>% 
+  filter(
+    DATE %in% c(min(DATE),max(DATE)),
+    GEOGRAPHY_NAME == 'South Yorkshire',
     )
 
+twoy$INDUSTRY_NAME_REDUCED <- gsub(x = twoy$INDUSTRY_NAME, pattern = 'of |and |acture|acturing|activities|equipment|products', replacement = '')
 
-#Keep a list of the 5 digit sectors there to get an "all other" next
-orig5sectors <- unique(plotdata$INDUSTRY_NAME)
-
-
-#Base plot
-p <- ggplot() +
-  geom_point(
-    data = plotdata %>% filter(difftotal > 0), 
-    aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal),
-    alpha = 0.1,
-    shape = 16,
-    colour = 'green'
-  ) +
-  geom_point(
-    data = plotdata %>% filter(difftotal < 0), 
-    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
-    aes(y = INDUSTRY_NAME_REDUCED, x = LQ, size = difftotal * -1),
-    alpha = 0.1,
-    shape = 16,
-    colour = 'red'
-  )  +
-  scale_size_continuous(range = c(1,24)) +
-  scale_x_continuous(trans = "log10") +
-  geom_vline(xintercept = 1, colour = 'blue') +
-  guides(size = F) +
-  facet_wrap(~SIC_2DIGIT_NAME, ncol = 3, scales = 'free_y', dir = 'v')#If one sector only, adds name anyway, still useful
+twoy_lags <- twoy %>% 
+  arrange(INDUSTRY_NAME,DATE) %>% 
+  mutate(
+    lag_sector_regional_proportion = sector_regional_proportion - lag(sector_regional_proportion),
+    lag_sector_uk_proportion_minustargetITL = sector_uk_proportion_minustargetITL - lag(sector_uk_proportion_minustargetITL)
+  ) %>% 
+  filter(DATE == max(DATE)) %>% 
+  mutate(
+    compass = case_when(
+      lag_sector_regional_proportion < 0 & lag_sector_uk_proportion_minustargetITL < 0 ~ 'SW',
+      lag_sector_regional_proportion < 0 & lag_sector_uk_proportion_minustargetITL > 0 ~ 'NW',
+      lag_sector_regional_proportion > 0 & lag_sector_uk_proportion_minustargetITL > 0 ~ 'NE',
+      lag_sector_regional_proportion > 0 & lag_sector_uk_proportion_minustargetITL < 0 ~ 'SE'
+    )
+  )
 
 
-#Add a place
-p <- addplace_to_LQplot(df = plotdata, plot_to_addto = p, place = 'Greater Manchester', shapenumber = 18,backgroundcolour = '#9ac0db', setalpha = 0.7)
-p <- addplace_to_LQplot(df = plotdata, plot_to_addto = p, place = 'South Yorkshire', shapenumber = 16, add_jobnumbers = T, addminmax = T)
+
+twoy <- twoy %>%
+  left_join(
+    twoy_lags %>% 
+      select(INDUSTRY_NAME,compass),
+    by = 'INDUSTRY_NAME'
+  )
+
+
+filtercompass='NE'#both growing
+filtercompass='NW'#SY shrinking, growth elsewhere
+filtercompass='SE'#SY growing, shrinkage elsewhere
+filtercompass='SW'#both shrinking
+filtercompass= c('NE','NW','SE','SW')
+
+#SY growth, both shrink growth elsewhere
+filtercompass= c('NE','SE')
+#SY shrink, both shrink growth else
+filtercompass= c('NW','SW')
+
+
+#Filter to subset of sectors
+twoy.p <- twoy %>% 
+  filter(INDUSTRY_NAME %in% returnplotdata$INDUSTRY_NAME)
+  # filter(INDUSTRY_NAME %in% returnplotdata2$INDUSTRY_NAME)
+
+sum(
+  twoy.p %>% filter(compass %in% filtercompass) %>% select(sector_regional_proportion) %>% pull()
+  )*100
+
+#Check none are higher props than on the plot
+table(twoy.p$sector_uk_proportion_minustargetITL*100 < 1)
+table(twoy.p$sector_regional_proportion*100 < 1)
+
+table(twoy.p$sector_uk_proportion_minustargetITL*100 < 0.1)
+table(twoy.p$sector_regional_proportion*100 < 0.1)
+
+max(twoy.p$sector_uk_proportion_minustargetITL*100)
+max(twoy.p$sector_regional_proportion*100)
+
+p <- ggplot(
+  twoy.p %>% filter(compass %in% filtercompass),
+  aes(x = sector_regional_proportion * 100, y = sector_uk_proportion_minustargetITL * 100)) +
+  geom_point(size = 5, alpha = 0.75, aes(colour = factor(DATE), group = INDUSTRY_NAME_REDUCED)) +
+  geom_line(size = 1, aes(colour = factor(DATE), group = INDUSTRY_NAME_REDUCED)) +
+  xlab('South Yorkshire FT job count proportion') +
+  ylab('UK FT job count proportion (MINUS South Yorkshire)')  +
+  geom_abline(slope = 1, size = 1, colour='blue', alpha = 0.5) +
+  coord_cartesian(xlim = c(0.01,1), ylim = c(0.01,1)) + # good for log scale
+  # coord_cartesian(xlim = c(0.01,7), ylim = c(0.01,7)) + # good for log scale
+  # coord_cartesian(xlim = c(0.01,11), ylim = c(0.01,11)) + # good for log scale
+  scale_y_log10() +
+  scale_x_log10() +
+  guides(colour=guide_legend(title=" "))
+
+p <- p + geom_text_repel(
+  data = twoy.p %>% filter(DATE==max(twoy$DATE), compass %in% filtercompass),
+  aes(x = sector_regional_proportion * 100, y = sector_uk_proportion_minustargetITL * 100,label = INDUSTRY_NAME_REDUCED, colour = compass),
+  alpha=1,
+  # colour = 'black',
+  nudge_x = .05,
+  box.padding = 1,
+  nudge_y = 0.05,
+  segment.curvature = -0.1,
+  segment.ncp = 0.3,
+  segment.angle = 20
+) +
+  # scale_color_brewer(palette = 'Dark2', direction = -1) 
+  scale_color_manual(values = c('red','black','#7fc97f','#beaed4','#fdc086','#1f78b4'))
+
+
 p
 
-ggsave(plot = p, filename = 'local/localimages/sy_5digitLqmorethan1_manuf.png', height=15, width=24)
+ggsave(plot = p, filename = paste0('local/localimages/fivedigit_nonmanuf_collection_nonlog_',filtercompass,'.png'), height = 9, width = 9)
 
 
 
@@ -1666,10 +1792,12 @@ ggsave(plot = p, filename = 'local/localimages/sy_5digitLqmorethan1_manuf.png', 
 
 
 
+#~~~~~~~~~~~~~~~~~~~~~~~
+#OTHER 5 DIGIT STUFF----
+#~~~~~~~~~~~~~~~~~~~~~~~
 
 
 
-#What about all OTHER LQ>1?
 sectors5other <- x %>% filter(
   GEOGRAPHY_NAME=="South Yorkshire",LQ > 1, minn > 1, difftotal < 0) %>% 
   # GEOGRAPHY_NAME=="South Yorkshire",LQ > 1, minn > 1, difftotal > 0) %>% 
@@ -2199,6 +2327,29 @@ ggplot(x %>% filter(GEOGRAPHY_NAME==placename, sector_regional_proportion * 100 
 
 
 
+#LQ vs sector regional proportion (problems with that right? This should correlate...)
+ggplot(x %>% filter(GEOGRAPHY_NAME==placename, sector_regional_proportion * 100 > 1), aes(x = sector_regional_proportion, y = LQ, label = INDUSTRY_NAME)) +
+  geom_point(aes(size = sector_regional_proportion * 100)) +
+  scale_y_log10() +
+  geom_hline(yintercept = 1) +
+  # geom_text(
+  #   aes(label=INDUSTRY_NAME),
+  #   nudge_x=0.01, 
+  #   # check_overlap=T,
+  #   hjust = 'left'
+  # ) +
+  geom_text_repel(
+    nudge_x = .05,
+    box.padding = 0.2,
+    nudge_y = 0.05,
+    segment.curvature = -0.1,
+    segment.ncp = 0.3,
+    segment.angle = 20
+  ) +
+  scale_size_continuous(range = c(3,12))
+
+
+
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #MAKE 2,3,5 LEVEL SIC SECTOR LOOKUP----
@@ -2597,4 +2748,9 @@ plot_ly(data = x, x = ~DATE, y = ~percent, color = ~INDUSTRY_NAME,
 
 
 
-
+# chk <- itl2.lq %>% 
+#   filter(GEOGRAPHY_NAME=='South Yorkshire', DATE ==2021,
+#          grepl('education', SIC_2DIGIT_NAME, ignore.case=T))
+# 
+# chk %>% 
+#   group_by()

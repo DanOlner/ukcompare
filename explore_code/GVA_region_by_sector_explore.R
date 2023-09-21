@@ -6,6 +6,7 @@ library(tmap)
 library(plotly)
 library(magick)
 library(cowplot)
+library(ggrepel)
 source('functions/misc_functions.R')
 options(scipen = 99)
 
@@ -460,21 +461,21 @@ ggplot(minmaxes_plus_sy,
 #Something odd with water and air transport, remove until work out what
 place = 'South Yorkshire'
 
-x <- itl2.cp %>% filter(year == 2021, `SIC07 description` != 'Water and air transport') %>% mutate(flaggedplace = `ITL region name`==place)
+xmm <- itl2.cp %>% filter(year == 2021, `SIC07 description` != 'Water and air transport') %>% mutate(flaggedplace = `ITL region name`==place)
 
 #Ordering by the flagged place, bit awkward
-x$`SIC07 description` <- factor(x$`SIC07 description`)
-x$`SIC07 description` <- fct_relevel(
-  x$`SIC07 description`, 
-  unique(as.character(x$`SIC07 description`))[order(x %>% filter(`ITL region name`==place) %>%ungroup() %>% select(LQ_log) %>% pull(),decreasing = T)]
+xmm$`SIC07 description` <- factor(xmm$`SIC07 description`)
+xmm$`SIC07 description` <- fct_relevel(
+  xmm$`SIC07 description`, 
+  unique(as.character(xmm$`SIC07 description`))[order(xmm %>% filter(`ITL region name`==place) %>%ungroup() %>% select(LQ_log) %>% pull(),decreasing = T)]
   )
 
 #Actually, keep that order and use for animation below
-ordertouse <- unique(as.character(x$`SIC07 description`))[order(x %>% filter(`ITL region name`==place) %>%ungroup() %>% select(LQ_log) %>% pull(),decreasing = T)]
+ordertouse <- unique(as.character(xmm$`SIC07 description`))[order(xmm %>% filter(`ITL region name`==place) %>%ungroup() %>% select(LQ_log) %>% pull(),decreasing = T)]
 
 
 ggplot(
-  x, 
+  xmm, 
   aes(y = `SIC07 description`, x = LQ_log, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace)
   ) +
   geom_point() +
@@ -492,17 +493,17 @@ ggplot(
 #Bouncing off https://ryanpeek.org/2016-10-19-animated-gif_maps_in_r/
 LQovertime_ggplot <- function(filteryear,placename){
   
-  x <- itl2.cp %>% filter(year == filteryear, `SIC07 description` != 'Water and air transport') %>% mutate(flaggedplace = `ITL region name`==placename)
+  xmm <- itl2.cp %>% filter(year == filteryear, `SIC07 description` != 'Water and air transport') %>% mutate(flaggedplace = `ITL region name`==placename)
   
   #Ordering by the flagged place, bit awkward
-  x$`SIC07 description` <- factor(x$`SIC07 description`)
-  x$`SIC07 description` <- fct_relevel(
-    x$`SIC07 description`, 
+  xmm$`SIC07 description` <- factor(xmm$`SIC07 description`)
+  xmm$`SIC07 description` <- fct_relevel(
+    xmm$`SIC07 description`, 
     ordertouse
   )
 
   ggplot(
-    x, 
+    xmm, 
     aes(y = `SIC07 description`, x = LQplusone_log, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace)
   ) +
     geom_point() +
@@ -520,8 +521,8 @@ LQovertime_ggplot <- function(filteryear,placename){
 }
 
 #Change plotting order for SICs before running function
-x <- itl2.cp %>% filter(year == 2009, `SIC07 description` != 'Water and air transport') %>% mutate(flaggedplace = `ITL region name`==place)
-ordertouse <- unique(as.character(x$`SIC07 description`))[order(x %>% filter(`ITL region name`==place) %>%ungroup() %>% select(LQplusone_log) %>% pull(),decreasing = T)]
+xmm <- itl2.cp %>% filter(year == 2009, `SIC07 description` != 'Water and air transport') %>% mutate(flaggedplace = `ITL region name`==place)
+ordertouse <- unique(as.character(xmm$`SIC07 description`))[order(xmm %>% filter(`ITL region name`==place) %>%ungroup() %>% select(LQplusone_log) %>% pull(),decreasing = T)]
 
 #Create images in folder
 lapply(1998:2021, function(x) LQovertime_ggplot(x, 'South Yorkshire'))
@@ -657,26 +658,26 @@ plot_ly(data = sy %>% filter(year==2021), x = ~LQ, y = ~sector_regional_proporti
 #Originally made for BRES data, repeat code that adds change over time (via OLS) as colour
 
 #Create a function that fits lm and returns slope
-get_slope <- function(data) {
+get_slope2 <- function(data) {
   model <- lm(LQ_log ~ year, data = data, na.action = na.omit)
   coef(model)[2]
 }
 
 #Make it a safe function using purrr::possibly
 #(Issue with some data being all NAs)
-safe_get_slope <- purrr::possibly(get_slope, otherwise = 0)
+safe_get_slope2 <- purrr::possibly(get_slope2, otherwise = 0)
 
-l <- itl2.cp %>%
+ll <- itl2.cp %>%
   group_by(`ITL region name`, `SIC07 description`) %>%
   nest() %>%
-  mutate(slope = map_dbl(data, safe_get_slope)) %>%
+  mutate(slope = map_dbl(data, safe_get_slope2)) %>%
   select(-data) %>% 
   mutate(slope = ifelse(is.na(slope),0,slope)) %>% 
   arrange(slope)
 
 
 #Break into groups of differing slope
-diffchange <- l %>% 
+diffchange2 <- ll %>% 
   filter(slope!=0) %>% 
   group_by(`ITL region name`) %>% 
   mutate(group = as.integer(cut_number(slope,7))) %>% 
@@ -689,14 +690,14 @@ place = 'South Yorkshire'
 place = 'Greater Manchester'
 
 #climbers
-industries = diffchange %>% filter(`ITL region name` == place, group %in% c(7)) %>% select(`SIC07 description`) %>% pull()
+industries = diffchange2 %>% filter(`ITL region name` == place, group %in% c(7)) %>% select(`SIC07 description`) %>% pull()
 #droppers
-industries = diffchange %>% filter(`ITL region name` == place, group %in% c(4)) %>% select(`SIC07 description`) %>% pull()
+industries = diffchange2 %>% filter(`ITL region name` == place, group %in% c(4)) %>% select(`SIC07 description`) %>% pull()
 #middle
-industries = diffchange %>% filter(`ITL region name` == place, group %in% c(1)) %>% select(`SIC07 description`) %>% pull()
+industries = diffchange2 %>% filter(`ITL region name` == place, group %in% c(1)) %>% select(`SIC07 description`) %>% pull()
 
 #Select those industries / place
-x <- itl2.cp %>% filter(`ITL region name` == place, `SIC07 description` %in% industries) 
+xmn <- itl2.cp %>% filter(`ITL region name` == place, `SIC07 description` %in% industries) 
 
 
 #Check one set of slopes
@@ -708,7 +709,7 @@ x <- itl2.cp %>% filter(`ITL region name` == place, `SIC07 description` %in% ind
 # 
 # x <- sy %>% filter(slope %in% slopeorder[1:10])
 
-y <- x %>% 
+y <- xmn %>% 
   group_by(`SIC07 description`) %>% 
   arrange(year) %>% 
   mutate(
@@ -734,35 +735,35 @@ plot_ly(data = y, x = ~year, y = ~movingav, color = ~`SIC07 description`,
 
 
 #LQ PLOTS
-x <- itl2.cp %>% filter(year == 2021)
+xmm <- itl2.cp %>% filter(year == 2021)
 
 #Add slopes into data to get LQ plots
-x <- x %>% 
+xmm <- xmm %>% 
   left_join(
-    diffchange %>% select(-group),
+    diffchange2 %>% select(-group),
     by = c("ITL region name","SIC07 description")
   )
 
 #Get min max values over time as well, to add as bars so range of sector is easy to see
-minmaxes <- itl2.cp %>% 
+minmaxes2 <- itl2.cp %>% 
   group_by(`SIC07 description`,`ITL region name`) %>% 
   summarise(
     minn = min(LQ),
     maxx = max(LQ)
   )
 
-x <- x %>% 
+xmm <- xmm %>% 
   left_join(
-    minmaxes,
+    minmaxes2,
     by = c("ITL region name","SIC07 description")
   )
 
 
 #Factor
-x$`SIC07 description` <- factor(x$`SIC07 description`)
-x$`SIC07 description` <- fct_relevel(
-  x$`SIC07 description`, 
-  unique(as.character(x$`SIC07 description`))[order(x %>% filter(`ITL region name`==place) %>%ungroup() %>% select(LQ) %>% pull(),decreasing = T)]
+xmm$`SIC07 description` <- factor(xmm$`SIC07 description`)
+xmm$`SIC07 description` <- fct_relevel(
+  xmm$`SIC07 description`, 
+  unique(as.character(xmm$`SIC07 description`))[order(xmm %>% filter(`ITL region name`==place) %>%ungroup() %>% select(LQ) %>% pull(),decreasing = T)]
 )
 
 
@@ -774,11 +775,11 @@ x$`SIC07 description` <- fct_relevel(
 
 #LQ PLOT
 #Function for overlaying specific places / ITL2 zones
-addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundcolour='black', add_gva = F, setalpha = 1, addminmax = F){
+addplace_to_LQplot2 <- function(df, plot_to_addto, place, shapenumber=16,backgroundcolour='black', add_gva = F, setalpha = 1, addminmax = F){
   
   plot_to_addto <- plot_to_addto +
     geom_point(
-      data = x %>% filter(`ITL region name` == place, difftotal > 0), 
+      data = df %>% filter(`ITL region name` == place, difftotal > 0), 
       # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
       aes(y = `SIC07 description`, x = LQ, size = difftotal *1.75),
       shape = shapenumber,
@@ -786,7 +787,7 @@ addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundco
       alpha = setalpha
     ) +
     geom_point(
-      data = x %>% filter(`ITL region name` == place, difftotal < 0), 
+      data = df %>% filter(`ITL region name` == place, difftotal < 0), 
       # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
       aes(y = `SIC07 description`, x = LQ, size = difftotal *-1.75),
       shape = shapenumber,
@@ -794,7 +795,7 @@ addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundco
       alpha = setalpha
     ) +
     geom_point(
-      data = x %>% filter(`ITL region name` == place, difftotal > 0), 
+      data = df %>% filter(`ITL region name` == place, difftotal > 0), 
       # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
       aes(y = `SIC07 description`, x = LQ, size = difftotal),
       shape = shapenumber,
@@ -802,7 +803,7 @@ addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundco
       alpha = setalpha
     ) +
     geom_point(
-      data = x %>% filter(`ITL region name` == place, difftotal < 0), 
+      data = df %>% filter(`ITL region name` == place, difftotal < 0), 
       # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
       aes(y = `SIC07 description`, x = LQ, size = difftotal * -1),
       shape = shapenumber,
@@ -815,7 +816,7 @@ addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundco
     
     plot_to_addto <- plot_to_addto +  
       geom_text(
-        data = x %>% filter(`ITL region name` == place), 
+        data = df %>% filter(`ITL region name` == place), 
         aes(y = `SIC07 description`, x = 20, label = paste0('£',value,'M, ',round(sector_regional_proportion * 100, 2),'%')),
         # aes(y = INDUSTRY_NAME, x = max(LQ) + 2, label = COUNT),
         nudge_x = 0.3, hjust = 1, alpha = 0.7, size = 3
@@ -825,8 +826,9 @@ addplace_to_LQplot <- function(plot_to_addto, place, shapenumber=16,backgroundco
       
       plot_to_addto <- plot_to_addto +
         geom_errorbar(
-          data = x %>% filter(`ITL region name` == place),
-          aes(y = `SIC07 description`, xmin = minn, xmax = maxx)
+          data = df %>% filter(`ITL region name` == place),
+          aes(y = `SIC07 description`, xmin = minn, xmax = maxx),
+          width = 0.05
           )
       
     }
@@ -861,17 +863,17 @@ place2 = 'South Yorkshire'
 
 
 #Factor
-x$`SIC07 description` <- factor(x$`SIC07 description`)
-x$`SIC07 description` <- fct_relevel(
-  x$`SIC07 description`, 
-  unique(as.character(x$`SIC07 description`))[order(x %>% filter(`ITL region name`==place1) %>%ungroup() %>% select(LQ) %>% pull(),decreasing = T)]
+xmm$`SIC07 description` <- factor(xmm$`SIC07 description`)
+xmm$`SIC07 description` <- fct_relevel(
+  xmm$`SIC07 description`, 
+  unique(as.character(xmm$`SIC07 description`))[order(xmm %>% filter(`ITL region name`==place1) %>%ungroup() %>% select(LQ) %>% pull(),decreasing = T)]
 )
 
 
 #Base plot
 p <- ggplot() +
   geom_point(
-    data = x %>% filter(difftotal > 0), 
+    data = xmm %>% filter(difftotal > 0), 
     # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
     aes(y = `SIC07 description`, x = LQ, size = difftotal),
     alpha = 0.1,
@@ -879,7 +881,70 @@ p <- ggplot() +
     colour = 'green'
   ) +
   geom_point(
-    data = x %>% filter(difftotal < 0), 
+    data = xmm %>% filter(difftotal < 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = `SIC07 description`, x = LQ, size = difftotal * -1),
+    alpha = 0.1,
+    shape = 16,
+    colour = 'red'
+  )  +
+  scale_size_continuous(range = c(1,17)) +
+  scale_x_continuous(trans = "log10", limits = c(0.01, 51)) +
+  geom_vline(xintercept = 1, colour = 'blue') +
+  guides(size = F) 
+
+
+
+#Add a place
+p <- addplace_to_LQplot2(df = xmm, plot_to_addto = p, place = place2, shapenumber = 18,backgroundcolour = '#9ac0db', setalpha = 0.7)
+p <- addplace_to_LQplot2(df = xmm, plot_to_addto = p, place = place1, shapenumber = 16, add_gva = T, addminmax = T)
+p
+
+
+ggsave(plot = p, filename = paste0('local/localimages/gva_',place1,'_v_',place2,'_plot.png'), width = 12, height = 12)
+
+
+
+
+
+#Reduced version 1: growth sectors, always LQ>1
+sic5filter <- xmm %>% filter(
+  `ITL region name`=="South Yorkshire",LQ > 1, difftotal > 0,
+  # `ITL region name`=="South Yorkshire",LQ > 1, minn > 1,#no slope, can be going up or down in that time
+  # `ITL region name`=="South Yorkshire",LQ > 1, minn > 1, difftotal > 0,#never LQ < 1
+  !grepl('Water and air', `SIC07 description`)
+) %>% 
+  ungroup() %>% 
+  select(`SIC07 description`) %>% 
+  pull
+
+
+reduced <- xmm %>% filter(
+  `SIC07 description` %in% sic5filter
+)
+
+#total GVA and percent, for the above
+value_n_perc <- reduced %>% 
+  filter(`ITL region name` == 'South Yorkshire') %>% 
+  summarise(
+    value = sum(value),
+    totperc = sum(sector_regional_proportion) * 100
+  )
+
+
+
+#Base plot
+p <- ggplot() +
+  geom_point(
+    data = reduced %>% filter(difftotal > 0), 
+    # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
+    aes(y = `SIC07 description`, x = LQ, size = difftotal),
+    alpha = 0.1,
+    shape = 16,
+    colour = 'green'
+  ) +
+  geom_point(
+    data = reduced %>% filter(difftotal < 0), 
     # aes(y = INDUSTRY_NAME, x = LQ, shape = flaggedplace, alpha = flaggedplace, size = flaggedplace, colour = flaggedplace, size = COUNT)) +
     aes(y = `SIC07 description`, x = LQ, size = difftotal * -1),
     alpha = 0.1,
@@ -889,17 +954,378 @@ p <- ggplot() +
   scale_size_continuous(range = c(1,17)) +
   scale_x_continuous(trans = "log10", limits = c(0.001, 51)) +
   geom_vline(xintercept = 1, colour = 'blue') +
-  guides(size = F) 
+  guides(size = F) +
+  ggtitle(
+    paste0(
+      'SY GVA LQs > 1. ', round(value_n_perc$totperc,2),'% of SY economy.'
+    )
+  ) +
+  theme(plot.title = element_text(face = 'bold')) +
+  ylab("")
 
 
 
 #Add a place
-p <- addplace_to_LQplot(plot_to_addto = p, place = place2, shapenumber = 18,backgroundcolour = '#9ac0db', setalpha = 0.7)
-p <- addplace_to_LQplot(plot_to_addto = p, place = place1, shapenumber = 16, add_gva = T, addminmax = T)
+p <- addplace_to_LQplot2(df = reduced, plot_to_addto = p, place = place2, shapenumber = 18,backgroundcolour = '#9ac0db', setalpha = 0.7)
+p <- addplace_to_LQplot2(df = reduced, plot_to_addto = p, place = place1, shapenumber = 16, add_gva = T, addminmax = T)
 p
 
+ggsave(plot = p, filename = 'local/localimages/SY_LQ_morethan1.png', height = 8, width = 8)
 
-ggsave(plot = p, filename = paste0('local/localimages/gva_',place1,'_v_',place2,'_plot.png'), width = 12, height = 12)
+
+
+#Lemme see the full path of those selections plz thank you
+y <- itl2.cp %>% filter(`ITL region name` == place1, `SIC07 description` %in% unique(reduced$`SIC07 description`)) %>% 
+  group_by(`SIC07 description`) %>% 
+  arrange(year) %>% 
+  mutate(
+    LQ = ifelse(LQ == 0, NA, LQ),#Set to NA so plotly won't show
+    movingav = rollapply(LQ,3,mean,align='right',fill=NA)
+    # LQ_movingav = rollapply(LQ,3,mean,align='right',fill=NA),0)#Have a count moving average too, so it matches the percent (so count orders are correct vertically)
+  )
+
+y <- y %>% 
+  mutate(`SIC07 description` = factor(`SIC07 description`),
+         `SIC07 description` = fct_reorder(`SIC07 description`, LQ)
+         # `SIC07 description` = fct_reorder(`SIC07 description`, movingav, .na_rm = T)
+         )
+
+#Break into av LQ groups for facetting
+cutz <- y %>% 
+  group_by(`SIC07 description`) %>% 
+  summarise(avLQ = mean(LQ, na.rm = T)) %>% 
+  mutate(LQ_group = as.numeric(cut_number(avLQ, 4)))
+
+
+y <- y %>% 
+  left_join(cutz, by = 'SIC07 description')
+
+
+# plot_ly(data = y, x = ~year, y = ~movingav, color = ~`SIC07 description`,
+#         # plot_ly(data = y, x = ~year, y = ~LQ, color = ~`SIC07 description`,
+#         # text = ~paste("Sector:", `SIC07 description`, "\nGVA: ",value, "\nslope: ",slope),  # Add this line for hover text
+#         text = ~paste("Sector:", `SIC07 description`, "\nGVA: ",value),  # Add this line for hover text
+#         hoverinfo = 'text',
+#         type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+#   layout(title = "Yearly percents by SIC", 
+#          xaxis = list(title = "Year"), 
+#          yaxis = list(title = "Value", type='log'),
+#          # yaxis = list(title = "Value"),
+#          showlegend = F)
+
+#ggplot version
+ggplot(y, aes(x = year, y = movingav, colour = fct_reorder(`SIC07 description`, -movingav, na.rm=T))) +
+  geom_point() +
+  geom_line() +
+  # scale_color_distiller(type = 'qual', direction = -1) +
+  # scale_color_brewer(palette = 'Dark2', direction = -1) +
+  # scale_color_brewer(palette = 'Paired', direction = -1) +
+  scale_y_log10() +
+  theme(legend.title=element_blank()) +
+  ylab('LQ, 3 year moving average, log') +
+  geom_hline(yintercept = 1)
+
+#Faceted by groups (based on av LQ over time) version
+ggplot(y, aes(x = year, y = movingav, colour = fct_reorder(`SIC07 description`, -movingav, na.rm=T))) +
+  geom_point() +
+  geom_line() +
+  # scale_color_distiller(type = 'qual', direction = -1) +
+  # scale_color_brewer(palette = 'Dark2', direction = -1) +
+  # scale_color_brewer(palette = 'Paired', direction = -1) +
+  scale_y_log10() +
+  theme(legend.title=element_blank()) +
+  ylab('LQ, 3 year moving average, log') +
+  facet_wrap(~LQ_group, scales = 'free_y') +
+  geom_hline(yintercept = 1)
+  
+
+
+#XY PLOT OF SY LQS VS REGIONAL PROPORTION 
+#To check on actual GVA sizes vs relative position in UK
+#For a single year (might be interesting to animate this, but can look at pair of years for now)
+
+#Hmm, arguably could just put UK regional proportion rather than LQ. 2 dimensional version gives clear picture
+# ggplot(y, aes(x = sector_regional_proportion, y = sector_uk_proportion, label = `SIC07 description`)) +
+ggplot(
+  # itl2.cp %>% filter(`ITL region name` == place1, year == 2021),
+  itl2.cp %>% filter(`ITL region name` == place1, year == 2021, `SIC07 description` %in% unique(reduced$`SIC07 description`)),
+       aes(x = sector_regional_proportion * 100, y = sector_uk_proportion * 100, label = `SIC07 description`)) +
+  geom_point(size = 4, colour = 'red') +
+  # geom_vline(xintercept = 0) +
+  # geom_hline(yintercept = 1) +
+  geom_text_repel(
+    nudge_x = .05,
+    box.padding = 0.2,
+    nudge_y = 0.05,
+    segment.curvature = -0.1,
+    segment.ncp = 0.3,
+    segment.angle = 20
+  ) +
+  geom_abline(slope = 1, size = 1, colour='blue', alpha = 0.5) +
+  coord_cartesian(xlim = c(0.1,11), ylim = c(0.1,11)) + # good for log scale
+  scale_y_log10() +
+  scale_x_log10()
+  
+
+
+
+#Making a version that has "UK regional proportion minus the target region"
+#Otherwise they're autocorrelating
+#Make that and then just merge back in?
+uk_regional_props_minus_targetregion <- itl2.cp %>%
+  filter(`ITL region name` != place1) %>% 
+  group_by(`ITL region name`, year) %>% 
+  mutate(
+    region_totalsize = sum(value, na.rm = T),#a. Current price per region per year, for regional denominator
+    sector_regional_proportion = value / region_totalsize#b. regional sector proportion (noting that a single row in this group is a single sector)
+  ) %>% 
+  group_by(year, `SIC07 code`) %>% 
+  mutate(
+    uk_sectorsize = sum(value, na.rm = T),#c. Summed current prices for EACH SECTOR, UK-wide
+  ) %>% 
+  group_by(year) %>% 
+  mutate(
+    uk_totalsize = sum(value, na.rm = T),#d. Summed current prices for WHOLE UK per year, for UK denominator
+    sector_uk_proportion_minustargetITL = uk_sectorsize / uk_totalsize#e. UK-level sector proportion
+  ) 
+
+
+#Add back in to a copy of the main itl df, so it can be smoothed
+itl2.cp.w.sector_uk_proportion_minustargetITL <- itl2.cp %>% 
+  left_join(
+    uk_regional_props_minus_targetregion %>% 
+      select(`SIC07 description`, year,sector_uk_proportion_minustargetITL) %>% 
+      distinct(`SIC07 description`,year,sector_uk_proportion_minustargetITL),
+    by = c('SIC07 description', 'year')
+  )
+
+#Correlation between these should be close but not one... Yup.
+cor(itl2.cp.w.sector_uk_proportion_minustargetITL$sector_uk_proportion,itl2.cp.w.sector_uk_proportion_minustargetITL$sector_uk_proportion_minustargetITL, use = 'complete.obs')
+plot(itl2.cp.w.sector_uk_proportion_minustargetITL$sector_uk_proportion,itl2.cp.w.sector_uk_proportion_minustargetITL$sector_uk_proportion_minustargetITL)
+
+
+#Let's try a smoothed / animated version of that.
+#Add smoothing first
+smoothband = 1
+
+anim_lq <- itl2.cp.w.sector_uk_proportion_minustargetITL %>% filter(`ITL region name` == place1, `SIC07 description` %in% unique(reduced$`SIC07 description`)) %>% 
+  group_by(`SIC07 description`) %>% 
+  arrange(year) %>% 
+  mutate(
+    regionalprop_movingav = rollapply(sector_regional_proportion,smoothband,mean,align='right',fill=NA),
+    ukprop_movingav = rollapply(sector_uk_proportion,smoothband,mean,align='right',fill=NA),
+    ukprop_minustargetITL_movingav = rollapply(sector_uk_proportion_minustargetITL,smoothband,mean,align='right',fill=NA)
+  ) %>% #remove NA years smoothing created
+  filter(!is.na(regionalprop_movingav))
+  # filter(!is.na(regionalprop_movingav), !is.na(ukprop_minustargetITL_movingav))
+
+
+
+for(i in min(anim_lq$year):2021){
+  
+  p <- ggplot(
+    # itl2.cp %>% filter(`ITL region name` == place1, year == 2021),
+    anim_lq %>% filter(year == i),
+    aes(x = regionalprop_movingav * 100, y = ukprop_minustargetITL_movingav * 100, label = `SIC07 description`)) +
+    geom_point(size = 4, colour = 'red') +
+    xlab('South Yorkshire GVA proportion') +
+    ylab('UK GVA proportion') +
+    # geom_vline(xintercept = 0) +
+    # geom_hline(yintercept = 1) +
+    geom_text_repel(
+      nudge_x = .05,
+      box.padding = 0.2,
+      nudge_y = 0.05,
+      segment.curvature = -0.1,
+      segment.ncp = 0.3,
+      segment.angle = 20
+    ) +
+    geom_abline(slope = 1, size = 1, colour='blue', alpha = 0.5) +
+    coord_cartesian(xlim = c(0.1,11), ylim = c(0.1,11)) + # good for log scale
+    scale_y_log10() +
+    scale_x_log10() +
+    annotate("text", x = 0.2, y = 9, label = i, size = 25) 
+    # annotate("text", x = 7, y = 0.15, label = i, size = 25)
+  
+  ggsave(plot = p, filename = paste0('local/localimages/animations/GVA_LQ_2D/',i,'.png'))
+  
+}
+
+list.files(path = "local/localimages/animations/GVA_LQ_2D/", pattern = "*.png", full.names = T) %>% 
+  map(image_read) %>% # reads each path file
+  image_join() %>% # joins image
+  image_animate(fps=2) %>% # animates, can opt for number of loops
+  image_write("local/localimages/animations/GVA_LQ_2D/SYregional_v_UKproportions_GVAcurrentprices.gif")
+
+
+
+
+#Plot comparing two years, linking years with lines
+twoy <- anim_lq %>% filter(year %in% c(min(year),max(year)))
+
+twoy$INDUSTRY_NAME_REDUCED <- gsub(x = twoy$`SIC07 description`, pattern = 'of |and |acture|acturing|activities|equipment|products', replacement = '')
+
+
+#Mark four corners of the compass!
+# Lines going ‘South West’ = GVA proportion shrinking in both SY and other UK.
+# ‘SE’: growing in SY, shrinking elsewhere
+# ‘NE’: growing everywhere (slope = relative rate)
+# ‘NW’: growing in both SY and other UK
+
+#Lag first, then polarity
+#Make separately to get polarities then merge back in for labelling
+twoy_lags <- twoy %>% 
+  arrange(`SIC07 description`,year) %>% 
+  mutate(
+    lag_sector_regional_proportion = sector_regional_proportion - lag(sector_regional_proportion),
+    lag_sector_uk_proportion_minustargetITL = sector_uk_proportion_minustargetITL - lag(sector_uk_proportion_minustargetITL)
+  ) %>% 
+  filter(year == max(year)) %>% 
+  mutate(
+    compass = case_when(
+      lag_sector_regional_proportion < 0 & lag_sector_uk_proportion_minustargetITL < 0 ~ 'SW',
+      lag_sector_regional_proportion < 0 & lag_sector_uk_proportion_minustargetITL > 0 ~ 'NW',
+      lag_sector_regional_proportion > 0 & lag_sector_uk_proportion_minustargetITL > 0 ~ 'NE',
+      lag_sector_regional_proportion > 0 & lag_sector_uk_proportion_minustargetITL < 0 ~ 'SE'
+    )
+  )
+
+#No NW, curious
+#Joining in the labels below
+
+p <- ggplot(
+  twoy,
+  aes(x = sector_regional_proportion * 100, y = sector_uk_proportion_minustargetITL * 100)) +
+  geom_point(size = 5, alpha = 0.75, aes(colour = factor(year), group = INDUSTRY_NAME_REDUCED)) +
+  geom_line(size = 1, aes(colour = factor(year), group = INDUSTRY_NAME_REDUCED)) +
+  xlab('South Yorkshire GVA proportion') +
+  ylab('UK GVA proportion (MINUS South Yorkshire)')  +
+  geom_abline(slope = 1, size = 1, colour='blue', alpha = 0.5) +
+  coord_cartesian(xlim = c(0.1,11), ylim = c(0.1,11)) + # good for log scale
+  # scale_y_log10() +
+  # scale_x_log10() +
+  guides(colour=guide_legend(title=" "))
+
+p <- p + geom_text_repel(
+    data = twoy %>% filter(year==max(twoy$year)) %>% 
+      left_join(
+        twoy_lags %>% 
+          select(`SIC07 description`,compass),
+        by = 'SIC07 description'
+        ),
+    aes(x = sector_regional_proportion * 100, y = sector_uk_proportion_minustargetITL * 100,label = INDUSTRY_NAME_REDUCED, colour = compass),
+    alpha=1,
+    # colour = 'black',
+    nudge_x = .05,
+    box.padding = 1,
+    nudge_y = 0.05,
+    segment.curvature = -0.1,
+    segment.ncp = 0.3,
+    segment.angle = 20
+  ) +
+  # scale_color_brewer(palette = 'Dark2', direction = -1) 
+  scale_color_manual(values = c('red','black','#7fc97f','#beaed4','#fdc086','#ffff99'))
+  
+
+p
+
+ggsave(plot = p, filename = 'local/localimages/SY_LQ2D_nonlog.png', height = 9, width = 9)
+
+ 
+
+
+#REPEAT COMPASS FOR ALL SY SECTORS
+#Have a look at which grown, just by 98-21 change
+#how compares to UK growth
+smoothband = 1
+
+anim_lq <- itl2.cp.w.sector_uk_proportion_minustargetITL %>% filter(`ITL region name` == place1) %>% 
+  group_by(`SIC07 description`) %>% 
+  arrange(year) %>% 
+  mutate(
+    regionalprop_movingav = rollapply(sector_regional_proportion,smoothband,mean,align='right',fill=NA),
+    ukprop_movingav = rollapply(sector_uk_proportion,smoothband,mean,align='right',fill=NA),
+    ukprop_minustargetITL_movingav = rollapply(sector_uk_proportion_minustargetITL,smoothband,mean,align='right',fill=NA)
+  ) %>% #remove NA years smoothing created
+  filter(!is.na(regionalprop_movingav))
+
+twoy <- anim_lq %>% filter(year %in% c(min(year),max(year)))
+
+twoy$INDUSTRY_NAME_REDUCED <- gsub(x = twoy$`SIC07 description`, pattern = 'of |and |acture|acturing|activities|equipment|products', replacement = '')
+
+twoy_lags <- twoy %>% 
+  arrange(`SIC07 description`,year) %>% 
+  mutate(
+    lag_sector_regional_proportion = sector_regional_proportion - lag(sector_regional_proportion),
+    lag_sector_uk_proportion_minustargetITL = sector_uk_proportion_minustargetITL - lag(sector_uk_proportion_minustargetITL)
+  ) %>% 
+  filter(year == max(year)) %>% 
+  mutate(
+    compass = case_when(
+      lag_sector_regional_proportion < 0 & lag_sector_uk_proportion_minustargetITL < 0 ~ 'SW',
+      lag_sector_regional_proportion < 0 & lag_sector_uk_proportion_minustargetITL > 0 ~ 'NW',
+      lag_sector_regional_proportion > 0 & lag_sector_uk_proportion_minustargetITL > 0 ~ 'NE',
+      lag_sector_regional_proportion > 0 & lag_sector_uk_proportion_minustargetITL < 0 ~ 'SE'
+    )
+  )
+
+twoy <- twoy %>%
+  left_join(
+    twoy_lags %>% 
+      select(`SIC07 description`,compass),
+    by = 'SIC07 description'
+  )
+
+#Water and air transport snuck in there somehow and added 2020 in
+twoy <- twoy %>% 
+  filter(!grepl('Water and air', `SIC07 description`))
+  
+
+filtercompass='NE'
+filtercompass='NW'
+filtercompass='SE'
+filtercompass='SW'
+
+p <- ggplot(
+  twoy %>% filter(compass == filtercompass),
+  aes(x = sector_regional_proportion * 100, y = sector_uk_proportion_minustargetITL * 100)) +
+  geom_point(size = 5, alpha = 0.75, aes(colour = factor(year), group = INDUSTRY_NAME_REDUCED)) +
+  geom_line(size = 1, aes(colour = factor(year), group = INDUSTRY_NAME_REDUCED)) +
+  xlab('South Yorkshire GVA proportion') +
+  ylab('UK GVA proportion (MINUS South Yorkshire)')  +
+  geom_abline(slope = 1, size = 1, colour='blue', alpha = 0.5) +
+  coord_cartesian(xlim = c(0.1,11), ylim = c(0.1,11)) + # good for log scale
+  scale_y_log10() +
+  scale_x_log10() +
+  guides(colour=guide_legend(title=" "))
+
+p <- p + geom_text_repel(
+  data = twoy %>% filter(year==max(twoy$year), compass == filtercompass),
+  aes(x = sector_regional_proportion * 100, y = sector_uk_proportion_minustargetITL * 100,label = INDUSTRY_NAME_REDUCED, colour = compass),
+  alpha=1,
+  # colour = 'black',
+  nudge_x = .05,
+  box.padding = 1,
+  nudge_y = 0.05,
+  segment.curvature = -0.1,
+  segment.ncp = 0.3,
+  segment.angle = 20
+) +
+  # scale_color_brewer(palette = 'Dark2', direction = -1) 
+  scale_color_manual(values = c('red','black','#7fc97f','#beaed4','#fdc086','#1f78b4'))
+
+
+p
+
+ggsave(plot = p, filename = paste0('local/localimages/SY_LQ2D_',filtercompass,'.png'), height = 9, width = 9)
+
+
+
+
+
+
+
+
 
 
 
@@ -1883,7 +2309,8 @@ for(i in unique(gva_jobs5$INDUSTRY_NAME)){
          aes(y = GEOGRAPHY_NAME, colour = flaggedplace)) +
     geom_errorbar(aes(y = GEOGRAPHY_NAME, xmin = minn_ft, xmax = maxx_ft)) +
     facet_wrap(~INDUSTRY_NAME) +
-    guides(colour=F) 
+    guides(colour=F) +
+    ylab("")
   
   if(length(y %>% filter(GEOGRAPHY_NAME == place) %>% select(minn_ft) %>% pull) !=0)
   {
@@ -1951,10 +2378,15 @@ p
 #That's being horrible. Let's cowplot that instead
 #Get three separate ones
 sectors <- unique(xg$INDUSTRY_NAME)[grepl('basic metals|fabricated metal|machinery and equipment', unique(xg$INDUSTRY_NAME))]
+sectors <- unique(xg$INDUSTRY_NAME)[grepl('basic metals|fabricated metal|Manufacture of machinery and equipment|Manufacture of food products', unique(xg$INDUSTRY_NAME))]
 sectors <- unique(xg$INDUSTRY_NAME)[grepl('research and development|food products|non-metallic', unique(xg$INDUSTRY_NAME))]
+sectors <- unique(xg$INDUSTRY_NAME)[grepl('construction of buildings|education', unique(xg$INDUSTRY_NAME), ignore.case = T)]
+sectors <- unique(xg$INDUSTRY_NAME)[grepl('education|human health|public admin|wholesale trade of motor|warehousing', unique(xg$INDUSTRY_NAME), ignore.case = T)]
+sectors <- unique(xg$INDUSTRY_NAME)[grepl('education|human health|public admin|legal and accounting', unique(xg$INDUSTRY_NAME), ignore.case = T)]
+sectors <- unique(xg$INDUSTRY_NAME)[grepl('wholesale trade|Residential care|sports|postal', unique(xg$INDUSTRY_NAME), ignore.case = T)]
 
 
-sectors <- unique(xg$INDUSTRY_NAME)
+#sectors <- unique(xg$INDUSTRY_NAME)
 
 
 #Get list of plots
@@ -2002,10 +2434,11 @@ plotz <- lapply(sectors, function(x) spanplot(x))
 
 cp <- plot_grid(plotlist = plotz, nrow = 1)
 
-save_plot(plot = cp, filename = paste0('local/localimages/GVA_perc_minmax/',paste(sectors, collapse = '_'),'.png'), base_height = 6, base_width = 18)
+save_plot(plot = cp, filename = paste0('local/localimages/GVA_perc_minmax/',paste(sectors, collapse = '_'),'.png'), base_height = 4, base_width = 15)
+# save_plot(plot = cp, filename = paste0('local/localimages/GVA_perc_minmax/',paste(sectors, collapse = '_'),'.png'), base_height = 6, base_width = 18)
 
 #For large plot
-save_plot(plot = cp, filename = paste0('local/localimages/GVA_perc_minmax/',paste(sectors, collapse = '_'),'.png'), base_height = 25, base_width = 50, limitsize=F)
+# save_plot(plot = cp, filename = paste0('local/localimages/GVA_perc_minmax/',paste(sectors, collapse = '_'),'.png'), base_height = 25, base_width = 50, limitsize=F)
 
 
 

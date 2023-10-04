@@ -361,6 +361,35 @@ itl2.cp <- itl2.cp %>%
   ) %>% 
   mutate(LQ_log = log(LQ)) 
 
+
+
+#SIDEQUEST, MAINLY CONTINUED BELOW IN ITS OWN SECTION
+#REPEAT GETTING THE ABOVE PROPORTIONS BUT WITH IMPUTED RENT REMOVED
+itl2.cp.no.ir <- itl2.cp %>%
+  filter(`SIC07 description`!="Owner-occupiers' imputed rental") %>% 
+  group_by(`ITL region name`, year) %>% 
+  mutate(
+    region_totalsize = sum(value, na.rm = T),#a. Current price per region per year, for regional denominator
+    sector_regional_proportion = value / region_totalsize#b. regional sector proportion (noting that a single row in this group is a single sector)
+  ) %>% 
+  group_by(year, `SIC07 code`) %>% 
+  mutate(
+    uk_sectorsize = sum(value, na.rm = T),#c. Summed current prices for EACH SECTOR, UK-wide
+  ) %>% 
+  group_by(year) %>% 
+  mutate(
+    uk_totalsize = sum(value, na.rm = T),#d. Summed current prices for WHOLE UK per year, for UK denominator
+    sector_uk_proportion = uk_sectorsize / uk_totalsize#e. UK-level sector proportion
+  ) %>% 
+  mutate(
+    LQ = sector_regional_proportion / sector_uk_proportion#f. Location quotient!
+  ) %>% 
+  mutate(LQ_log = log(LQ)) 
+
+
+
+
+
   
 #Those regional values by themselves are going to be interesting:
 #How has a region's OWN economy structure changed over time?
@@ -649,6 +678,130 @@ plot_ly(data = sy %>% filter(year==2021), x = ~LQ, y = ~sector_regional_proporti
 
 
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#SIDEQUEST: GVA WITHOUT IMPUTED RENT----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#What I'd like: GVA proportions with and without imputed rent
+#Both need calculating separately, probably 
+
+#Here's one I made earlier - this has imputed rent removed
+glimpse(itl2.cp.no.ir)
+
+
+#Can we see the two of them side by side? I.e. just for one year
+#what is each ITL2 proportion of UK total GVA?
+#Also just need a single unique region total size and UK total size, to get proportion
+no.ir2021 <- itl2.cp.no.ir %>% filter(year==2021) %>% 
+  distinct(`ITL region name`,region_totalsize,uk_totalsize) %>% 
+  mutate(percent_of_uk_gva = (region_totalsize/uk_totalsize)*100)
+
+#Repeat for with imputed rent
+with.ir2021 <- itl2.cp %>% filter(year==2021) %>% 
+  distinct(`ITL region name`,region_totalsize,uk_totalsize) %>% 
+  mutate(percent_of_uk_gva = (region_totalsize/uk_totalsize)*100)
+
+#Check there weren't any duplicate totalsize values... tick
+length(unique(ir2021$`ITL region name`)) == length(unique(itl2.cp$`ITL region name`))
+
+#Check orig total size uk was correct... tick
+no.ir2021 %>% 
+# with.ir2021 %>% 
+  group_by(year) %>% 
+  summarise(sum(percent_of_uk_gva))
+
+
+
+#What's the proportion diff with / without IR?
+#12.66% of the economy. Uh huh.
+(no.ir2021$uk_totalsize[1]/with.ir2021$uk_totalsize[1])*100
+100-((no.ir2021$uk_totalsize[1]/with.ir2021$uk_totalsize[1])*100)
+
+
+
+#Direct comparison of sizes will be tricky. What will be easier: 
+#For each region, what proportion of its GVA is imputed rent?
+#Hmm, we already had that figure in the original calcs didn't we, actually?
+
+#So we can just look at the proportion that imputed rent is in different ITL2s?
+ggplot(
+  itl2.cp %>% filter(`SIC07 description` == "Owner-occupiers' imputed rental"),
+  aes(x = year, y = sector_regional_proportion*100, colour = `ITL region name`)
+  ) +
+  geom_line() +
+  geom_point()
+
+
+
+plot_ly(
+  data = itl2.cp %>% ungroup() %>% filter(`SIC07 description` == "Owner-occupiers' imputed rental"), 
+        x = ~year, y = ~sector_regional_proportion*100, color = ~`ITL region name`,
+        text = ~paste("ITL:", `ITL region name`),  # Add this line for hover text
+        hoverinfo = 'text+y+x',
+        type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
+  layout(title = "Yearly values by SIC", 
+         xaxis = list(title = "Year"), 
+         # yaxis = list(title = "Value", type='log'),
+         yaxis = list(title = "Value"),
+         showlegend = TRUE)
+
+#That's fascinating plot for several reasons, but...
+
+
+#Better question:
+#What proportion of the whole UK economy does each ITL make up
+#With and without imputed rent?
+#That can give us a sense of the difference without getting on to denominators like FT jobs or per capita etc
+#Just raw difference
+
+#Calculated above. Put next to each other to see diff
+both <- no.ir2021 %>% 
+  select(-region_totalsize,-uk_totalsize) %>% 
+  rename(percent_of_uk_gva_NO_IR = percent_of_uk_gva) %>% 
+  left_join(
+    with.ir2021 %>% rename(percent_of_uk_gva_WITH_IR = percent_of_uk_gva) %>% select(-region_totalsize,-uk_totalsize),
+    by = c('year','ITL region name')
+  ) %>% 
+  relocate(percent_of_uk_gva_WITH_IR, .before = percent_of_uk_gva_NO_IR) %>% 
+  mutate(percentdiff = (percent_of_uk_gva_NO_IR/percent_of_uk_gva_WITH_IR)*100)
+
+
+ggplot(
+  both %>% mutate(`ITL region name` = factor(`ITL region name`)), 
+  aes(x = fct_reorder(`ITL region name`,percentdiff), y = percentdiff)
+  ) +
+  geom_bar(stat='identity') +
+  coord_flip(ylim = c(90,107)) +
+  # coord_cartesian(xlim = c(80,110)) +
+  geom_hline(yintercept = 100)
+
+
+#Let's just stare at Inner London West.
+#I know underlying reason: finance there massive, so imputed rent relatively less strong.
+#But...
+
+
+
+#That totally needs a map making!
+itl2.geo <- st_read('data/geographies/International_Territorial_Level_2_January_2021_UK_BFE_V2_2022_-4735199360818908762/ITL2_JAN_2021_UK_BFE_V2.shp') %>% 
+  st_simplify(preserveTopology = T, dTolerance = 100)
+
+chk <- itl2.geo %>% 
+  right_join(
+    both,
+    by = c('ITL221NM'='ITL region name')
+  )
+
+
+#Just interpreted that
+#If a place is 90%, its GVA is a 10% smaller proportion of the whole UK economy (for that year) than if imputed rent included.
+tm_shape(chk) +
+  tm_polygons('percentdiff', n = 11)
+  # tm_polygons('percentdiff', n = 11, palette="-RdYlGn")
+
+
+
+#Next Q. How have those percentages changed over time? 
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -687,7 +840,7 @@ diffchange2 <- ll %>%
 
 #Look at some for sanity check
 place = 'South Yorkshire'
-place = 'Greater Manchester'
+# place = 'Greater Manchester'
 
 #climbers
 industries = diffchange2 %>% filter(`ITL region name` == place, group %in% c(7)) %>% select(`SIC07 description`) %>% pull()

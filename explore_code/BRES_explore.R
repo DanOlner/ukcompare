@@ -2166,6 +2166,7 @@ maptoplot <- chk %>% filter(grepl('81100 : Combined facilities support activitie
 maptoplot <- chk %>% filter(grepl('62090 : Other information technology and computer service activities',INDUSTRY_NAME))
 
 tm_shape(maptoplot) +
+  # tm_polygons('LQ_log', n = 11, palette="-RdYlGn")
   tm_polygons('LQ_log', n = 11)
 
 

@@ -801,7 +801,7 @@ tm_shape(chk) +
 
 
 
-#Next Q. How have those percentages changed over time? 
+#Next Q. How have those percentages changed over time?
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1402,7 +1402,29 @@ anim_lq <- itl2.cp.w.sector_uk_proportion_minustargetITL %>% filter(`ITL region 
   ) %>% #remove NA years smoothing created
   filter(!is.na(regionalprop_movingav))
 
-twoy <- anim_lq %>% filter(year %in% c(min(year),max(year)))
+# twoy <- anim_lq %>% filter(year %in% c(min(year),max(year)))
+#Different startyears
+startyear = 1998
+# startyear = 2010#middle
+endyear = 2021
+
+startyear = 1998
+endyear = 2009
+
+startyear = 2015
+endyear = 2021
+
+startyear = 2008
+endyear = 2021
+
+startyear = 1998
+endyear = 2007
+
+startyear = 2016
+endyear = 2021
+
+
+twoy <- anim_lq %>% filter(year %in% c(startyear, endyear))
 
 twoy$INDUSTRY_NAME_REDUCED <- gsub(x = twoy$`SIC07 description`, pattern = 'of |and |acture|acturing|activities|equipment|products', replacement = '')
 
@@ -1412,7 +1434,7 @@ twoy_lags <- twoy %>%
     lag_sector_regional_proportion = sector_regional_proportion - lag(sector_regional_proportion),
     lag_sector_uk_proportion_minustargetITL = sector_uk_proportion_minustargetITL - lag(sector_uk_proportion_minustargetITL)
   ) %>% 
-  filter(year == max(year)) %>% 
+  filter(year == endyear) %>% #using final year to mark when going in particular compass direction
   mutate(
     compass = case_when(
       lag_sector_regional_proportion < 0 & lag_sector_uk_proportion_minustargetITL < 0 ~ 'SW',
@@ -1439,11 +1461,82 @@ filtercompass='NW'
 filtercompass='SE'
 filtercompass='SW'
 
-p <- ggplot(
-  twoy %>% filter(compass == filtercompass),
-  aes(x = sector_regional_proportion * 100, y = sector_uk_proportion_minustargetITL * 100)) +
-  geom_point(size = 5, alpha = 0.75, aes(colour = factor(year), group = INDUSTRY_NAME_REDUCED)) +
-  geom_line(size = 1, aes(colour = factor(year), group = INDUSTRY_NAME_REDUCED)) +
+#SY growth
+filtercompass=c('SE','NE')
+#SY shrinkage
+filtercompass=c('SW','NW')
+
+
+
+# p <- ggplot(
+#   twoy %>% filter(compass == filtercompass),
+#   aes(x = sector_regional_proportion * 100, y = sector_uk_proportion_minustargetITL * 100)) +
+#   geom_point(size = 5, alpha = 0.75, aes(colour = factor(year), group = INDUSTRY_NAME_REDUCED)) +
+#   # geom_segment(size = 1, aes(colour = factor(year), group = INDUSTRY_NAME_REDUCED)) +
+#   geom_line(size = 1, aes(colour = factor(year), group = INDUSTRY_NAME_REDUCED)) +
+#   xlab('South Yorkshire GVA proportion') +
+#   ylab('UK GVA proportion (MINUS South Yorkshire)')  +
+#   geom_abline(slope = 1, size = 1, colour='blue', alpha = 0.5) +
+#   coord_cartesian(xlim = c(0.1,11), ylim = c(0.1,11)) + # good for log scale
+#   scale_y_log10() +
+#   scale_x_log10() +
+#   guides(colour=guide_legend(title=" "))
+# 
+# 
+# #Try using geom_segment to get arrow. Needs the start and end in the same row to be able to plot
+# #Need start and end of line available on the same row
+# twoy.wide <- twoy %>% filter(compass == filtercompass) %>% 
+#   mutate(year = ifelse(year == min(year), 'startyear', 'endyear')) %>% 
+#   select(year,sector_uk_proportion_minustargetITL,sector_regional_proportion) %>% 
+#   pivot_wider(names_from = year, values_from = c(sector_uk_proportion_minustargetITL,sector_regional_proportion))
+# 
+# p <- p +
+#   geom_segment(data = twoy.wide, aes(x = sector_regional_proportion_startyear * 100, y = sector_uk_proportion_minustargetITL_startyear  * 100, 
+#                                      xend = sector_regional_proportion_endyear * 100, yend = sector_uk_proportion_minustargetITL_endyear * 100),
+#                arrow = arrow(length = unit(0.5, "cm"))
+#                )
+# 
+# 
+# p <- p + geom_text_repel(
+#   data = twoy %>% filter(year==max(twoy$year), compass == filtercompass),
+#   aes(x = sector_regional_proportion * 100, y = sector_uk_proportion_minustargetITL * 100,label = INDUSTRY_NAME_REDUCED, colour = compass),
+#   alpha=1,
+#   # colour = 'black',
+#   nudge_x = .05,
+#   box.padding = 1,
+#   nudge_y = 0.05,
+#   segment.curvature = -0.1,
+#   segment.ncp = 0.3,
+#   segment.angle = 20
+# ) +
+#   # scale_color_brewer(palette = 'Dark2', direction = -1) 
+#   scale_color_manual(values = c('red','black','#7fc97f','#beaed4','#fdc086','#1f78b4'))
+# 
+# 
+# p
+
+
+#Swapping order so arrow below all else, so line doesn't overwrite
+
+#Try using geom_segment to get arrow. Needs the start and end in the same row to be able to plot
+#Need start and end of line available on the same row
+twoy.wide <- twoy %>% filter(compass %in% filtercompass) %>% 
+  mutate(year = ifelse(year == min(year), 'startyear', 'endyear')) %>% 
+  select(year,sector_uk_proportion_minustargetITL,sector_regional_proportion) %>% 
+  pivot_wider(names_from = year, values_from = c(sector_uk_proportion_minustargetITL,sector_regional_proportion))
+
+p <- ggplot() +
+  geom_segment(data = twoy.wide, aes(x = sector_regional_proportion_startyear * 100, y = sector_uk_proportion_minustargetITL_startyear  * 100, 
+                                     xend = sector_regional_proportion_endyear * 100, yend = sector_uk_proportion_minustargetITL_endyear * 100),
+               arrow = arrow(length = unit(0.5, "cm")),
+               size = 1
+  )
+
+p <- p + 
+  geom_point(data = twoy %>% filter(compass%in%filtercompass), size = 5, alpha = 0.75, 
+             aes(x = sector_regional_proportion * 100, y = sector_uk_proportion_minustargetITL * 100,colour = factor(year), group = INDUSTRY_NAME_REDUCED)) +
+  # geom_segment(size = 1, aes(colour = factor(year), group = INDUSTRY_NAME_REDUCED)) +
+  geom_line(data = twoy %>% filter(compass == filtercompass), size = 1, aes(x = sector_regional_proportion * 100, y = sector_uk_proportion_minustargetITL * 100,colour = factor(year), group = INDUSTRY_NAME_REDUCED)) +
   xlab('South Yorkshire GVA proportion') +
   ylab('UK GVA proportion (MINUS South Yorkshire)')  +
   geom_abline(slope = 1, size = 1, colour='blue', alpha = 0.5) +
@@ -1452,8 +1545,11 @@ p <- ggplot(
   scale_x_log10() +
   guides(colour=guide_legend(title=" "))
 
+
+
+
 p <- p + geom_text_repel(
-  data = twoy %>% filter(year==max(twoy$year), compass == filtercompass),
+  data = twoy %>% filter(year==max(twoy$year), compass%in%filtercompass),
   aes(x = sector_regional_proportion * 100, y = sector_uk_proportion_minustargetITL * 100,label = INDUSTRY_NAME_REDUCED, colour = compass),
   alpha=1,
   # colour = 'black',
@@ -1462,7 +1558,8 @@ p <- p + geom_text_repel(
   nudge_y = 0.05,
   segment.curvature = -0.1,
   segment.ncp = 0.3,
-  segment.angle = 20
+  segment.angle = 20,
+  max.overlaps = 20
 ) +
   # scale_color_brewer(palette = 'Dark2', direction = -1) 
   scale_color_manual(values = c('red','black','#7fc97f','#beaed4','#fdc086','#1f78b4'))
@@ -1470,7 +1567,196 @@ p <- p + geom_text_repel(
 
 p
 
-ggsave(plot = p, filename = paste0('local/localimages/SY_LQ2D_',filtercompass,'.png'), height = 9, width = 9)
+filtercompasscombined <- paste0(filtercompass, collapse = '_')
+
+ggsave(plot = p, filename = paste0('local/localimages/GVA_2Dplots/SY_LQ2D_',startyear,'_to_',endyear,'_',filtercompasscombined,'.png'), height = 9, width = 9)
+
+
+#get full sector name list
+twoy %>% filter(compass%in%filtercompass) %>% select(`SIC07 description`) %>% pull %>% unique
+
+#Or can I look by hover at ones not labelled?
+ggplotly(p, tooltip = c('INDUSTRY_NAME_REDUCED'))
+
+
+#want to pick out total sectors that are growing in SY 2016-2021 and already a strength here
+#So, any that are LQ > 1 and growing
+chk <- twoy %>% filter(
+  compass%in%filtercompass,
+  sector_regional_proportion > sector_uk_proportion_minustargetITL,#LQ > 1 
+  year == max(year)
+  )
+
+#How much of yearly GVA for final year do those make up?
+sum(chk$value)
+unique(chk$region_totalsize)
+(sum(chk$value)/unique(chk$region_totalsize))*100
+
+#What's the proportion if we exclude health?
+chk2 <- twoy %>% filter(
+  compass%in%filtercompass,
+  sector_regional_proportion > sector_uk_proportion_minustargetITL,#LQ > 1 
+  year == max(year),
+  `SIC07 description`!='Human health activities'
+  )
+
+#How much of yearly GVA for final year do those make up?
+sum(chk2$value)
+unique(chk2$region_totalsize)
+(sum(chk2$value)/unique(chk2$region_totalsize))*100
+
+#SAVE SY GROWTH SECTORS 2016-2021 THAT ARE ALSO LQ>1
+saveRDS(chk,'SY_2016_21_growth_plusLQmorethan1.rds')
+
+
+
+
+#REPEAT FOR ALL, NOT JUST THOSE CONCENTRATED MORE IN SY
+chk <- twoy %>% filter(
+  compass%in%filtercompass,
+  # sector_regional_proportion > sector_uk_proportion_minustargetITL,#LQ > 1 
+  year == max(year)
+)
+
+#How much of yearly GVA for final year do those make up?
+sum(chk$value)
+unique(chk$region_totalsize)
+(sum(chk$value)/unique(chk$region_totalsize))*100
+
+#What's the proportion if we exclude health?
+chk2 <- twoy %>% filter(
+  compass%in%filtercompass,
+  # sector_regional_proportion > sector_uk_proportion_minustargetITL,#LQ > 1 
+  year == max(year),
+  `SIC07 description`!='Human health activities'
+)
+
+#How much of yearly GVA for final year do those make up?
+sum(chk2$value)
+unique(chk2$region_totalsize)
+(sum(chk2$value)/unique(chk2$region_totalsize))*100
+
+
+
+
+#ANIMATED VERSION OF 2D LQ PLOT (BROKEN DOWN BY SOME CATEGORY...?)----
+
+#Let's try doing a moving average window of x years
+#Just going to test with ALL sectors regardless of initial direction (probably a mess)
+
+LQ_foranim <- function(startyear,window,subfoldername,sectorstoshow){
+  
+  twoy <- anim_lq %>% filter(year %in% c(startyear,startyear+window))
+  
+  twoy$INDUSTRY_NAME_REDUCED <- gsub(x = twoy$`SIC07 description`, pattern = 'of |and |acture|acturing|activities|equipment|products', replacement = '')
+  
+  twoy_lags <- twoy %>%
+    arrange(`SIC07 description`,year) %>%
+    mutate(
+      lag_sector_regional_proportion = sector_regional_proportion - lag(sector_regional_proportion),
+      lag_sector_uk_proportion_minustargetITL = sector_uk_proportion_minustargetITL - lag(sector_uk_proportion_minustargetITL)
+    ) %>%
+    filter(year == max(year)) %>%
+    mutate(
+      compass = case_when(
+        lag_sector_regional_proportion < 0 & lag_sector_uk_proportion_minustargetITL < 0 ~ 'SW',
+        lag_sector_regional_proportion < 0 & lag_sector_uk_proportion_minustargetITL > 0 ~ 'NW',
+        lag_sector_regional_proportion > 0 & lag_sector_uk_proportion_minustargetITL > 0 ~ 'NE',
+        lag_sector_regional_proportion > 0 & lag_sector_uk_proportion_minustargetITL < 0 ~ 'SE'
+      )
+    )
+
+  twoy <- twoy %>%
+    left_join(
+      twoy_lags %>%
+        select(`SIC07 description`,compass),
+      by = 'SIC07 description'
+    )
+  # 
+  #Water and air transport snuck in there somehow and added 2020 in
+  twoy <- twoy %>% 
+    filter(!grepl('Water and air', `SIC07 description`))
+  
+  # filtercompass='NE'
+  # filtercompass='NW'
+  # filtercompass='SE'
+  # filtercompass='SW'
+  
+  #Select sectors manually
+  twoy <- twoy %>% filter(
+    `SIC07 description` %in% sectorstoshow
+  )
+  
+  #Try using geom_segment to get arrow. Needs the start and end in the same row to be able to plot
+  #Need start and end of line available on the same row
+  twoy.wide <- twoy %>% filter(compass%in%filtercompass) %>% 
+    mutate(year = ifelse(year == min(year), 'startyear', 'endyear')) %>% 
+    select(year,sector_uk_proportion_minustargetITL,sector_regional_proportion) %>% 
+    pivot_wider(names_from = year, values_from = c(sector_uk_proportion_minustargetITL,sector_regional_proportion))
+  
+  p <- ggplot() +
+    geom_segment(data = twoy.wide, aes(x = sector_regional_proportion_startyear * 100, y = sector_uk_proportion_minustargetITL_startyear  * 100, 
+                                       xend = sector_regional_proportion_endyear * 100, yend = sector_uk_proportion_minustargetITL_endyear * 100),
+                 arrow = arrow(length = unit(0.25, "cm")),
+                 size = 1,
+                 lineend = 'round', linejoin = 'round'
+    )
+  
+  p <- p + 
+    geom_point(data = twoy %>% filter(compass %in% filtercompass), size = 5, alpha = 0.75, 
+               aes(x = sector_regional_proportion * 100, y = sector_uk_proportion_minustargetITL * 100,colour = factor(year), group = INDUSTRY_NAME_REDUCED)) +
+    geom_line(data = twoy %>% filter(compass%in%filtercompass), size = 1, aes(x = sector_regional_proportion * 100, y = sector_uk_proportion_minustargetITL * 100,group = INDUSTRY_NAME_REDUCED), colour = 'red') +
+    # geom_line(data = twoy %>% filter(compass%in%filtercompass), size = 1, aes(x = sector_regional_proportion * 100, y = sector_uk_proportion_minustargetITL * 100,colour = factor(year), group = INDUSTRY_NAME_REDUCED)) +
+    xlab('South Yorkshire GVA proportion') +
+    ylab('UK GVA proportion (MINUS South Yorkshire)')  +
+    geom_abline(slope = 1, size = 1, colour='blue', alpha = 0.5) +
+    coord_cartesian(xlim = c(0.1,11), ylim = c(0.1,11)) + # good for log scale
+    scale_y_log10() +
+    scale_x_log10() +
+    guides(colour=guide_legend(title=" "))
+  
+  p <- p + geom_text_repel(
+    data = twoy %>% filter(year==max(twoy$year), compass%in%filtercompass),
+    aes(x = sector_regional_proportion * 100, y = sector_uk_proportion_minustargetITL * 100,label = INDUSTRY_NAME_REDUCED, colour = compass),
+    alpha=1,
+    # colour = 'black',
+    nudge_x = .05,
+    box.padding = 1,
+    nudge_y = 0.05,
+    segment.curvature = -0.1,
+    segment.ncp = 0.3,
+    segment.angle = 20
+  ) +
+    # scale_color_brewer(palette = 'Dark2', direction = -1) 
+    scale_color_manual(values = c('red','black','#7fc97f','#beaed4','#fdc086','#1f78b4'))
+  
+  
+  p
+  
+
+  
+  ggsave(plot = p, filename = paste0('local/localimages/GVA_2DLQPLOTSOVERTIME/',subfoldername,'/',startyear,'_to_',startyear+window,'.png'), height = 9, width = 9)
+  
+}
+
+
+filtercompass= c('NE','NW','SE','SW')
+lapply(1998:2016, function(x) LQ_foranim(startyear = x, window = 5, subfoldername = 'allsectors_fiveyearwindow'))
+
+
+filtercompass= c('NE','NW','SE','SW')
+lapply(1998:2016, function(x) 
+  LQ_foranim(startyear = x, window = 5, subfoldername = 'manuf_fiveyearwindow',
+             sectorstoshow = unique(itl2.cp$`SIC07 description`[grepl('manuf',itl2.cp$`SIC07 description`,ignore.case = T)]))
+  )
+
+filtercompass= c('NE','NW','SE','SW')
+lapply(1998:2016, function(x) 
+  LQ_foranim(startyear = x, window = 5, subfoldername = 'nonmanuf_fiveyearwindow',
+             sectorstoshow = unique(itl2.cp$`SIC07 description`[!grepl('manuf',itl2.cp$`SIC07 description`,ignore.case = T)]))
+  )
+
+
 
 
 
@@ -2539,11 +2825,14 @@ sectors <- unique(xg$INDUSTRY_NAME)[grepl('education|human health|public admin|l
 sectors <- unique(xg$INDUSTRY_NAME)[grepl('wholesale trade|Residential care|sports|postal', unique(xg$INDUSTRY_NAME), ignore.case = T)]
 
 
-#sectors <- unique(xg$INDUSTRY_NAME)
+#Get sectors for 2016-21 SY growth plus LQ > 1
+chk <- readRDS('SY_2016_21_growth_plusLQmorethan1.rds')
+
+sectors <- unique(chk$`SIC07 description`)
 
 
 #Get list of plots
-spanplot <- function(sector){
+spanplot <- function(sector, includeplacesnames = T){
   
   y <- xg %>% filter(INDUSTRY_NAME %in% sector, JOBCOUNT_FT >= 250) %>% 
     # y <- x %>% filter(INDUSTRY_NAME %in% sectors, JOBCOUNT_FT >= 500) %>% 
@@ -2565,8 +2854,16 @@ spanplot <- function(sector){
     guides(colour='none') +
     scale_x_continuous(limits = c(0,0.0000125)) +
     coord_flip() +
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
     ylab('')
+  
+  if(!includeplacesnames){
+    p <- p +
+      theme(axis.title.x=element_blank(),
+            axis.text.x=element_blank(),
+            axis.ticks.x=element_blank())
+  } else {
+    p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) 
+  }
   
   
   if(length(y %>% filter(GEOGRAPHY_NAME == place) %>% select(minn_ft) %>% pull) !=0){
@@ -2583,15 +2880,18 @@ spanplot <- function(sector){
   
 }
 
-plotz <- lapply(sectors, function(x) spanplot(x))
+plotz <- lapply(sectors, function(x) spanplot(x, includeplacesnames = F))
 
-cp <- plot_grid(plotlist = plotz, nrow = 1)
+cp <- plot_grid(plotlist = plotz, nrow = 4)
 
 save_plot(plot = cp, filename = paste0('local/localimages/GVA_perc_minmax/',paste(sectors, collapse = '_'),'.png'), base_height = 4, base_width = 15)
 # save_plot(plot = cp, filename = paste0('local/localimages/GVA_perc_minmax/',paste(sectors, collapse = '_'),'.png'), base_height = 6, base_width = 18)
 
 #For large plot
-# save_plot(plot = cp, filename = paste0('local/localimages/GVA_perc_minmax/',paste(sectors, collapse = '_'),'.png'), base_height = 25, base_width = 50, limitsize=F)
+save_plot(plot = cp, filename = paste0('local/localimages/GVA_perc_minmax/',paste(sectors, collapse = '_'),'.png'), base_height = 25, base_width = 50, limitsize=F)
+
+#ot that large!
+save_plot(plot = cp, filename = paste0('local/localimages/GVA_perc_minmax/',paste(sectors, collapse = '_'),'.png'), base_height = 15, base_width = 20, limitsize=F)
 
 
 

@@ -1796,15 +1796,24 @@ ggsave(plot = p, filename = paste0('local/localimages/fivedigit_nonmanuf_collect
 #OTHER 5 DIGIT STUFF----
 #~~~~~~~~~~~~~~~~~~~~~~~
 
-
+x <- readRDS('local/x_2021.rds')
 
 sectors5other <- x %>% filter(
-  GEOGRAPHY_NAME=="South Yorkshire",LQ > 1, minn > 1, difftotal < 0) %>% 
+  GEOGRAPHY_NAME=="South Yorkshire",LQ > 1, minn > 1, difftotal > 0) %>% 
   # GEOGRAPHY_NAME=="South Yorkshire",LQ > 1, minn > 1, difftotal > 0) %>% 
   # GEOGRAPHY_NAME=="South Yorkshire",LQ > 1, minn > 1) %>% 
   ungroup() %>% 
   select(INDUSTRY_NAME) %>% 
   pull
+
+
+#Bespoke sector selection (which I did somewhere else but can't currently find)
+#For now, just pulling out creative + museum from the two digit
+creativez <- unique(x$INDUSTRY_NAME[grepl(x = x$SIC_2DIGIT_NAME, pattern = 'creative|museum', ignore.case = T)])
+
+#OK, that'll do for now
+
+
 
 length(sectors5other)
 length(orig5sectors)
@@ -1815,8 +1824,13 @@ length(sectors5other[!sectors5other %in% orig5sectors])
 
 
 #List of the 2 digits I want to take out of that that are less connected also added in
+# plotdata <- x %>% filter(
+#   INDUSTRY_NAME %in% sectors5other[!sectors5other %in% orig5sectors]
+# )
+
+#HAAACK
 plotdata <- x %>% filter(
-  INDUSTRY_NAME %in% sectors5other[!sectors5other %in% orig5sectors]
+  INDUSTRY_NAME %in% creativez
 )
 
 #What the tot workforce in that?

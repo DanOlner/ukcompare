@@ -8,6 +8,7 @@ library(plotly)
 library(magick)
 library(nomisr)
 library(pryr)
+library(cowplot)
 options(scipen = 99)
 
 
@@ -22,7 +23,12 @@ unique(atts$name.value)
 
 #Business counts: enterprises will probably have larger businesses in SY, so counts will be higher. Need to compare both.
 atts %>% filter(name.value == "UK Business Counts - local units by industry and employment size band")
+atts %>% filter(name.value == "UK Business Counts - local units by industry and employment size band")
 atts %>% filter(name.value == "UK Business Counts - enterprises by industry and employment size band")
+
+namez <- atts %>% filter(grepl("UK Business Counts", name.value))
+unique(namez$name.value)
+
 
 #local units
 #This is saying it was last updated 2019, don't think that's accurate. Website has more recent data.
@@ -268,7 +274,7 @@ lapply(years, function(x) download_all_BUSINESSCOUNT_LOCALUNITS(x))
 
 #Will need reducing a lot to be manageable. What are we after? Look at one to pick out
 x <- readRDS('local/data/BusinessCountsByNUTS2/BUSINESSCOUNT_ENTERPRISE_NUTS2_2020.rds')
-#x <- readRDS('local/data/BusinessCountsByNUTS2/BUSINESSCOUNT_LOCALUNITS_GB_2016.rds')
+x <- readRDS('local/data/BusinessCountsByNUTS2/BUSINESSCOUNT_LOCALUNITS_NUTS2_2022.rds')
 
 unique(x$EMPLOYMENT_SIZEBAND_NAME)
 #There are overlapping categories. We may want to keep these at some later time, but let's look at the highest resolution first
@@ -313,9 +319,9 @@ LOADBUSINESSCOUNTS_and_reduce <- function(filename){
   ),
   LEGAL_STATUS_NAME == 'Total',
   INDUSTRY_NAME != 'Total',
-  INDUSTRY_TYPE == 'SIC 2007 subclass (5 digit)'
+  # INDUSTRY_TYPE == 'SIC 2007 subclass (5 digit)'#Actually, think I want the option to choose this later plz
   ) %>% 
-    select(DATE,GEOGRAPHY_NAME,GEOGRAPHY_CODE,INDUSTRY_NAME,INDUSTRY_CODE,EMPLOYMENT_SIZEBAND_NAME,COUNT=OBS_VALUE)
+    select(DATE,GEOGRAPHY_NAME,GEOGRAPHY_CODE,INDUSTRY_NAME,INDUSTRY_CODE,INDUSTRY_TYPE,EMPLOYMENT_SIZEBAND_NAME,COUNT=OBS_VALUE)
   
 }
 
@@ -330,7 +336,24 @@ bc <- list.files(path = "local/data/BusinessCountsByNUTS2/", pattern = "ENTERPRI
 bc$INDUSTRY_NAME <- iconv(bc$INDUSTRY_NAME, "UTF-8", "UTF-8",sub='')
 
 #Save!
-saveRDS(bc, 'data/sectors/ITL2_BUSINESSCOUNTS_ENTERPRISE_9CATSIZEBAND_LEGALSTATUSALL_INDUSTRYTYPE5DIGIT_16to21.rds')
+# saveRDS(bc, 'data/sectors/ITL2_BUSINESSCOUNTS_ENTERPRISE_9CATSIZEBAND_LEGALSTATUSALL_INDUSTRYTYPE5DIGIT_16to21.rds')
+saveRDS(bc, 'data/sectors/ITL2_BUSINESSCOUNTS_ENTERPRISE_9CATSIZEBAND_LEGALSTATUSALL_ALLINDUSTRYTYPES_16to21.rds')
+
+
+#REPEAT FOR LOCAL UNITS
+bc <- list.files(path = "local/data/BusinessCountsByNUTS2/", pattern = "LOCALUNITS_NUTS2", full.names = T) %>% 
+  map(LOADBUSINESSCOUNTS_and_reduce) %>% 
+  bind_rows()
+
+#One single INDUSTY_NAME field has a non-UTF8 char that breaks some things
+#Check for annoying chars and fix
+#https://stackoverflow.com/a/17292126
+bc$INDUSTRY_NAME <- iconv(bc$INDUSTRY_NAME, "UTF-8", "UTF-8",sub='')
+
+#Save!
+# saveRDS(bc, 'data/sectors/ITL2_BUSINESSCOUNTS_ENTERPRISE_9CATSIZEBAND_LEGALSTATUSALL_INDUSTRYTYPE5DIGIT_16to21.rds')
+# saveRDS(bc, 'data/sectors/ITL2_BUSINESSCOUNTS_ENTERPRISE_9CATSIZEBAND_LEGALSTATUSALL_ALLINDUSTRYTYPES_16to21.rds')
+saveRDS(bc, 'data/sectors/ITL2_BUSINESSCOUNTS_LOCALUNITS_9CATSIZEBAND_LEGALSTATUSALL_ALLINDUSTRYTYPES_16to21.rds')
 
 
 
@@ -437,6 +460,9 @@ gb <- readRDS('data/sectors/GB_BUSINESSCOUNTS_ENTERPRISE_9CATSIZEBAND_LEGALSTATU
 
 #NOTE, SOME OF THESE ODDITIES DUE TO DOWNLOAD ERROR GETTING JUST 2022 NOT ALL YEARS
 
+#5 digit
+length(unique(gb$INDUSTRY_NAME))
+
 #Some oddities here immediately:
 #I know there's some nuclear fuel processing goes on. So why is that zero?
 counts <- gb %>%
@@ -515,6 +541,269 @@ gb %>%
     count = sum(COUNT)
     ) %>% 
   mutate(percent = (count/sum(count))*100)
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#ITL2: ENTERPRISE BUSINESS COUNT EXPLORE----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Local units plz
+bc <- readRDS('data/sectors/ITL2_BUSINESSCOUNTS_LOCALUNITS_9CATSIZEBAND_LEGALSTATUSALL_ALLINDUSTRYTYPES_16to21.rds')
+# bc <- readRDS('data/sectors/ITL2_BUSINESSCOUNTS_ENTERPRISE_9CATSIZEBAND_LEGALSTATUSALL_ALLINDUSTRYTYPES_16to21.rds')
+
+#Ah, no "all industries" category.
+#Can sum 2 digit, but rounding errors will compound?
+unique(bc$INDUSTRY_TYPE)
+
+#Did the lookup have smaller breakdowns?
+#No, we don't have the broad classes
+SIClookup <- read_csv('data/SIClookup.csv')
+
+#Checking we don't have that in the other data...
+# sic <- readRDS('local/data/BRES_NUTS2_2021.rds') %>% filter(MEASURES_NAME=='Value', MEASURE_NAME=='Count') %>% 
+# # sic <- readRDS('local/data/BRES_NUTS2_2021.rds') %>% filter(MEASURES_NAME=='Value', MEASURE_NAME=='Count', !INDUSTRY_TYPE %in% c('industry','SIC 2007 class (4 digit)')) %>% 
+#   select(INDUSTRY_NAME, INDUSTRY_CODE, INDUSTRY_TYPE) %>% 
+#   distinct(INDUSTRY_NAME,.keep_all = T)
+
+
+#OK, let's not complicate. Counts for these groups, SIC 2 digit breakdown, compare the four places
+#Could do letter classes but let's see what this looks like...
+#Only most recent year for now? Can think about change later if we want
+bc2 <- bc %>% filter(INDUSTRY_TYPE=='SIC 2007 division (2 digit)', DATE == max(DATE))
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#USING MANUAL 2023 DOWNLOAD FOR ITL2: ENTERPRISE BUSINESS COUNT EXPLORE----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Just checking on a manual download, after very faffy edit, to get broad industrial groups
+#API doesn't seem to get the broad industrial groups, for some reason
+lu23 <- read_csv('local/data/BusinessCountsByNUTS2/manualdownload_NUTS2_localunits_2023_readyforimport.csv') %>% 
+  pivot_longer(cols = `UKC1 Tees Valley and Durham`:`UKN0 Northern Ireland`, names_to = 'GEOGRAPHY_NAME', values_to = 'COUNT') %>% 
+  mutate(
+    GEOGRAPHY_NAME = substring(GEOGRAPHY_NAME, 6)#Drop codes
+  ) 
+  
+
+#Industries are in the correct order in that load. Get factor order from there.
+industryorder <- unique(lu23$Industry)[1:length(unique(lu23$Industry))-1]
+
+#OK, so just getting a picture for this year.
+#We want proportions of total business counts, so...
+
+#But let's start with totals for ALL industries to get overview
+lu.all <- lu23 %>% 
+  filter(Sizeband!='All') %>% #otherwise, double counting!
+  group_by(Sizeband,GEOGRAPHY_NAME) %>% 
+  summarise(COUNT = sum(COUNT)) %>% 
+  group_by(GEOGRAPHY_NAME) %>% 
+  mutate(
+    REGION_TOTAL = sum(COUNT),
+    REGION_PERCENT = (COUNT/REGION_TOTAL) * 100
+    ) %>% 
+  mutate(Sizeband = factor(Sizeband, levels = c("Micro (0 to 9)","Small (10 to 49)","Medium-sized (50 to 249)","Large (250+)")))
+
+#sanity check on region percents
+# lu.all %>% group_by(GEOGRAPHY_NAME) %>% summarise(sum(REGION_PERCENT))
+
+#Merseyside is liverpool city region, checked, matches
+#See map at https://en.wikipedia.org/wiki/Liverpool_City_Region
+
+#List of comparators
+places = unique(lu.all$GEOGRAPHY_NAME[grepl('Merseyside|South York|Manchester|West York', lu.all$GEOGRAPHY_NAME)])
+
+#OK, so with totals, basic comparison
+ggplot(
+  lu.all %>% filter(GEOGRAPHY_NAME %in% places), 
+  aes(x = Sizeband, y = REGION_PERCENT, fill = GEOGRAPHY_NAME)
+) +
+  geom_bar(stat='identity', position = 'dodge') 
+
+#Repeat and separate out to compare scale of each sizeband
+ggplot(
+  lu.all %>% filter(GEOGRAPHY_NAME %in% places), 
+  aes(x = Sizeband, y = REGION_PERCENT, fill = GEOGRAPHY_NAME)
+) +
+  geom_bar(stat='identity', position = 'dodge') +
+  facet_wrap(~Sizeband, scales = 'free')
+
+
+
+
+
+#Repeat for the broad industrial groups
+lu.ind <- lu23 %>% 
+  filter(Sizeband!='All', Industry!='Column Total') %>% #otherwise, double counting!
+  group_by(Sizeband,GEOGRAPHY_NAME,Industry) %>% 
+  summarise(COUNT = sum(COUNT)) %>% 
+  group_by(GEOGRAPHY_NAME) %>% 
+  mutate(
+    REGION_TOTAL = sum(COUNT),
+    REGION_PERCENT = (COUNT/REGION_TOTAL) * 100
+  ) %>% 
+  mutate(
+    Sizeband = factor(Sizeband, levels = c("Micro (0 to 9)","Small (10 to 49)","Medium-sized (50 to 249)","Large (250+)")),
+    Industry = factor(Industry, levels = industryorder)
+    )
+
+
+#sanity check on region percents... tick
+# lu.ind %>% group_by(GEOGRAPHY_NAME) %>% summarise(sum(REGION_PERCENT))
+
+
+ggplot(
+  lu.ind %>% filter(GEOGRAPHY_NAME %in% places), 
+  aes(x = Sizeband, y = REGION_PERCENT, fill = GEOGRAPHY_NAME)
+) +
+  geom_bar(stat='identity', position = 'dodge') +
+  facet_wrap(~Industry) +
+  coord_flip() +
+  scale_fill_brewer(palette = "Paired", direction = 1)
+
+
+#Free axis
+ggplot(
+  lu.ind %>% filter(GEOGRAPHY_NAME %in% places), 
+  aes(x = Sizeband, y = REGION_PERCENT, fill = GEOGRAPHY_NAME)
+) +
+  geom_bar(stat='identity', position = 'dodge') +
+  facet_wrap(~Industry, scales = 'free_x') +
+  coord_flip() +
+  scale_fill_brewer(palette = "Paired", direction = 1)
+
+
+
+
+
+#Stacked sizes, put places on axis?
+ggplot(
+  lu.ind %>% filter(GEOGRAPHY_NAME %in% places), 
+  aes(x = GEOGRAPHY_NAME, y = REGION_PERCENT, fill = Sizeband)
+) +
+  geom_bar(stat='identity', position = 'fill') +
+  facet_wrap(~Industry) +
+  coord_flip() +
+  scale_fill_brewer(palette = "Paired", direction = 1)
+
+
+
+#Repeat and separate out to compare scale of each sizeband
+#COUNT BETTER FOR THE LARGER ORGS COS BINS ARE SO LARGE, THIS MAKES CLEAR WHERE REAL DIFFS
+ggplot(
+  lu.ind %>% filter(GEOGRAPHY_NAME %in% places, Sizeband == 'Large (250+)'), 
+  aes(x = Sizeband, y = COUNT, fill = GEOGRAPHY_NAME)
+) +
+  geom_bar(stat='identity', position = 'dodge') +
+  facet_wrap(~Industry, scales = 'free') +
+  scale_fill_brewer(palette = "Paired", direction = 1)
+
+
+ggplot(
+  lu.ind %>% filter(GEOGRAPHY_NAME %in% places, Sizeband == 'Micro (0 to 9)'), 
+  aes(x = Sizeband, y = REGION_PERCENT, fill = GEOGRAPHY_NAME)
+) +
+  geom_bar(stat='identity', position = 'dodge') +
+  facet_wrap(~Industry, scales = 'free_x')+
+  scale_fill_brewer(palette = "Paired", direction = 1) +
+  xlab("Business size band") +
+  ylab("Percent of region's total business count") +
+  theme(legend.title=element_blank(), plot.title = element_text(face = 'bold'), axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+  ggtitle("Micro (0-9)")
+
+ggplot(
+  lu.ind %>% filter(GEOGRAPHY_NAME %in% places, Sizeband == 'Small (10 to 49)'), 
+  aes(x = Sizeband, y = REGION_PERCENT, fill = GEOGRAPHY_NAME)
+) +
+  geom_bar(stat='identity', position = 'dodge') +
+  facet_wrap(~Industry, scales = 'free')+
+  scale_fill_brewer(palette = "Paired", direction = 1)+
+  xlab("Business size band") +
+  ylab("Percent of region's total business count") +
+  theme(legend.title=element_blank(), plot.title = element_text(face = 'bold'), axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+  ggtitle("Small (10 to 49)")
+
+ggplot(
+  lu.ind %>% filter(GEOGRAPHY_NAME %in% places, Sizeband == 'Medium-sized (50 to 249)'), 
+  aes(x = Sizeband, y = REGION_PERCENT, fill = GEOGRAPHY_NAME)
+) +
+  geom_bar(stat='identity', position = 'dodge') +
+  facet_wrap(~Industry, scales = 'free')+
+  scale_fill_brewer(palette = "Paired", direction = 1)+
+  xlab("Business size band") +
+  ylab("Percent of region's total business count") +
+  theme(legend.title=element_blank(), plot.title = element_text(face = 'bold'), axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+  ggtitle("Medium-sized (50 to 249)")
+
+
+
+
+
+
+
+#What's the pattern if looking at one industry, faceting Size band?
+#E.g.
+ggplot(
+  lu.ind %>% filter(GEOGRAPHY_NAME %in% places, Industry == '13 : Professional, scientific & technical (M)'), 
+  aes(x = Sizeband, y = REGION_PERCENT, fill = GEOGRAPHY_NAME)
+) +
+  geom_bar(stat='identity', position = 'dodge') +
+  facet_wrap(~Sizeband, scales = 'free')+
+  scale_fill_brewer(palette = "Paired", direction = 1) +
+  xlab("Business size band") +
+  ylab("Percent of region's total business count") +
+  scale_fill_brewer(palette = "Paired", direction = 1) +
+  theme(legend.title=element_blank())
+
+
+
+#Groups of four and cowplot?
+#Using previously found industries in order
+plotindustry <- function(industryname){
+  
+  p <- ggplot(
+    lu.ind %>% filter(GEOGRAPHY_NAME %in% places, Industry == industryname), 
+    aes(x = Sizeband, y = REGION_PERCENT, fill = GEOGRAPHY_NAME)
+  ) +
+    geom_bar(stat='identity', position = 'dodge') +
+    facet_wrap(~Sizeband, scales = 'free')+
+    scale_fill_brewer(palette = "Paired", direction = 1) +
+    xlab("Business size band") +
+    ylab("Percent of region's total business count") +
+    scale_fill_brewer(palette = "Paired", direction = 1) +
+    theme(legend.title=element_blank(), plot.title = element_text(face = 'bold')) +
+    ggtitle(industryname)
+  
+}
+
+
+# plots <- map(industryorder[1:4], plotindustry)
+
+#Picking out an interesting selection
+bespoke <- unique(lu.ind$Industry[grepl(x = lu.ind$Industry, pattern = 'manuf|construction|transport|financ|scient|defence', ignore.case = T)])
+
+plots <- map(bespoke, plotindustry)
+
+cp <- plot_grid(plotlist = plots, nrow = 2)
+cp
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

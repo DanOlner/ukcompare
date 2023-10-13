@@ -6,6 +6,8 @@
 .RDataTmp
 *.docx
 *.doc
+*.ppt
+*.pptx
 *.tmp
 local/
 cuttinz/

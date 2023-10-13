@@ -119,7 +119,7 @@ z <- z %>% separate_wider_delim(CELL_NAME, delim = " : ", names = c("SOC2020", "
 
 
 #Local laptop save for now
-saveRDS(z, 'local/sicsoc/NUTS2_2016_latestAPS_SIC2007_SOC2020.rds')
+saveRDS(z, 'local/data/sicsoc/NUTS2_2016_latestAPS_SIC2007_SOC2020.rds')
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -202,7 +202,8 @@ z <- z %>%
 
 sy <- z %>% filter(GEOGRAPHY_NAME == 'South Yorkshire')
 sy <- z %>% filter(GEOGRAPHY_NAME %in% c('South Yorkshire','Greater Manchester'))
-sy <- z %>% filter(grepl(pattern = 'South Yorkshire|Manchester|Merseyside|West Mid', x = GEOGRAPHY_NAME, ignore.case = T))
+sy <- z %>% filter(grepl(pattern = 'South Yorkshire|Manchester|Merseyside|West York', x = GEOGRAPHY_NAME, ignore.case = T))
+sy <- z %>% filter(grepl(pattern = 'South Yorkshire|Manchester|West York', x = GEOGRAPHY_NAME, ignore.case = T))
 sy <- z %>% filter(grepl(pattern = 'South Yorkshire|West Mid', x = GEOGRAPHY_NAME, ignore.case = T))
 sy <- z %>% filter(grepl(pattern = 'South Yorkshire|Merseyside', x = GEOGRAPHY_NAME, ignore.case = T))
 
@@ -261,8 +262,13 @@ ggplot(
   # facet_wrap(~SIC2007) +
   facet_wrap(~SIC2007, scales = 'free_x') +
   geom_errorbar(aes(ymin = min_ci, ymax = max_ci), position = position_dodge()) +
-  coord_flip()
+  coord_flip() +
+  xlab("% of total employed") +
+  ylab("") +
+  theme(legend.title=element_blank(), plot.title = element_text(face = 'bold')) +
+  ggtitle("Occupation (SOC2020) vs sector (SIC2007), SY and GM")
 
+ggsave('local/localimages/sicsoc_GM_SY.png', width = 14, height = 10)
 
 
 

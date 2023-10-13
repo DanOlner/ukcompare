@@ -1,0 +1,351 @@
+---
+title: "2023 Business Counts of Local Units for South Yorkshire, Greater Manchester, West Yorkshire and Merseyside (Liverpool City Region) broken down by broad industrial group"
+author: "Dan Olner"
+date: "2023-10-13"
+output: powerpoint_presentation
+---
+
+```{r setup, include=FALSE}
+#Don't think DPI makes a difference... oh yes it does, ace (not in Word though?)
+knitr::opts_chunk$set(echo = F, warning = F, error = F, message = F, comment=NA, dpi=300, fig.width = 9)
+
+library(tidyverse)
+library(cowplot)
+```
+
+```{r}
+lu23 <- read_csv('../local/data/BusinessCountsByNUTS2/manualdownload_NUTS2_localunits_2023_readyforimport.csv') %>% 
+  pivot_longer(cols = `UKC1 Tees Valley and Durham`:`UKN0 Northern Ireland`, names_to = 'GEOGRAPHY_NAME', values_to = 'COUNT') %>% 
+  mutate(
+    GEOGRAPHY_NAME = substring(GEOGRAPHY_NAME, 6)#Drop codes
+  ) 
+  
+#Industries are in the correct order in that load. Get factor order from there.
+industryorder <- unique(lu23$Industry)[1:length(unique(lu23$Industry))-1]
+
+
+#OK, so just getting a picture for this year.
+#We want proportions of total business counts, so...
+
+#But let's start with totals for ALL industries to get overview
+lu.all <- lu23 %>% 
+  filter(Sizeband!='All') %>% #otherwise, double counting!
+  group_by(Sizeband,GEOGRAPHY_NAME) %>% 
+  summarise(COUNT = sum(COUNT)) %>% 
+  group_by(GEOGRAPHY_NAME) %>% 
+  mutate(
+    REGION_TOTAL = sum(COUNT),
+    REGION_PERCENT = (COUNT/REGION_TOTAL) * 100
+    ) %>% 
+  mutate(Sizeband = factor(Sizeband, levels = c("Micro (0 to 9)","Small (10 to 49)","Medium-sized (50 to 249)","Large (250+)")))
+
+#sanity check on region percents
+# lu.all %>% group_by(GEOGRAPHY_NAME) %>% summarise(sum(REGION_PERCENT))
+
+#Merseyside is liverpool city region, checked, matches
+#See map at https://en.wikipedia.org/wiki/Liverpool_City_Region
+
+#List of comparators
+places = unique(lu.all$GEOGRAPHY_NAME[grepl('Merseyside|South York|Manchester|West York', lu.all$GEOGRAPHY_NAME)])
+
+#Repeat for the broad industrial groups
+lu.ind <- lu23 %>% 
+  filter(Sizeband!='All', Industry!='Column Total') %>% #otherwise, double counting!
+  group_by(Sizeband,GEOGRAPHY_NAME,Industry) %>% 
+  summarise(COUNT = sum(COUNT)) %>% 
+  group_by(GEOGRAPHY_NAME) %>% 
+  mutate(
+    REGION_TOTAL = sum(COUNT),
+    REGION_PERCENT = (COUNT/REGION_TOTAL) * 100
+  ) %>% 
+  mutate(
+    Sizeband = factor(Sizeband, levels = c("Micro (0 to 9)","Small (10 to 49)","Medium-sized (50 to 249)","Large (250+)")),
+    Industry = factor(Industry, levels = industryorder)
+    )
+```
+
+
+# Total business counts for each region
+
+* The four regions are broadly similar in percent of business counts per size band.
+* Micro firms for all sectors make up by far the largest proportion of local units.
+* Manchester slightly ahead for micro, LCR and SY for small and medium-size firms (but suspect error bars might wipe that difference out)
+
+```{r}
+
+#OK, so with totals, basic comparison
+ggplot(
+  lu.all %>% filter(GEOGRAPHY_NAME %in% places), 
+  aes(x = Sizeband, y = REGION_PERCENT, fill = GEOGRAPHY_NAME)
+) +
+  geom_bar(stat='identity', position = 'dodge') +
+  xlab("Business size band") +
+  ylab("Percent of region's total business count") +
+  scale_fill_brewer(palette = "Paired", direction = 1) +
+  theme(legend.title=element_blank())
+
+
+
+```
+
+
+
+# Each size band with its own scale
+
+**Zooming in to each size band to make the (not very large) differences a bit more clear. The business count numbers are rounded to 5, and removed if not enough values - particularly tricky for 250+. See below to see 250+ counts.**
+
+```{r}
+#Repeat and separate out to compare scale of each sizeband
+ggplot(
+  lu.all %>% filter(GEOGRAPHY_NAME %in% places), 
+  aes(x = Sizeband, y = REGION_PERCENT, fill = GEOGRAPHY_NAME)
+) +
+  geom_bar(stat='identity', position = 'dodge') +
+  facet_wrap(~Sizeband, scales = 'free') +
+  xlab("Business size band") +
+  ylab("Percent of region's total business count") +
+  scale_fill_brewer(palette = "Paired", direction = 1) +
+  theme(legend.title=element_blank())
+
+```
+
+# Next slide: Business counts by industry, overview
+
+**The next slide has business counts by industry for each region, with the x axis fixed so all sectors and regions can be compared.**
+
+* Certain sectors much more micro-firm heavy
+* SY/WY a little ahead in manufacturing micro and small firms (see below for more on that)
+* Proportionally many more SY micro-firms for transport/storage
+* Fewer SY micro firms in 13, 14 and 17
+
+
+
+***   
+
+```{r fig.height = 9, fig.width = 17}
+#Changing dimensions helps, DPI does not
+# ```{r dpi = 600}
+ggplot(
+  lu.ind %>% filter(GEOGRAPHY_NAME %in% places), 
+  aes(x = Sizeband, y = REGION_PERCENT, fill = GEOGRAPHY_NAME)
+) +
+  geom_bar(stat='identity', position = 'dodge') +
+  facet_wrap(~Industry) +
+  coord_flip() +
+  xlab("Business size band") +
+  ylab("Percent of region's total business count") +
+  scale_fill_brewer(palette = "Paired", direction = 1) +
+  theme(legend.title=element_blank())
+  
+
+```
+
+
+# Next slide: Business counts by industry, overview - free percent axis
+
+**Same again, but with the percent axis free, so e.g. we can see for public admin and defence (15) what the mix of business sizes is a little more clearly.**
+
+
+***   
+
+
+```{r fig.height = 9, fig.width = 17}
+ggplot(
+  lu.ind %>% filter(GEOGRAPHY_NAME %in% places), 
+  aes(x = Sizeband, y = REGION_PERCENT, fill = GEOGRAPHY_NAME)
+) +
+  geom_bar(stat='identity', position = 'dodge') +
+  facet_wrap(~Industry, scales = 'free_x') +
+  coord_flip() +
+  xlab("Business size band") +
+  ylab("Percent of region's total business count") +
+  scale_fill_brewer(palette = "Paired", direction = 1) +
+  theme(legend.title=element_blank())
+
+```
+
+
+
+# Next slide: stacked bars showing composition of each industry size
+
+**Public sectors have far higher numbers of large organisations, predictably. Stand-outs are South Yorkshire's higher proportion of micro-firms / lower for 250+ firms in public admin & defence.**
+
+
+***   
+
+
+
+
+```{r fig.height = 9, fig.width = 17}
+ggplot(
+  lu.ind %>% filter(GEOGRAPHY_NAME %in% places), 
+  aes(x = GEOGRAPHY_NAME, y = REGION_PERCENT, fill = Sizeband)
+) +
+  geom_bar(stat='identity', position = 'fill') +
+  facet_wrap(~Industry) +
+  coord_flip() +
+  xlab("Region") +
+  ylab("Percent of region's total business count") +
+  scale_fill_brewer(palette = "Paired", direction = 1) +
+  theme(legend.title=element_blank())
+
+```
+
+
+# Next slide: Micro (0-9) units broken down by industry
+
+**Looking just at micro-size local units (0 to 9 people), a few South Yorkshire stand-outs:**
+
+* Larger % of construction micro-firm units than the comparators
+* Much larger % for transport and storage
+* GM a way ahead in finance/insurance at this scale
+* Professional, scientific & technical - lower for SY.
+* (Public sector units generally much lower micro-firm numbers.)
+
+***   
+
+
+
+```{r fig.height = 9, fig.width = 17}
+ggplot(
+  lu.ind %>% filter(GEOGRAPHY_NAME %in% places, Sizeband == 'Micro (0 to 9)'), 
+  aes(x = Sizeband, y = REGION_PERCENT, fill = GEOGRAPHY_NAME)
+) +
+  geom_bar(stat='identity', position = 'dodge') +
+  facet_wrap(~Industry, scales = 'free_x')+
+  scale_fill_brewer(palette = "Paired", direction = 1) +
+  xlab("Business size band") +
+  ylab("Percent of region's total business count") +
+  theme(legend.title=element_blank(), plot.title = element_text(face = 'bold'), axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+  ggtitle("Micro (0-9)")
+```
+
+
+# Next slide: Small (10 to 49) units broken down by industry
+
+* More in SY for manufacturing and motor trades
+* SY a stand out as larger in public admin and defence at this scale
+
+***   
+
+
+
+
+```{r fig.height = 9, fig.width = 17}
+ggplot(
+  lu.ind %>% filter(GEOGRAPHY_NAME %in% places, Sizeband == 'Small (10 to 49)'), 
+  aes(x = Sizeband, y = REGION_PERCENT, fill = GEOGRAPHY_NAME)
+) +
+  geom_bar(stat='identity', position = 'dodge') +
+  facet_wrap(~Industry, scales = 'free')+
+  scale_fill_brewer(palette = "Paired", direction = 1)+
+  xlab("Business size band") +
+  ylab("Percent of region's total business count") +
+  theme(legend.title=element_blank(), plot.title = element_text(face = 'bold'), axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+  ggtitle("Small (10 to 49)")
+
+```
+
+
+# Next slide: Medium-sized (50 to 249) units broken down by industry
+
+* SY and WY both much higher % in manufacturing here, same for motor trades.
+* Finance: SY lower than elsewhere for medium size firms
+
+
+
+***   
+
+
+
+```{r fig.height = 9, fig.width = 17}
+ggplot(
+  lu.ind %>% filter(GEOGRAPHY_NAME %in% places, Sizeband == 'Medium-sized (50 to 249)'), 
+  aes(x = Sizeband, y = REGION_PERCENT, fill = GEOGRAPHY_NAME)
+) +
+  geom_bar(stat='identity', position = 'dodge') +
+  facet_wrap(~Industry, scales = 'free')+
+  scale_fill_brewer(palette = "Paired", direction = 1)+
+  xlab("Business size band") +
+  ylab("Percent of region's total business count") +
+  theme(legend.title=element_blank(), plot.title = element_text(face = 'bold'), axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+  ggtitle("Medium-sized (50 to 249)")
+
+```
+
+
+# Next slide: Actual counts for 250+ local units, by industry
+
+**Because there are far fewer 250+ size sites, the applied rounding to 5 affects them a lot more, meaning percents are dubious. Looking at the raw counts is a useful alternative (though caution needed given they aren't adjusted for region size).**
+
+**A South Yorkshire stand out here is the very small number of large professional/scientific/technical local units, matching lower micro numbers.**
+
+***   
+
+
+```{r fig.height = 9, fig.width = 17}
+ggplot(
+  lu.ind %>% filter(GEOGRAPHY_NAME %in% places, Sizeband == 'Large (250+)'), 
+  aes(x = Sizeband, y = COUNT, fill = GEOGRAPHY_NAME)
+) +
+  geom_bar(stat='identity', position = 'dodge') +
+  facet_wrap(~Industry) +
+  # facet_wrap(~Industry, scales = 'free') +
+  xlab("") +
+  ylab("Total business count for 250+ firms") +
+  scale_fill_brewer(palette = "Paired", direction = 1) +
+  theme(legend.title=element_blank(), plot.title = element_text(face = 'bold'), axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+  ggtitle("Counts of 250+ size local units")
+```
+
+
+
+# Next slide: Picking out some of the stand out sectors from above, putting together
+
+* GM far ahead in finance in micro and medium size, SY behind across the board
+* Professional/scientific: SY especially low in large firms (but note issue of counts rounding in large firm numbers)
+* SY Public admin / defence numbers higher in micro/small - what kinds of firms are those?
+* Manufacturing East / West split, SY and WY ahead in all firm sizes
+* Construction more mixed, with SY ahead for both ends - micro and large, far ahead for large
+* SY ahead for most transport/storage firm scales, LCR in medium-sized though.
+
+***   
+
+
+
+```{r fig.height = 9, fig.width = 17}
+bespoke <- unique(lu.ind$Industry[grepl(x = lu.ind$Industry, pattern = 'manuf|construction|transport|financ|scient|defence', ignore.case = T)])
+
+plotindustry <- function(industryname){
+  
+  p <- ggplot(
+    lu.ind %>% filter(GEOGRAPHY_NAME %in% places, Industry == industryname), 
+    aes(x = Sizeband, y = REGION_PERCENT, fill = GEOGRAPHY_NAME)
+  ) +
+    geom_bar(stat='identity', position = 'dodge') +
+    facet_wrap(~Sizeband, scales = 'free')+
+    scale_fill_brewer(palette = "Paired", direction = 1) +
+    xlab("Business size band") +
+    ylab("Percent of region's total business count") +
+    scale_fill_brewer(palette = "Paired", direction = 1) +
+    theme(legend.title=element_blank(), plot.title = element_text(face = 'bold')) +
+    ggtitle(industryname)
+  
+}
+
+plots <- map(bespoke, plotindustry)
+
+cp <- plot_grid(plotlist = plots, nrow = 2)
+cp
+
+```
+
+

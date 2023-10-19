@@ -1647,6 +1647,7 @@ savesubplots(
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 place1 = 'South Yorkshire'
+place1 = 'North Yorkshire'
 
 uk_regional_props_minus_targetregion.bres <- itl2.lq %>%
   filter(GEOGRAPHY_NAME != place1) %>% 
@@ -1685,7 +1686,7 @@ twoy <- itl2.lq.w.sector_uk_proportion_minustargetITL %>%
   ungroup() %>% 
   filter(
     DATE %in% c(min(DATE),max(DATE)),
-    GEOGRAPHY_NAME == 'South Yorkshire',
+    GEOGRAPHY_NAME == place1,
     )
 
 twoy$INDUSTRY_NAME_REDUCED <- gsub(x = twoy$INDUSTRY_NAME, pattern = 'of |and |acture|acturing|activities|equipment|products', replacement = '')
@@ -1719,8 +1720,11 @@ twoy <- twoy %>%
 filtercompass='NE'#both growing
 filtercompass='NW'#SY shrinking, growth elsewhere
 filtercompass='SE'#SY growing, shrinkage elsewhere
+
 filtercompass='SW'#both shrinking
 filtercompass= c('NE','NW','SE','SW')
+#SY growing, other shrinking or growing
+filtercompass= c('NE','SE')
 
 #SY growth, both shrink growth elsewhere
 filtercompass= c('NE','SE')
@@ -1732,6 +1736,9 @@ filtercompass= c('NW','SW')
 twoy.p <- twoy %>% 
   filter(INDUSTRY_NAME %in% returnplotdata$INDUSTRY_NAME)
   # filter(INDUSTRY_NAME %in% returnplotdata2$INDUSTRY_NAME)
+
+#Or, all
+twoy.p <- twoy %>% filter(LQ > 1)
 
 sum(
   twoy.p %>% filter(compass %in% filtercompass) %>% select(sector_regional_proportion) %>% pull()
@@ -1752,8 +1759,8 @@ p <- ggplot(
   aes(x = sector_regional_proportion * 100, y = sector_uk_proportion_minustargetITL * 100)) +
   geom_point(size = 5, alpha = 0.75, aes(colour = factor(DATE), group = INDUSTRY_NAME_REDUCED)) +
   geom_line(size = 1, aes(colour = factor(DATE), group = INDUSTRY_NAME_REDUCED)) +
-  xlab('South Yorkshire FT job count proportion') +
-  ylab('UK FT job count proportion (MINUS South Yorkshire)')  +
+  xlab(paste0(place1,' FT job count proportion')) +
+  ylab(paste0('UK FT job count proportion (MINUS ',place1,')'))  +
   geom_abline(slope = 1, size = 1, colour='blue', alpha = 0.5) +
   coord_cartesian(xlim = c(0.01,1), ylim = c(0.01,1)) + # good for log scale
   # coord_cartesian(xlim = c(0.01,7), ylim = c(0.01,7)) + # good for log scale
@@ -2769,3 +2776,14 @@ plot_ly(data = x, x = ~DATE, y = ~percent, color = ~INDUSTRY_NAME,
 # 
 # chk %>% 
 #   group_by()
+
+
+
+#Random filter
+nyork <- itl2.lq %>% 
+  ungroup() %>% 
+  filter(
+  DATE == max(DATE),
+  GEOGRAPHY_NAME == 'North Yorkshire'
+  )
+

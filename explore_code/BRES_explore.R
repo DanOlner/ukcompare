@@ -146,6 +146,35 @@ nomis_get_metadata(id = "NM_189_1", concept = "GEOGRAPHY")
 print(nomis_get_metadata(id = "NM_189_1", concept = "geography", type = "type"), n = 40)
 
 
+
+
+
+#Check on differences for LAs district/unitary vs county/unitary
+#Reminder: https://www.instituteforgovernment.org.uk/explainer/local-government-unitarisation
+#"In two-tier areas, local government functions are shared between an upper-tier county council and a number of constituent lower-tier district councils, which are located within the administrative boundaries of the county council."
+#Note, a fair chance this isn't 100% up to date, as unitarisation is ongoing
+county <- nomis_get_metadata(id = "NM_189_1", concept = "geography", type = "TYPE431")
+district <- nomis_get_metadata(id = "NM_189_1", concept = "geography", type = "TYPE432")
+
+#Share 182 LAs. The others? Map is going to be useful huh?
+#24 county councils 182 (remainder unitary)
+table(county$label.en %in% district$label.en)
+#181 district councils (182 remainder unitary)
+table(district$label.en %in% county$label.en)
+
+
+#So districts are smaller and nested with county councils
+#Let's just look at those (the rest being the unitary authorities, presumably)
+#Something labelling the nesting would be jolly useful!
+#North Yorkshire is unitary now isn't it? As of April 2023
+county$label.en[!county$label.en %in% district$label.en]
+district$label.en[!district$label.en %in% county$label.en]
+
+
+
+
+
+
 #So let's do that for the others we need to pick from too.
 #Only the first one is failing to work... API problem? If I can't specify that, that's going to make life hard
 nomis_get_metadata(id = "NM_189_1", concept = "INDUSTRY")

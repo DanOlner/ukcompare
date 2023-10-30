@@ -253,6 +253,35 @@ sy.w <- sy %>%
   )
 
 
+
+#Mark pairs where CIs do not overlap
+#Rather than messing around with figuring out lags
+#make a wider version and do differences there
+
+#https://stackoverflow.com/a/3269471
+#If (StartA <= EndB) and (EndA >= StartB) 
+sy.ww <- sy.w %>%
+  select(GEOGRAPHY_NAME,SIC2007,SOC2020,min_ci,max_ci) %>% 
+  pivot_wider(
+    names_from = GEOGRAPHY_NAME, values_from = c(min_ci,max_ci),
+    values_fn = mean
+  ) %>% 
+  mutate(CIs_overlap = ifelse(
+    (`min_ci_Greater Manchester` <= `max_ci_South Yorkshire` & `max_ci_Greater Manchester` <= `min_ci_South Yorkshire`) |
+      (`min_ci_South Yorkshire` <= `max_ci_Greater Manchester` & `max_ci_South Yorkshire` <= `min_ci_Greater Manchester`)  , 
+    T,F))
+
+
+#Merge those back in
+#Applies to both places so can merge in on these
+sy.w <- sy.w %>% 
+  left_join(
+    sy.ww,
+    by = c('SIC2007','SOC2020')
+  )
+
+
+
 #Facet by SIC, plot SOC2020 counts
 ggplot(
   sy.w %>% filter(SIC2007!='Total Services'), 
@@ -261,12 +290,15 @@ ggplot(
   geom_bar(stat='identity', position = 'dodge') +
   # facet_wrap(~SIC2007) +
   facet_wrap(~SIC2007, scales = 'free_x') +
-  geom_errorbar(aes(ymin = min_ci, ymax = max_ci), position = position_dodge()) +
+  geom_errorbar(aes(ymin = min_ci, ymax = max_ci, colour = CIs_overlap, size = CIs_overlap), position = position_dodge()) +
   coord_flip() +
   xlab("% of total employed") +
   ylab("") +
   theme(legend.title=element_blank(), plot.title = element_text(face = 'bold')) +
-  ggtitle("Occupation (SOC2020) vs sector (SIC2007), SY and GM")
+  ggtitle("Occupation (SOC2020) vs sector (SIC2007), SY and GM") +
+  scale_color_manual(values = c('grey','black')) +
+  scale_size_manual(values = c(0.5,1)) +
+  guides(colour = F, size = F)
 
 ggsave('local/localimages/sicsoc_GM_SY.png', width = 14, height = 10)
 

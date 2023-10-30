@@ -1193,7 +1193,10 @@ ggplot(y, aes(x = year, y = movingav, colour = fct_reorder(`SIC07 description`, 
   
 
 
-#XY PLOT OF SY LQS VS REGIONAL PROPORTION 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#XY PLOT OF SY LQS VS REGIONAL PROPORTION----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 #To check on actual GVA sizes vs relative position in UK
 #For a single year (might be interesting to animate this, but can look at pair of years for now)
 
@@ -2899,9 +2902,76 @@ save_plot(plot = cp, filename = paste0('local/localimages/GVA_perc_minmax/',past
 
 
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#ITL3 CURRENT PRICE DATA PROCESSING----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+ITL3_SICremoves = c(
+  'Total',#leave this in to check the categories left over total correctly (then can remove)
+  'A-E',
+  'C (10-33)',
+  'F (41-43)',
+  'G-T',
+  'G (45-47)',
+  'H (49-53)',
+  'I (55-56)',
+  'J (58-63)',
+  'K (64-66)',
+  'L (68)',#real estate activities - leaves in "Real estate activities, excluding imputed rental" & "Owner-occupiers' imputed rental" as separate categories
+  'M (69-75)',
+  'N (77-82)',
+  'Q (86-88)',
+  'R (90-93)',
+  'S (94-96)'
+)
+
+#Using 'current prices' - LQs are purely proportional at single time points
+#So across-time comparisons only matter for the proportions, not the nominal values
+#Given that - the GVA current price values actually sum correctly across industries and within regions (unlike volume-chained)
+itl3.cp <- read_csv('data/sectors/Table 3c ITL3 UK current price estimates pounds million.csv')
+
+#Filter out duplicate value rows and make long by year
+#Also convert year to numeric
+itl3.cp <- itl3.cp %>% filter(!`SIC07 code` %in% ITL3_SICremoves) %>% 
+  pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'value') %>% 
+  mutate(year = as.numeric(year))
+
+#Check totals match... 
+# chk1 <- itl3.cp %>% 
+#   filter(`SIC07 code`!='Total') %>% 
+#   group_by(year, `ITL region name`) %>% 
+#   summarise(sum = sum(value))
+# 
+# chk2 <- itl3.cp %>% 
+#   filter(`SIC07 code`=='Total')
+# 
+# both <- chk1 %>% 
+#   left_join(
+#     chk2,
+#     by = c('year','ITL region name')
+#   )
+
+#tick, within rounding error
+# max(abs(both$sum-both$value))
+# table(abs(both$sum-both$value)==0)
 
 
+#Check on just water and air transport, where the neg values are
+# itl3.cp %>% filter(`SIC07 description` == "Water and air transport") %>% View
 
+#RANDOM NEGATIVE VALUES IN THERE
+#Looking, I think just typos given previous data
+#(And also makes no logical sense, so...)
+# itl3.cp %>% filter(value < 0)
+
+#Any neg values in ITL3 like with 2? Yup. Water again? Yup!
+table(itl3.cp$value < 0)
+itl3.cp %>% filter(value < 0) %>% View
+
+#NA any negative values in GVA, can't be trusted
+#Only 2021 values for water transport, for four places, again, same as itl2
+itl3.cp <- itl3.cp %>% 
+  mutate(value = ifelse(value < 0, NA, value))
 
 
 

@@ -103,7 +103,7 @@ LQ_baseplot <- function(df, alpha = 0.1, sector_name, LQ_column, change_over_tim
   
   sector_name <- enquo(sector_name)
   LQ_column <- enquo(LQ_column)
-  change_over_time <- enquo(change_over_time)
+  change_over_time <- enquo(change_over_time) 
   
   p <- ggplot() +
   geom_point(

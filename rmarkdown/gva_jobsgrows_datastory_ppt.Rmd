@@ -30,22 +30,60 @@ itl2.cp <- itl2.cp %>%
 
 
 
+```{r SY_v_UK}
+place = 'South Yorkshire'
+
+uk_minus_sy <- itl2.cp$ITL_region_name[!grepl('South Y', itl2.cp$ITL_region_name, ignore.case = T)] %>% unique
+
+#Filter down to just the north
+
+debugonce(twod_proportionplot)
+p <- twod_proportionplot(
+  df = itl2.cp,
+  x_regionnames = place, 
+  y_regionnames = uk_minus_sy,
+  regionvar = ITL_region_name,
+  category_var = SIC07_description, 
+  valuevar = value, 
+  timevar = year, 
+  start_time = 1998,
+  # end_time = 2007,
+  # start_time = 2008,
+  end_time = 2021,
+  compasspoints_to_display = c('SW','NW')
+  # compasspoints_to_display = c('SE','NE')
+)
+
+#add some extras
+p <- p + 
+  xlab(paste0(place, ' GVA proportion')) +
+  ylab(paste0('UK GVA proportion (MINUS ',place,')')) +
+  scale_y_log10() +
+  scale_x_log10() +
+  coord_fixed(xlim = c(0.1,12), ylim = c(0.1,12))# good for log scale
+  # coord_fixed(xlim = c(0.1,3), ylim = c(0.1,3))# zoom in
+
+p
+```
+
 ```{r SY_v_north}
 place = 'South Yorkshire'
 
 north <- itl2.cp$ITL_region_name[grepl('Greater Manc|Merseyside|West Y|Cumbria|Cheshire|Lancashire|East Y|North Y|Tees|Northumb|South Y', itl2.cp$ITL_region_name, ignore.case = T)] %>% unique
 
+north_minus_sy <- itl2.cp$ITL_region_name[grepl('Greater Manc|Merseyside|West Y|Cumbria|Cheshire|Lancashire|East Y|North Y|Tees|Northumb|South Y', itl2.cp$ITL_region_name, ignore.case = T)] %>% unique
 
+#Filter down to just the north
 p <- twod_proportionplot(
-  df = itl2.cp,
+  df = itl2.cp %>% filter(ITL_region_name %in% north),#comparing SY to North only, not the rest of the UK
   x_regionnames = place, 
-  y_regionnames = north,
+  y_regionnames = north_minus_sy,
   regionvar = ITL_region_name,
   category_var = SIC07_description, 
   valuevar = value, 
   timevar = year, 
-  # start_time = 1998, 
-  # end_time = 2007, 
+  # start_time = 1998,
+  # end_time = 2007,
   start_time = 2008,
   end_time = 2021,
   # compasspoints_to_display = c('SW','NW')
@@ -56,10 +94,10 @@ p <- twod_proportionplot(
 p <- p + 
   xlab(paste0(place, ' GVA proportion')) +
   ylab(paste0('Northern UK GVA proportion (MINUS ',place,')')) +
-  # scale_y_log10() +
-  # scale_x_log10() +
-  # coord_fixed(xlim = c(0.1,12), ylim = c(0.1,12))# good for log scale
-  coord_fixed(xlim = c(0.1,3), ylim = c(0.1,3))# zoom in
+  scale_y_log10() +
+  scale_x_log10() +
+  coord_fixed(xlim = c(0.1,12), ylim = c(0.1,12))# good for log scale
+  # coord_fixed(xlim = c(0.1,3), ylim = c(0.1,3))# zoom in
 
 p
 ```

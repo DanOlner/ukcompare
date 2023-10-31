@@ -280,7 +280,7 @@ twod_proportionplot <- function(df, regionvar, category_var, valuevar, timevar, 
         lag_x_sector_total_proportion < 0 & lag_y_sector_total_proportion > 0 ~ 'NW',
         lag_x_sector_total_proportion > 0 & lag_y_sector_total_proportion > 0 ~ 'NE',
         lag_x_sector_total_proportion > 0 & lag_y_sector_total_proportion < 0 ~ 'SE'
-      )
+      ) 
     )
 
   twoy <- twoy %>%  

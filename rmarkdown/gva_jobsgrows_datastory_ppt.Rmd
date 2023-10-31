@@ -37,7 +37,7 @@ uk_minus_sy <- itl2.cp$ITL_region_name[!grepl('South Y', itl2.cp$ITL_region_name
 
 #Filter down to just the north
 
-debugonce(twod_proportionplot)
+# debugonce(twod_proportionplot)
 p <- twod_proportionplot(
   df = itl2.cp,
   x_regionnames = place, 
@@ -47,10 +47,11 @@ p <- twod_proportionplot(
   valuevar = value, 
   timevar = year, 
   start_time = 1998,
-  # end_time = 2007,
+  end_time = 2007,
   # start_time = 2008,
-  end_time = 2021,
-  compasspoints_to_display = c('SW','NW')
+  # end_time = 2021,
+  # compasspoints_to_display = c('SW','NW')
+  compasspoints_to_display = c('SW')
   # compasspoints_to_display = c('SE','NE')
 )
 

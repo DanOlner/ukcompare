@@ -3033,7 +3033,7 @@ FT_slopes <- get_slope_and_se_safely(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_
     slopepolarity = ifelse(slope > 0, 'increasing', 'decreasing')
   )
 
-#... and EMPLOYMENT
+#... and EMPLOYMENT (all jobs)
 EMP_slopes <- get_slope_and_se_safely(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_NAME, y = "log_GVA_aspercentofGBtotal_perEMPLOYMENT", x = "DATE") %>% mutate(
   min95 = slope - (se * 1.96),
   max95 = slope + (se * 1.96),
@@ -3093,7 +3093,8 @@ gvax <- gva_jobs5 %>% filter(DATE == 2021) %>%
   #   by = c('INDUSTRY_NAME','GEOGRAPHY_NAME')
   # ) %>% 
   left_join(
-    FT_slopes,
+    # FT_slopes,
+    EMP_slopes,
     by = c('INDUSTRY_NAME','GEOGRAPHY_NAME')
   ) %>% mutate(
     INDUSTRY_NAME_REDUCED = gsub(x = INDUSTRY_NAME, pattern = 'of |and |acture|acturing| activities| equipment| products', replacement = '')
@@ -3246,7 +3247,7 @@ for(i in unique(gvax$INDUSTRY_NAME_REDUCED)){
   
   # tmap_save(tm = m, filename = paste0('local/localimages/gva_perFTworker_trendmaps/',i,'.png'), width = 1100, dpi = 300, outer.margins = 0, asp=0)
   # tmap_save(tm = m, filename = paste0('local/localimages/gva_perFTworker_trendmaps/',i,'.png'), width = 1100, dpi = 300, asp = 0.45)
-  tmap_save(tm = m, filename = paste0('local/localimages/gva_perFTworker_trendmaps/',i,'.png'), width = 1500, dpi = 300)
+  tmap_save(tm = m, filename = paste0('local/localimages/gva_perFTworker_trendmaps/',i,'_emp.png'), width = 1500, dpi = 300)
   
 }
 

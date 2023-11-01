@@ -191,5 +191,87 @@ print(eig$vectors[,2])
 
 
 
+#COEF CHECKS----
+
+#Which coef value is the SE? If I want to be able to return that?
+x = runif(100)
+y = runif(100)
+
+m <- lm(data = data.frame(x,y), formula = y ~ x)
+
+#Slope/coef
+coef(m)[2]
+
+#Oh, we need more info to pull out the SE
+coef(m)
+
+ms <- summary(m)
+ms[[4]]
+ms[[4]]['x','Std. Error']#this!
+summary(m)[[4]]['x','Std. Error']#this!
+#is this the same number? Tick
+summary(m)$coefficients[2, 2]
+
+
+#Try in amended function
+itl2.cp <- read_csv('data/sectors/ITL2currentprices_long.csv')
+
+itl2.cp <- itl2.cp %>% 
+  split(.$year) %>% 
+  map(add_location_quotient_and_proportions, 
+      regionvar = ITL_region_name,
+      lq_var = SIC07_description,
+      valuevar = value) %>% 
+  bind_rows()
+
+debugonce(get_slope_and_se_or_zero)
+get_slope_and_se_or_zero(itl2.cp, ITL_region_name, SIC07_description,#slopes will be found within whatever grouping vars are added here
+                         y = LQ_log, x = year)
+
+
+#Aye, working, with a bit of AI help.
+#So let's test / see what we get here
+#Add in some 95% CIs
+LQ_slopes <- get_slope_and_se_safely(
+  data = itl2.cp, 
+  ITL_region_name, SIC07_description,#slopes will be found within whatever grouping vars are added here
+  y = log(sector_regional_proportion), x = year) %>% 
+  mutate(
+    min95 = slope - (se * 1.96),
+    max95 = slope + (se * 1.96),
+    crosseszero = min95 * max95 < 0#mark if crosses zero
+  )
+
+#LQs
+LQ_slopes <- get_slope_and_se_safely(
+  data = itl2.cp, 
+  ITL_region_name, SIC07_description,#slopes will be found within whatever grouping vars are added here
+  y = LQ_log, x = year) %>% 
+  mutate(
+    min95 = slope - (se * 1.96),
+    max95 = slope + (se * 1.96),
+    crosseszero = min95 * max95 < 0#mark if crosses zero
+  )
+
+#similar prop for LQ vs sector_regional_proportion
+table(LQ_slopes$crosseszero) %>% prop.table
+
+
+#Filter down to a single year
+yeartoplot <- itl2.cp %>% filter(year == 2021)
+
+#Add slopes into data to get LQ plots
+yeartoplot <- yeartoplot %>% 
+  left_join(
+    LQ_slopes,
+    by = c('ITL_region_name','SIC07_description')
+  )
+
+
+
+
+
+
+
 
 

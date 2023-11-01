@@ -30,6 +30,43 @@ compute_slope_or_zero <- function(data, ..., y, x) {
 
 
 
+#Version that returns slope and SE (for 2D LM only...)
+get_slope_and_se_safely <- function(data, ..., y, x) {
+  
+  groups <- quos(...)  
+  y <- enquo(y)
+  x <- enquo(x) 
+  
+  #Function to compute slope
+  get_slope_and_se <- function(data) {
+    # model <- lm(data = data, formula = as.formula(paste0(!!y, " ~ ", !!x)))
+    model <- lm(data = data, formula = as.formula(paste0(quo_name(y), " ~ ", quo_name(x))))
+    
+    slope <- coef(model)[2]
+    se <- summary(model)$coefficients[2, 2]
+    return(list(slope = slope, se = se))
+    
+    
+    # return(c(coef(model)[2],summary(model)[[4]]['x','Std. Error']))
+  }
+  
+  #Make it a safe function using purrr::possibly
+  safe_get_slope <- possibly(get_slope_and_se, otherwise = list(slope = NA, se = NA))
+  
+  #Group and summarize
+  data %>%
+    group_by(!!!groups) %>%
+    nest() %>%
+    mutate(result = map(data, safe_get_slope)) %>% 
+    mutate(slope = map_dbl(result, "slope"),
+           se = map_dbl(result, "se")) %>%
+    select(-data, -result)
+  
+}
+
+
+
+
 #Create location quotients (and the regional and larger scale proportions needed to calculate it) and return attached to original dataframe
 add_location_quotient_and_proportions <- function(df, regionvar, lq_var, valuevar){
   

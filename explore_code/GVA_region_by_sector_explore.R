@@ -10,6 +10,8 @@ library(ggrepel)
 source('functions/misc_functions.R')
 options(scipen = 99)
 
+#for work laptop library path setting
+# .libPaths('C:/Users/mg1dol/Documents/templibpaths')
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #LOAD AND INITIAL PROCESS----
@@ -2266,6 +2268,9 @@ ggplot(diffz %>% ungroup() %>% filter(sd %in% topsds[runif(50,min=1,max=2784)]),
 
 #Question 1: how far apart are the GVA per job ratios for 'full time employees' vs 'employment'?
 #See above for the difference...
+gva_w_jobcounts <- readRDS('data/UK_GVA_with_BRES_jobcounts_and_jobcounts_summedfrom5digitSIC.rds')
+
+
 
 #Find ratio, then let's see the spread.
 #Note to self: this ratio is the same thing as the actual job number ratio
@@ -2601,6 +2606,9 @@ FT_slopes <- compute_slope_or_zero(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_NA
 #... and EMPLOYMENT
 EMP_slopes <- compute_slope_or_zero(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_NAME, y = "GVA_aspercentofGBtotal_perEMPLOYMENT", x = "DATE")
 
+
+#saving gva_job5 for later
+saveRDS(gva_jobs5,'data/gva_per_worker_from5digitSIC_BRESsums.rds')
 
 
 #Add both of those slope types to the single year data
@@ -2979,8 +2987,82 @@ itl3.cp <- itl3.cp %>%
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#2D LQ PLOT FUNCTION TESTING----
+#GVA PER WORKER SLOPES, CHECKING FOR SIGNIFICANCE----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#One I made earlier
+gva_jobs5 <- readRDS('data/gva_per_worker_from5digitSIC_BRESsums.rds')
+
+#FT employees
+FT_slopes <- get_slope_and_se_safely(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_NAME, y = "GVA_aspercentofGBtotal_perFTjob", x = "DATE") %>% 
+  mutate(
+    min95 = slope - (se * 1.96),
+    max95 = slope + (se * 1.96),
+    crosseszero = min95 * max95 < 0#mark if crosses zero
+  )
+
+#... and EMPLOYMENT
+EMP_slopes <- get_slope_and_se_safely(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_NAME, y = "GVA_aspercentofGBtotal_perEMPLOYMENT", x = "DATE") %>% mutate(
+  min95 = slope - (se * 1.96),
+  max95 = slope + (se * 1.96),
+  crosseszero = min95 * max95 < 0#mark if crosses zero
+)
+  
+
+
+gvax <- gva_jobs5 %>% filter(DATE == 2021) %>% mutate(flaggedplace = ifelse(GEOGRAPHY_NAME==place, 'A', 'B'))
+
+#Let's just look at FT for now...
+gvax <- gvax %>% 
+  # left_join(
+  #   EMP_slopes %>% rename(slope_EMP = slope, ),
+  #   by = c('INDUSTRY_NAME','GEOGRAPHY_NAME')
+  # ) %>% 
+  left_join(
+    FT_slopes,
+    by = c('INDUSTRY_NAME','GEOGRAPHY_NAME')
+  )
+
+
+place = 'South Yorkshire'
+place = 'Greater Manchester'
+place = 'West Yorkshire'
+
+#OK, so. Quick plot of South Yorkshire sectors with sig slopes, both neg and pos
+gva_sy_sig <- gvax %>% 
+  filter(GEOGRAPHY_NAME == place, crosseszero == F) %>% 
+  mutate(positive_slope = slope > 0)
+
+
+#OK, well... those aren't the cheeriest numbers, but...
+ggplot(gva_sy_sig, aes(x = slope, y = fct_reorder(INDUSTRY_NAME,slope))) +
+  geom_point() +
+  geom_errorbar(aes(xmin = min95, xmax = max95)) +
+  geom_vline(xintercept = 0, colour = 'red', alpha = 0.5)
+
+
+#OK, might be worth looking at all but greying out nonsig
+gva_sy <- gvax %>% 
+  filter(GEOGRAPHY_NAME == place) 
+
+gva_sy_b <- gva_sy
+# gva_sy_b <- gva_sy %>% filter(INDUSTRY_NAME != 'Insurance and pension funding')#South Yorkshire, remove annoying
+# gva_sy_b <- gva_sy %>% filter(!grepl(pattern = 'forestry|scientific|wearing apparel', x = INDUSTRY_NAME, ignore.case = T))#Greater Manchester, remove annoying
+gva_sy_b <- gva_sy %>% filter(!grepl(pattern = 'wearing apparel', x = INDUSTRY_NAME, ignore.case = T))#West Yorkshire, remove annoying
+
+#https://stackoverflow.com/a/38862452
+a <- ifelse(gva_sy_b$crosseszero[order(gva_sy_b$slope)], "Grey", "Black")
+
+#Big sector warping view removed
+ggplot(gva_sy_b, 
+       aes(x = slope, y = fct_reorder(INDUSTRY_NAME,slope), colour = crosseszero, size = crosseszero)) +
+  geom_point() +
+  geom_errorbar(aes(xmin = min95, xmax = max95)) +
+  geom_vline(xintercept = 0, colour = 'red', alpha = 0.5) +
+  scale_size_manual(values = c(1,0.5)) +
+  scale_colour_manual(values = c('firebrick4','gray30')) +
+  theme(axis.text.y = element_text(colour = a))
+
 
 
 

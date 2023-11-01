@@ -2991,29 +2991,103 @@ itl3.cp <- itl3.cp %>%
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #One I made earlier
-gva_jobs5 <- readRDS('data/gva_per_worker_from5digitSIC_BRESsums.rds')
+gva_jobs5 <- readRDS('local/data/misc/gva_per_worker_from5digitSIC_BRESsums.rds')
+
+#Sanity check via plotting some of these
+#Pick one we know is sig (in theory)
+chk <- gva_jobs5 %>% 
+  filter(
+    # GEOGRAPHY_NAME=='South Yorkshire',
+    GEOGRAPHY_NAME=='Inner London - West',
+    # INDUSTRY_NAME=='Manufacture of electrical equipment'
+    # grepl(pattern = 'fabricated metal', x = INDUSTRY_NAME, ignore.case = T)
+    # grepl(pattern = 'services to buildings', x = INDUSTRY_NAME, ignore.case = T)
+    grepl(pattern = 'scientific research', x = INDUSTRY_NAME, ignore.case = T)
+    
+    )
+
+
+#Ah, I have not logged these.
+#Shouldn't change sigs but means can't interpret as % change per year
+#Log it up
+gva_jobs5 <- gva_jobs5 %>% 
+  mutate(
+    log_GVA_aspercentofGBtotal_perFTjob = log(GVA_aspercentofGBtotal_perFTjob),
+    log_GVA_aspercentofGBtotal_perEMPLOYMENT = log(GVA_aspercentofGBtotal_perEMPLOYMENT)
+  )
+
+ggplot(chk, aes(x = DATE, y = log_GVA_aspercentofGBtotal_perFTjob * 100)) +
+  geom_point(size = 2) +
+  geom_smooth(method = 'lm')
 
 #FT employees
-FT_slopes <- get_slope_and_se_safely(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_NAME, y = "GVA_aspercentofGBtotal_perFTjob", x = "DATE") %>% 
+# FT_slopes <- get_slope_and_se_safely(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_NAME, y = "GVA_aspercentofGBtotal_perFTjob", x = "DATE") %>%
+FT_slopes <- get_slope_and_se_safely(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_NAME, y = "log_GVA_aspercentofGBtotal_perFTjob", x = "DATE") %>%
   mutate(
     min95 = slope - (se * 1.96),
     max95 = slope + (se * 1.96),
-    crosseszero = min95 * max95 < 0#mark if crosses zero
+    min90 = slope - (se * 1.645),
+    max90 = slope + (se * 1.645),
+    crosseszero95 = min95 * max95 < 0,#mark if crosses zero
+    crosseszero90 = min90 * max90 < 0,#mark if crosses zero
+    slopepolarity = ifelse(slope > 0, 'increasing', 'decreasing')
   )
 
 #... and EMPLOYMENT
-EMP_slopes <- get_slope_and_se_safely(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_NAME, y = "GVA_aspercentofGBtotal_perEMPLOYMENT", x = "DATE") %>% mutate(
+EMP_slopes <- get_slope_and_se_safely(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_NAME, y = "log_GVA_aspercentofGBtotal_perEMPLOYMENT", x = "DATE") %>% mutate(
   min95 = slope - (se * 1.96),
   max95 = slope + (se * 1.96),
-  crosseszero = min95 * max95 < 0#mark if crosses zero
+  min90 = slope - (se * 1.645),
+  max90 = slope + (se * 1.645),
+  crosseszero95 = min95 * max95 < 0,#mark if crosses zero
+  crosseszero90 = min90 * max90 < 0,#mark if crosses zero
+  slopepolarity = ifelse(slope > 0, 'increasing', 'decreasing')
 )
   
 
 
-gvax <- gva_jobs5 %>% filter(DATE == 2021) %>% mutate(flaggedplace = ifelse(GEOGRAPHY_NAME==place, 'A', 'B'))
+#Quick check - pretty sure log and non log will have the same categories crossing zero, they should. But just confirming.
+#Note, the order in the plot does change but that's not important.
+# FT_slopes_log <- get_slope_and_se_safely(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_NAME, y = "log_GVA_aspercentofGBtotal_perFTjob", x = "DATE") %>%
+#   mutate(
+#     min95 = slope - (se * 1.96),
+#     max95 = slope + (se * 1.96),
+#     min90 = slope - (se * 1.645),
+#     max90 = slope + (se * 1.645),
+#     crosseszero95 = min95 * max95 < 0,#mark if crosses zero
+#     crosseszero90 = min90 * max90 < 0#mark if crosses zero
+#   )
+# 
+# 
+# FT_slopes_nonlog <- get_slope_and_se_safely(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_NAME, y = "GVA_aspercentofGBtotal_perFTjob", x = "DATE") %>%
+#   mutate(
+#     min95 = slope - (se * 1.96),
+#     max95 = slope + (se * 1.96),
+#     min90 = slope - (se * 1.645),
+#     max90 = slope + (se * 1.645),
+#     crosseszero95 = min95 * max95 < 0,#mark if crosses zero
+#     crosseszero90 = min90 * max90 < 0#mark if crosses zero
+#   )
+# 
+# #Mostly. Think we get a few edge cases. Assuming the falses are close
+# table(FT_slopes_log$crosseszero95 == FT_slopes_nonlog$crosseszero95)
+# table(FT_slopes_log$crosseszero90 == FT_slopes_nonlog$crosseszero90)
+# 
+# #Aye, all edge cases
+# chk <- FT_slopes_log %>% ungroup() %>% filter(crosseszero95 != FT_slopes_nonlog$crosseszero95)
+# ggplot(chk, 
+#        aes(x = slope, y = fct_reorder(INDUSTRY_NAME,slope), colour = crosseszero95, size = crosseszero95)) +
+#   geom_point(size = 2) +
+#   geom_errorbar(aes(xmin = min95, xmax = max95)) +
+#   geom_vline(xintercept = 0, colour = 'red', alpha = 0.5) +
+#   scale_size_manual(values = c(1,0.5)) +
+#   scale_colour_manual(values = c('firebrick4','gray30')) +
+#   theme(axis.text.y = element_text(colour = a))
+
+# gvax <- gva_jobs5 %>% filter(DATE == 2021) %>% mutate(flaggedplace = ifelse(GEOGRAPHY_NAME==place, 'A', 'B'))
 
 #Let's just look at FT for now...
-gvax <- gvax %>% 
+gvax <- gva_jobs5 %>% filter(DATE == 2021) %>% 
   # left_join(
   #   EMP_slopes %>% rename(slope_EMP = slope, ),
   #   by = c('INDUSTRY_NAME','GEOGRAPHY_NAME')
@@ -3021,48 +3095,160 @@ gvax <- gvax %>%
   left_join(
     FT_slopes,
     by = c('INDUSTRY_NAME','GEOGRAPHY_NAME')
+  ) %>% mutate(
+    INDUSTRY_NAME_REDUCED = gsub(x = INDUSTRY_NAME, pattern = 'of |and |acture|acturing| activities| equipment| products', replacement = '')
   )
 
+
+gvax$GEOGRAPHY_NAME[grepl(pattern = 'London', x = gvax$GEOGRAPHY_NAME, ignore.case = T)] %>% unique
 
 place = 'South Yorkshire'
 place = 'Greater Manchester'
 place = 'West Yorkshire'
+place = 'Inner London - West'
 
 #OK, so. Quick plot of South Yorkshire sectors with sig slopes, both neg and pos
-gva_sy_sig <- gvax %>% 
-  filter(GEOGRAPHY_NAME == place, crosseszero == F) %>% 
-  mutate(positive_slope = slope > 0)
-
-
-#OK, well... those aren't the cheeriest numbers, but...
-ggplot(gva_sy_sig, aes(x = slope, y = fct_reorder(INDUSTRY_NAME,slope))) +
-  geom_point() +
-  geom_errorbar(aes(xmin = min95, xmax = max95)) +
-  geom_vline(xintercept = 0, colour = 'red', alpha = 0.5)
+# gva_sy_sig <- gvax %>% 
+#   filter(GEOGRAPHY_NAME == place, crosseszero == F) %>% 
+#   mutate(positive_slope = slope > 0)
+# 
+# 
+# #OK, well... those aren't the cheeriest numbers, but...
+# ggplot(gva_sy_sig, aes(x = slope, y = fct_reorder(INDUSTRY_NAME,slope))) +
+#   geom_point() +
+#   geom_errorbar(aes(xmin = min95, xmax = max95)) +
+#   geom_vline(xintercept = 0, colour = 'red', alpha = 0.5)
 
 
 #OK, might be worth looking at all but greying out nonsig
 gva_sy <- gvax %>% 
-  filter(GEOGRAPHY_NAME == place) 
+  filter(
+    GEOGRAPHY_NAME == place,
+    !is.na(slope)
+    ) %>% 
+  mutate(
+    INDUSTRY_NAME_REDUCED = gsub(x = INDUSTRY_NAME, pattern = 'of |and |acture|acturing| activities| equipment| products', replacement = '')
+  )
 
-gva_sy_b <- gva_sy
-# gva_sy_b <- gva_sy %>% filter(INDUSTRY_NAME != 'Insurance and pension funding')#South Yorkshire, remove annoying
-# gva_sy_b <- gva_sy %>% filter(!grepl(pattern = 'forestry|scientific|wearing apparel', x = INDUSTRY_NAME, ignore.case = T))#Greater Manchester, remove annoying
-gva_sy_b <- gva_sy %>% filter(!grepl(pattern = 'wearing apparel', x = INDUSTRY_NAME, ignore.case = T))#West Yorkshire, remove annoying
+# gva_sy <- gva_sy
+# gva_sy <- gva_sy %>% filter(INDUSTRY_NAME != 'Insurance and pension funding')#South Yorkshire, remove annoying
+# gva_sy <- gva_sy %>% filter(!grepl(pattern = 'forestry|scientific|wearing apparel', x = INDUSTRY_NAME, ignore.case = T))#Greater Manchester, remove annoying
+# gva_sy <- gva_sy %>% filter(!grepl(pattern = 'wearing apparel', x = INDUSTRY_NAME, ignore.case = T))#West Yorkshire, remove annoying
 
 #https://stackoverflow.com/a/38862452
-a <- ifelse(gva_sy_b$crosseszero[order(gva_sy_b$slope)], "Grey", "Black")
+a <- ifelse(gva_sy$crosseszero95[order(gva_sy$slope)], "Grey", "Black")
 
-#Big sector warping view removed
-ggplot(gva_sy_b, 
-       aes(x = slope, y = fct_reorder(INDUSTRY_NAME,slope), colour = crosseszero, size = crosseszero)) +
-  geom_point() +
+#95% CIs
+ggplot(gva_sy, 
+       aes(x = slope, y = fct_reorder(INDUSTRY_NAME_REDUCED,slope), colour = crosseszero95, size = crosseszero95)) +
+  geom_point(size = 2) +
   geom_errorbar(aes(xmin = min95, xmax = max95)) +
   geom_vline(xintercept = 0, colour = 'red', alpha = 0.5) +
   scale_size_manual(values = c(1,0.5)) +
   scale_colour_manual(values = c('firebrick4','gray30')) +
   theme(axis.text.y = element_text(colour = a))
 
+b <- ifelse(gva_sy$crosseszero90[order(gva_sy$slope)], "Grey", "Black")
+
+#90% CIs
+#Facetting doesn't work for the axis text colouring
+ggplot(gva_sy, 
+       aes(x = slope *100, y = fct_reorder(INDUSTRY_NAME_REDUCED,slope), colour = crosseszero90, size = crosseszero90)) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(xmin = min90*100, xmax = max90*100)) +
+  geom_vline(xintercept = 0, colour = 'red', alpha = 0.5) +
+  scale_size_manual(values = c(1,0.5)) +
+  scale_colour_manual(values = c('firebrick4','gray30')) +
+  theme(axis.text.y = element_text(colour = b)) 
+  # facet_wrap(~slopepolarity, scales = 'free_y')
+  
+
+
+
+#Can we identify and count which sectors have many significant entries?
+#SY could then be doing OK even if non-shrinking, relatively
+#We want 'crosses zero' and the polarity combined, so we can count those
+gvax <- gvax %>% 
+  unite(crosses_zero90_n_polarity, c("crosseszero90", "slopepolarity"), remove = F) %>% 
+  unite(crosses_zero95_n_polarity, c("crosseszero95", "slopepolarity"), remove = F)
+
+
+#Proportions of each
+gvax_props <- gvax %>% 
+  group_by(INDUSTRY_NAME) %>% 
+  summarise(
+    prop.sig90.dec = mean(slopepolarity=='decreasing' & !crosseszero90),
+    prop.sig90.inc = mean(slopepolarity=='increasing' & !crosseszero90)
+  )
+
+
+
+#Mappy mappy
+itl2.geo <- st_read('data/geographies/International_Territorial_Level_2_January_2021_UK_BFE_V2_2022_-4735199360818908762/ITL2_JAN_2021_UK_BFE_V2.shp', quiet = T) %>% 
+  st_simplify(preserveTopology = T, dTolerance = 100)
+
+#Oh good.
+#table(itl2.geo$ITL221NM %in% gvax$GEOGRAPHY_NAME)
+
+#Fix!
+itl2.geo$ITL221NM[!itl2.geo$ITL221NM %in% gvax$GEOGRAPHY_NAME]
+unique(gvax$GEOGRAPHY_NAME[!gvax$GEOGRAPHY_NAME %in% itl2.geo$ITL221NM])
+
+#Note: no Northern Ireland because of BRES link, which is GB only
+itl2.geo$ITL221NM[itl2.geo$ITL221NM == 'Northumberland, and Tyne and Wear'] <- 'Northumberland and Tyne and Wear'
+itl2.geo$ITL221NM[itl2.geo$ITL221NM == 'West Wales and The Valleys'] <- 'West Wales'
+
+#Join map data to a subset of the GVA data
+map <- itl2.geo %>% 
+  right_join(
+    gvax %>% filter(
+      # grepl(pattern = 'finance and insurance', x = INDUSTRY_NAME, ignore.case = T)
+      # grepl(pattern = 'fabricated metal', x = INDUSTRY_NAME, ignore.case = T)
+      grepl(pattern = 'basic metal', x = INDUSTRY_NAME, ignore.case = T)
+      # grepl(pattern = 'electrical equipment', x = INDUSTRY_NAME, ignore.case = T)
+      # grepl(pattern = 'scientific research', x = INDUSTRY_NAME, ignore.case = T)
+      # grepl(pattern = 'printing and reprod', x = INDUSTRY_NAME, ignore.case = T)
+      # grepl(pattern = 'wholesale trade', x = INDUSTRY_NAME, ignore.case = T)
+    ),
+    by = c('ITL221NM'='GEOGRAPHY_NAME')
+  )
+
+
+tm_shape(map) +
+  tm_polygons('slope', n = 9) +
+  tm_layout(title = '', legend.outside = T) +
+tm_shape(
+  map %>% filter(!crosseszero90)
+  ) +
+  tm_borders(col='blue', lwd = 3) +
+  tm_view(bbox = c(left=-180, bottom=-60, right=180, top=85))
+
+
+
+#Let's have a look at the lot
+for(i in unique(gvax$INDUSTRY_NAME_REDUCED)){
+  
+  map <- itl2.geo %>% 
+    right_join(
+      gvax %>% filter(INDUSTRY_NAME_REDUCED == i),
+      by = c('ITL221NM'='GEOGRAPHY_NAME')
+    ) %>% 
+    mutate(slope100 = slope * 100)
+
+  m <- tm_shape(map) +
+    tm_polygons('slope100', n = 9, title="") +
+    tm_layout(title = i, legend.bg.color = 'white', legend.bg.alpha = 0.5) +
+    # tm_layout(title = i, legend.outside = T) +
+    tm_shape(
+      map %>% filter(!crosseszero90)
+    ) +
+    tm_borders(col='blue', lwd = 3)
+  
+  # tmap_save(tm = m, filename = paste0('local/localimages/gva_perFTworker_trendmaps/',i,'.png'), width = 1100, dpi = 300, outer.margins = 0, asp=0)
+  # tmap_save(tm = m, filename = paste0('local/localimages/gva_perFTworker_trendmaps/',i,'.png'), width = 1100, dpi = 300, asp = 0.45)
+  tmap_save(tm = m, filename = paste0('local/localimages/gva_perFTworker_trendmaps/',i,'.png'), width = 1500, dpi = 300)
+  
+}
 
 
 

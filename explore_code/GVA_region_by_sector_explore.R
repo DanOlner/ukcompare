@@ -2914,8 +2914,11 @@ save_plot(plot = cp, filename = paste0('local/localimages/GVA_perc_minmax/',past
 #ITL3 CURRENT PRICE DATA PROCESSING----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+#Remove any rows that are totals of other rows
+#Only want to keep unique SIC values that then sum to the national total
+#Different regional scales have slightly different SIC categories, so need a different remove list for each
 ITL3_SICremoves = c(
-  'Total',#leave this in to check the categories left over total correctly (then can remove)
+  'Total',#leave this in the CSV by commenting out, to check the categories left over total correctly in lines 42-63 below (then can remove by uncommenting)
   'A-E',
   'C (10-33)',
   'F (41-43)',
@@ -2935,7 +2938,7 @@ ITL3_SICremoves = c(
 
 #Using 'current prices' - LQs are purely proportional at single time points
 #So across-time comparisons only matter for the proportions, not the nominal values
-#Given that - the GVA current price values actually sum correctly across industries and within regions (unlike volume-chained)
+#Given that - the GVA current price values actually sum correctly across industries and within regions (unlike chained volume)
 itl3.cp <- read_csv('data/sectors/Table 3c ITL3 UK current price estimates pounds million.csv')
 
 #Filter out duplicate value rows and make long by year
@@ -2972,14 +2975,479 @@ itl3.cp <- itl3.cp %>% filter(!`SIC07 code` %in% ITL3_SICremoves) %>%
 #(And also makes no logical sense, so...)
 # itl3.cp %>% filter(value < 0)
 
-#Any neg values in ITL3 like with 2? Yup. Water again? Yup!
-table(itl3.cp$value < 0)
-itl3.cp %>% filter(value < 0) %>% View
+#Any neg values in ITL3 like with 2? Yup. Water again.
+# table(itl3.cp$value < 0)
+# itl3.cp %>% filter(value < 0) %>% View
 
-#NA any negative values in GVA, can't be trusted
+#NA any negative values in GVA
 #Only 2021 values for water transport, for four places, again, same as itl2
 itl3.cp <- itl3.cp %>% 
   mutate(value = ifelse(value < 0, NA, value))
+
+#Turn any columns with spaces into snake case
+names(itl3.cp) <- gsub(x = names(itl3.cp), pattern = ' ', replacement = '_')
+
+write_csv(itl3.cp, 'data/ITL3currentprices_long.csv')
+
+
+
+
+
+#~~~~~~~~~~~~~~~~~
+#ITL3 LQ PLOTS----
+#~~~~~~~~~~~~~~~~~
+
+itl3.cp <- itl3.cp %>% 
+  split(.$year) %>% 
+  map(add_location_quotient_and_proportions, 
+      regionvar = ITL_region_name,
+      lq_var = SIC07_description,
+      valuevar = value) %>% 
+  bind_rows()
+
+
+#Looking at proportions for Sheffield vs 3places
+itl3.cp %>% filter(
+  grepl(pattern = 'sheffield', x = ITL_region_name, ignore.case = T),
+  year == 2021
+) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(SIC07_description,regional_percent, LQ) %>% 
+  arrange(-LQ) %>% 
+  slice(1:20)
+
+itl3.cp %>% filter(
+  grepl(pattern = 'rotherham', x = ITL_region_name, ignore.case = T),
+  year == 2021
+) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(SIC07_description,regional_percent, LQ) %>% 
+  arrange(-LQ) %>% 
+  slice(1:20)
+
+#Just check LQ UK spread is broadly similar...
+#Actually, no it isn't. That's curious.
+LQspread <- itl3.cp %>% 
+  filter(year == 2021) %>% 
+  group_by(SIC07_description) %>% 
+  summarise(LQ_spread = diff(range(LQ))) %>% 
+  arrange(-LQ_spread)
+
+#Show top 
+LQspread[1:20,]
+
+#Maps will be different
+#Load ITL2 map data using the sf library
+itl3.geo <- st_read('data/geographies/International_Territorial_Level_3_January_2021_UK_BUC_V3_2022_6920195468392554877/ITL3_JAN_2021_UK_BUC_V3.shp', quiet = T) %>% st_simplify(preserveTopology = T, dTolerance = 100)
+
+#Check match
+itl3.geo$ITL321NM[!itl3.geo$ITL321NM %in% itl3.cp$ITL_region_name]
+unique(itl3.cp$ITL_region_name[!itl3.cp$ITL_region_name %in% itl3.geo$ITL321NM])
+
+#Note: no Northern Ireland because of BRES link, which is GB only
+itl3.geo$ITL321NM[itl3.geo$ITL321NM == 'Durham'] <- 'Durham CC'
+itl3.geo$ITL321NM[itl3.geo$ITL321NM == 'Shropshire'] <- 'Shropshire CC'
+itl3.geo$ITL321NM[itl3.geo$ITL321NM == 'Buckinghamshire'] <- 'Buckinghamshire CC'
+itl3.geo$ITL321NM[itl3.geo$ITL321NM == 'Inverness and Nairn, Moray, and Badenoch and Strathspey'] <- 'Inverness and Nairn, Moray, Badenoch and Strathspey'
+
+
+sel = 10
+
+#Join map data to a subset of the GVA data
+sector_LQ_map <- itl3.geo %>% 
+  right_join(
+    itl3.cp %>% filter(
+      year==2021,
+      SIC07_description == LQspread$SIC07_description[sel]#picking out the fourth highest geographical spread sector
+    ),
+    by = c('ITL321NM'='ITL_region_name')
+  )
+
+#Plot map
+tm_shape(sector_LQ_map) +
+  tm_polygons('LQ_log', n = 9) +
+  tm_layout(title = paste0('LQ spread of\n',LQspread$SIC07_description[sel],'\nAcross ITL3 regions'), legend.outside = T)
+
+
+
+#OK, let's see that in LQ plot form
+#Use
+#LQ_slopes %>% filter(slope==0)
+#To see which didn't get slopes (only 8 rows in the current data)
+LQ_slopes <- get_slope_and_se_safely(
+  data = itl3.cp, 
+  ITL_region_name, SIC07_description,#slopes will be found within whatever grouping vars are added here
+  y = LQ_log, x = year)
+
+#Filter down to a single year
+yeartoplot <- itl3.cp %>% filter(year == 2021)
+
+#Add slopes into data to get LQ plots
+yeartoplot <- yeartoplot %>% 
+  left_join(
+    LQ_slopes,
+    by = c('ITL_region_name','SIC07_description')
+  )
+
+#Get min/max values for LQ over time as well, for each sector and place, to add as bars so range of sector is easy to see
+minmaxes <- itl3.cp %>% 
+  group_by(SIC07_description,ITL_region_name) %>% 
+  summarise(
+    min_LQ_all_time = min(LQ),
+    max_LQ_all_time = max(LQ)
+  )
+
+#Join min and max
+yeartoplot <- yeartoplot %>% 
+  left_join(
+    minmaxes,
+    by = c('ITL_region_name','SIC07_description')
+  )
+
+place = 'Sheffield'
+
+#Get a vector with sectors ordered by the place's LQs, descending order
+#Use this next to factor-order the SIC sectors
+sectorLQorder <- itl3.cp %>% filter(
+  ITL_region_name == place,
+  year == 2021
+) %>% 
+  arrange(-LQ) %>% 
+  select(SIC07_description) %>% 
+  pull()
+
+#Turn the sector column into a factor and order by LCR's LQs
+yeartoplot$SIC07_description <- factor(yeartoplot$SIC07_description, levels = sectorLQorder, ordered = T)
+
+# Reduce to SY LQ 1+
+# lq.selection <- yeartoplot %>% filter(
+#   ITL_region_name == place,
+#   # slope > 1,#LQ grew relatively over time
+#   LQ > 1
+# )
+# 
+# #Keep only sectors that were LQ > 1 from the main plotting df
+# yeartoplot <- yeartoplot %>% filter(
+#   SIC07_description %in% lq.selection$SIC07_description
+# )
+
+#All the names
+unique(itl3.cp$ITL_region_name)[order(unique(itl3.cp$ITL_region_name))]
+
+
+p <- LQ_baseplot(df = yeartoplot, alpha = 0, sector_name = SIC07_description, 
+                 LQ_column = LQ, change_over_time = slope)
+
+# p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
+#                             placename = 'Manchester', shapenumber = 23,
+#                             region_name = ITL_region_name,#The next four, the function needs them all 
+#                             sector_name = SIC07_description, change_over_time = slope, LQ_column = LQ)
+# 
+# p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
+#                             placename = 'Leeds', shapenumber = 22,
+#                             region_name = ITL_region_name,
+#                             sector_name = SIC07_description, change_over_time = slope, LQ_column = LQ)
+
+p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
+                            placename = 'Barnsley, Doncaster and Rotherham', shapenumber = 23,
+                            region_name = ITL_region_name,
+                            sector_name = SIC07_description, change_over_time = slope, LQ_column = LQ)
+
+p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
+                            placename = place, shapenumber = 16,
+                            min_LQ_all_time = min_LQ_all_time,max_LQ_all_time = max_LQ_all_time,#Include minmax
+                            value_column = value, sector_regional_proportion = sector_regional_proportion,#include numbers
+                            region_name = ITL_region_name,
+                            sector_name = SIC07_description, change_over_time = slope, LQ_column = LQ)
+p <- p + 
+  annotate(
+    "text",
+    label = "Manchester: diamonds\nLeeds: squares\nBarnsley/Doncaster/Rotherham: empty circles",
+    x = 0.05, y = 20,
+    
+  )
+
+p
+
+
+#Place 3 places in priority...
+sectorLQorder <- itl3.cp %>% filter(
+  ITL_region_name == 'Barnsley, Doncaster and Rotherham',
+  year == 2021
+) %>% 
+  arrange(-LQ) %>% 
+  select(SIC07_description) %>% 
+  pull()
+
+#Turn the sector column into a factor and order by LCR's LQs
+yeartoplot$SIC07_description <- factor(yeartoplot$SIC07_description, levels = sectorLQorder, ordered = T)
+
+
+
+
+p <- LQ_baseplot(df = yeartoplot, alpha = 0, sector_name = SIC07_description, 
+                 LQ_column = LQ, change_over_time = slope)
+
+# p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
+#                             placename = 'Manchester', shapenumber = 23,
+#                             region_name = ITL_region_name,#The next four, the function needs them all 
+#                             sector_name = SIC07_description, change_over_time = slope, LQ_column = LQ)
+# 
+# p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
+#                             placename = 'Leeds', shapenumber = 22,
+#                             region_name = ITL_region_name,
+#                             sector_name = SIC07_description, change_over_time = slope, LQ_column = LQ)
+
+p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
+                            placename = place, shapenumber = 23,
+                            region_name = ITL_region_name,
+                            sector_name = SIC07_description, change_over_time = slope, LQ_column = LQ)
+
+p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
+                            placename = 'Barnsley, Doncaster and Rotherham', shapenumber = 16,
+                            min_LQ_all_time = min_LQ_all_time,max_LQ_all_time = max_LQ_all_time,#Include minmax
+                            value_column = value, sector_regional_proportion = sector_regional_proportion,#include numbers
+                            region_name = ITL_region_name,
+                            sector_name = SIC07_description, change_over_time = slope, LQ_column = LQ)
+p <- p + 
+  annotate(
+    "text",
+    label = "Manchester: diamonds\nLeeds: squares\nBarnsley/Doncaster/Rotherham: empty circles",
+    x = 0.05, y = 20,
+    
+  )
+
+p
+
+
+
+
+
+#TIMEPLOT
+#Pick a sector to plot separately for all places
+#Use grepl as a shortcut to search for sector names
+sector <- itl3.cp$SIC07_description[grepl('fabricated metal', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
+sector <- itl3.cp$SIC07_description[grepl('other manuf', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
+sector <- itl3.cp$SIC07_description[grepl('education', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
+sector <- itl3.cp$SIC07_description[grepl('telecom', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
+sector <- itl3.cp$SIC07_description[grepl('pension funding', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
+
+timeplot <- itl3.cp %>% 
+  filter(SIC07_description == sector) 
+
+#Use zoo's rollapply function to get a moving average
+timeplot <- timeplot %>% 
+  group_by(ITL_region_name) %>% 
+  arrange(year) %>% 
+  mutate(
+    LQ_movingav = rollapply(LQ,3,mean,align='right',fill=NA),
+    percent_movingav = rollapply(sector_regional_proportion * 100,3,mean,align='right',fill=NA)
+  )
+
+#Or pick top size values
+#Largest % in 2021
+largest_percents <- timeplot %>% 
+  filter(year == 2021) %>% 
+  arrange(-percent_movingav)
+
+#Keep only the top ten places and order them
+timeplot <- timeplot %>% 
+  mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = largest_percents$ITL_region_name)) %>% 
+  filter(ITL_region_name %in% c(largest_percents$ITL_region_name[1:10],'Sheffield','Barnsley, Doncaster and Rotherham'))
+
+
+places = c('Sheffield','Barnsley, Doncaster and Rotherham')
+
+#Mark the ITL of interest so it can be clearer in the plot
+timeplot <- timeplot %>%
+  mutate(
+    ITL2ofinterest = ifelse(ITL_region_name %in% places, 'ITL of interest','other'),
+  )
+
+ggplot(timeplot %>% 
+         rename(`ITL region` = ITL_region_name) %>% 
+         filter(!is.na(percent_movingav)),#remove NAs from dates so the x axis doesn't show them
+       aes(x = year, y = percent_movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+  geom_point() +
+  geom_line() +
+  scale_size_manual(values = c(4,1)) +
+  scale_color_brewer(palette = 'Paired', direction = 1) +
+  ylab('Regional GVA percent') +
+  scale_y_log10() +
+  guides(size = "none", linetype = "none") +
+  ggtitle(
+    paste0(sector,'\n', paste0(places, collapse = ', '), ' highlighted in thicker lines')
+  ) +
+  theme(plot.title = element_text(face = 'bold'))
+
+
+timeplot <- timeplot %>% 
+  mutate(percent_sector_regional_proportion = sector_regional_proportion * 100)
+
+
+
+#TOP SECTORS BY LQ GROWTH TREND
+#Look just at place of interest
+#And arrange by the 'growth' slope.
+place = 'Sheffield'
+place = 'Barnsley, Doncaster and Rotherham'
+
+#Look just at place of interest
+#And arrange by the 'growth' slope.
+place_slopes <- yeartoplot %>% 
+  filter(ITL_region_name == place) %>% 
+  arrange(-slope)
+
+#Use that to filter the main df and order sectors by which slope is largest
+timeplot.sectors <- itl3.cp %>% 
+  filter(ITL_region_name == place) %>% 
+  mutate(SIC07_description = factor(SIC07_description, ordered = T, levels = place_slopes$SIC07_description))
+
+#Moving averages
+timeplot.sectors <- timeplot.sectors %>% 
+  group_by(SIC07_description) %>% 
+  arrange(year) %>% 
+  mutate(
+    LQ_movingav = rollapply(LQ,3,mean,align='right',fill=NA),
+    percent_movingav = rollapply(sector_regional_proportion * 100,3,mean,align='right',fill=NA)
+  )
+
+#Filter down to top ten LQ growth sectors
+timeplot.sectors <- timeplot.sectors %>% 
+  filter(
+    SIC07_description %in% place_slopes$SIC07_description[1:10]
+  )
+
+#Plot GVA percent of the largest LQ growth sectors
+ggplot(timeplot.sectors %>% 
+         rename(Sector = SIC07_description) %>% 
+         filter(!is.na(percent_movingav)),#remove NAs from dates so the x axis doesn't show them
+       aes(x = year, y = percent_movingav, colour = Sector, group = Sector)) +
+       # aes(x = year, y = sector_regional_proportion*100, colour = Sector, group = Sector)) +
+  geom_point() +
+  geom_line() +
+  scale_color_brewer(palette = 'Paired', direction = -1) +
+  ylab('GVA percent') +
+  guides(size = "none", linetype = "none") +
+  ggtitle(
+    paste0('Top ten sectors by LQ growth trend\n', place)
+  ) +
+  theme(plot.title = element_text(face = 'bold'))
+
+
+
+
+
+#LQ 2D PLOTS
+#quick Sheffield / other 2D LQ plot comparison?
+#Northern England
+north <- itl2.cp$ITL_region_name[grepl('Greater Manc|Merseyside|West Y|Cumbria|Cheshire|Lancashire|East Y|North Y|Tees|Northumb|South Y', itl2.cp$ITL_region_name, ignore.case = T)] %>% unique
+
+#South England
+south <- itl2.cp$ITL_region_name[!grepl('Greater Manc|Merseyside|West Y|Cumbria|Cheshire|Lancashire|East Y|North Y|Tees|Northumb|South Y|Scot|Highl|Wales|Ireland', itl2.cp$ITL_region_name, ignore.case = T)] %>% unique
+
+
+xplace = 'Sheffield'
+yplace = 'Barnsley, Doncaster and Rotherham'
+
+p <- twod_proportionplot(
+  df = itl3.cp,
+  # df = itl3.cp %>% filter(ITL_region_name %in% c('Sheffield','Barnsley, Doncaster and Rotherham')),#just checking, doing this shouldn't make a difference
+  regionvar = ITL_region_name,
+  category_var = SIC07_description, 
+  valuevar = value, 
+  timevar = year, 
+  start_time = 2017,
+  end_time = 2021,
+  # start_time = 1998,
+  # end_time = 2007,
+  # compasspoints_to_display = c('SE','SW'),
+  # compasspoints_to_display = c('NE'),
+  # compasspoints_to_display = c('SE'),
+  compasspoints_to_display = c('NW'),
+  # compasspoints_to_display = c('SW'),
+  x_regionnames = xplace,
+  y_regionnames = yplace
+)
+
+#add these after
+p <- p + 
+  xlab(paste0(xplace,' GVA proportions')) +
+  ylab(paste0(yplace,' GVA proportions')) +
+  scale_y_log10() +
+  scale_x_log10() +
+  coord_fixed(xlim = c(0.1,11), ylim = c(0.1,11))# good for log scale
+
+p
+
+
+
+
+
+#PULL OUT SHEFFIELD AND ROTHERHAM SIG GVA GROWTH TRENDS
+itl3.cp <- itl3.cp %>% 
+  mutate(
+    log_sector_regional_proportion = log(sector_regional_proportion),
+    INDUSTRY_NAME_REDUCED = gsub(x = SIC07_description, pattern = 'of |and |acture|acturing| activities| equipment| products', replacement = '')
+    )
+
+#Slopes only for more recent data
+gva_slopes <- get_slope_and_se_safely(data = itl3.cp %>% filter(year %in% 2015:2021), 
+                                      ITL_region_name, SIC07_description, y = "log_sector_regional_proportion", x = "year") %>%
+  mutate(
+    min95 = slope - (se * 1.96),
+    max95 = slope + (se * 1.96),
+    min90 = slope - (se * 1.645),
+    max90 = slope + (se * 1.645),
+    crosseszero95 = min95 * max95 < 0,#mark if crosses zero
+    crosseszero90 = min90 * max90 < 0,#mark if crosses zero
+    slopepolarity = ifelse(slope > 0, 'increasing', 'decreasing')
+  )
+
+
+
+itl3.gvax <- itl3.cp %>% filter(year == 2021) %>% 
+  left_join(
+    gva_slopes,
+    by = c('SIC07_description','ITL_region_name')
+  )
+
+place = 'Sheffield'
+place = 'Barnsley, Doncaster and Rotherham'
+
+
+itl3.gva.plot <- itl3.gvax %>% 
+  filter(
+    ITL_region_name == place,
+    !is.na(slope)
+  ) 
+
+
+#https://stackoverflow.com/a/38862452
+a <- ifelse(itl3.gva.plot$crosseszero95[order(itl3.gva.plot$slope)], "Grey", "Black")
+
+#95% CIs
+ggplot(itl3.gva.plot, 
+       aes(x = slope, y = fct_reorder(INDUSTRY_NAME_REDUCED,slope), colour = crosseszero95, size = crosseszero95)) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(xmin = min95, xmax = max95)) +
+  geom_vline(xintercept = 0, colour = 'red', alpha = 0.5) +
+  scale_size_manual(values = c(1,0.5)) +
+  scale_colour_manual(values = c('firebrick4','gray30')) +
+  theme(axis.text.y = element_text(colour = a))
+
+b <- ifelse(itl3.gva.plot$crosseszero90[order(itl3.gva.plot$slope)], "Grey", "Black")
+
+#90% CIs
+#Facetting doesn't work for the axis text colouring
+ggplot(itl3.gva.plot, 
+       aes(x = slope *100, y = fct_reorder(INDUSTRY_NAME_REDUCED,slope), colour = crosseszero90, size = crosseszero90)) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(xmin = min90*100, xmax = max90*100)) +
+  geom_vline(xintercept = 0, colour = 'red', alpha = 0.5) +
+  scale_size_manual(values = c(1,0.5)) +
+  scale_colour_manual(values = c('firebrick4','gray30')) +
+  theme(axis.text.y = element_text(colour = b)) 
 
 
 
@@ -3169,9 +3637,9 @@ ggplot(gva_sy,
 #Can we identify and count which sectors have many significant entries?
 #SY could then be doing OK even if non-shrinking, relatively
 #We want 'crosses zero' and the polarity combined, so we can count those
-gvax <- gvax %>% 
-  unite(crosses_zero90_n_polarity, c("crosseszero90", "slopepolarity"), remove = F) %>% 
-  unite(crosses_zero95_n_polarity, c("crosseszero95", "slopepolarity"), remove = F)
+# gvax <- gvax %>% 
+#   unite(crosses_zero90_n_polarity, c("crosseszero90", "slopepolarity"), remove = F) %>% 
+#   unite(crosses_zero95_n_polarity, c("crosseszero95", "slopepolarity"), remove = F)
 
 
 #Proportions of each
@@ -3223,6 +3691,8 @@ tm_shape(
   ) +
   tm_borders(col='blue', lwd = 3) +
   tm_view(bbox = c(left=-180, bottom=-60, right=180, top=85))
+
+
 
 
 

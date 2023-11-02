@@ -352,7 +352,10 @@ twod_proportionplot <- function(df, regionvar, category_var, valuevar, timevar, 
   
   p <- p + geom_text_repel(
     data = twoy %>% filter(!!timevar==max(!!timevar), compass%in%compasspoints_to_display),
-    aes(x = x_sector_total_proportion * 100, y = y_sector_total_proportion * 100,label = !!category_var, colour = compass),
+    aes(x = x_sector_total_proportion * 100, y = y_sector_total_proportion * 100,
+        label = paste0(!!category_var, "\n(",round(x_sector_total_proportion * 100,2),"%,",round(y_sector_total_proportion * 100,2),"%)"), 
+        # label = paste0(!!category_var, "\n(x:",round(x_sector_total_proportion * 100,2),"%,y:",round(y_sector_total_proportion * 100,2),"%)"), 
+        colour = compass),
     alpha=1,
     nudge_x = .05,
     box.padding = 1,

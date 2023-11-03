@@ -1678,6 +1678,9 @@ savesubplots(
 place1 = 'South Yorkshire'
 place1 = 'North Yorkshire'
 
+#Saving for elsewhere!
+saveRDS(itl2.lq, 'local/data/bres_5digit_fulltime.rds')
+
 uk_regional_props_minus_targetregion.bres <- itl2.lq %>%
   filter(GEOGRAPHY_NAME != place1) %>% 
   group_by(GEOGRAPHY_NAME, DATE) %>% 

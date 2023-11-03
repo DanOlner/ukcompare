@@ -266,7 +266,7 @@ addplacename_to_LQplot <- function(df, plot_to_addto, placename, shapenumber=16,
 # Start time
 # End time
 # Compass position to display
-twod_proportionplot <- function(df, regionvar, category_var, valuevar, timevar, start_time, end_time, x_regionnames, y_regionnames, compasspoints_to_display = c('NE','NW','SE','SW')){
+twod_proportionplot <- function(df, regionvar, category_var, valuevar, timevar, start_time, end_time, x_regionnames, y_regionnames, compasspoints_to_display = c('NE','NW','SE','SW'), sectors_to_display = NULL){
   
   regionvar <- enquo(regionvar)
   category_var <- enquo(category_var)
@@ -300,9 +300,21 @@ twod_proportionplot <- function(df, regionvar, category_var, valuevar, timevar, 
     left_join(
       y_region_results,
       by = c(quo_name(category_var),quo_name(timevar))
-    )
+    ) 
   
-  twoy <- both %>% filter(!!timevar %in% c(start_time, end_time))
+  #If including subset of sectors to display
+  if(!missing(sectors_to_display)){
+    
+    twoy <- both %>% filter(
+      !!timevar %in% c(start_time, end_time),
+      !!category_var %in% sectors_to_display
+      ) 
+    
+  } else {
+    
+    twoy <- both %>% filter(!!timevar %in% c(start_time, end_time))  
+    
+  }
 
   twoy_lags <- twoy %>%
     arrange(!!category_var,!!timevar) %>%
@@ -310,7 +322,7 @@ twod_proportionplot <- function(df, regionvar, category_var, valuevar, timevar, 
       lag_x_sector_total_proportion = x_sector_total_proportion - lag(x_sector_total_proportion),
       lag_y_sector_total_proportion = y_sector_total_proportion - lag(y_sector_total_proportion)
     ) %>%
-    filter(year == end_time) %>% #using final year to mark when going in particular compass direction
+    filter(!!timevar == end_time) %>% #using final year to mark when going in particular compass direction
     mutate(
       compass = case_when(
         lag_x_sector_total_proportion < 0 & lag_y_sector_total_proportion < 0 ~ 'SW',
@@ -371,6 +383,79 @@ twod_proportionplot <- function(df, regionvar, category_var, valuevar, timevar, 
   p
 
   
+}
+
+
+
+
+
+#Return compass points for use elsewhere in filtering
+return_compasspoints <- function(df, regionvar, category_var, valuevar, timevar, start_time, end_time, x_regionnames, y_regionnames, compasspoints_to_display = c('NE','NW','SE','SW'), sectors_to_display = NULL){
+  
+  regionvar <- enquo(regionvar)
+  category_var <- enquo(category_var)
+  valuevar <- enquo(valuevar)
+  timevar <- enquo(timevar)
+  
+  x_region_results <- df %>% 
+    filter(!!regionvar %in% x_regionnames) %>% 
+    group_split(!!timevar) %>% 
+    map(add_location_quotient_and_proportions, 
+        regionvar = !!regionvar,
+        lq_var = !!category_var,
+        valuevar = !!valuevar) %>% 
+    bind_rows() %>% 
+    group_by(!!category_var,!!timevar) %>% 
+    summarise(x_sector_total_proportion = min(sector_total_proportion))#just get unique values
+  
+  y_region_results <- df %>% 
+    filter(!!regionvar %in% y_regionnames) %>% 
+    group_split(!!timevar) %>% 
+    map(add_location_quotient_and_proportions, 
+        regionvar = !!regionvar,
+        lq_var = !!category_var,
+        valuevar = !!valuevar) %>% 
+    bind_rows() %>% 
+    group_by(!!category_var,!!timevar) %>% 
+    summarise(y_sector_total_proportion = min(sector_total_proportion))#just get unique values
+  
+  #Join both
+  both <- x_region_results %>% 
+    left_join(
+      y_region_results,
+      by = c(quo_name(category_var),quo_name(timevar))
+    ) 
+  
+  #If including subset of sectors to display
+  if(!missing(sectors_to_display)){
+    
+    twoy <- both %>% filter(
+      !!timevar %in% c(start_time, end_time),
+      !!category_var %in% sectors_to_display
+      ) 
+    
+  } else {
+    
+    twoy <- both %>% filter(!!timevar %in% c(start_time, end_time)) 
+    
+  }
+
+  twoy %>%
+    arrange(!!category_var,!!timevar) %>%
+    mutate(
+      lag_x_sector_total_proportion = x_sector_total_proportion - lag(x_sector_total_proportion),
+      lag_y_sector_total_proportion = y_sector_total_proportion - lag(y_sector_total_proportion)
+    ) %>%
+    filter(!!timevar == end_time) %>% #using final year to mark when going in particular compass direction
+    mutate(
+      compass = case_when(
+        lag_x_sector_total_proportion < 0 & lag_y_sector_total_proportion < 0 ~ 'SW',
+        lag_x_sector_total_proportion < 0 & lag_y_sector_total_proportion > 0 ~ 'NW',
+        lag_x_sector_total_proportion > 0 & lag_y_sector_total_proportion > 0 ~ 'NE',
+        lag_x_sector_total_proportion > 0 & lag_y_sector_total_proportion < 0 ~ 'SE'
+      ) 
+    )
+
 }
 
 

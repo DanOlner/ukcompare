@@ -3231,6 +3231,8 @@ sector <- itl3.cp$SIC07_description[grepl('other manuf', itl3.cp$SIC07_descripti
 sector <- itl3.cp$SIC07_description[grepl('education', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
 sector <- itl3.cp$SIC07_description[grepl('telecom', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
 sector <- itl3.cp$SIC07_description[grepl('pension funding', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
+sector <- itl3.cp$SIC07_description[grepl('petrol', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
+sector <- itl3.cp$SIC07_description[grepl('motor trades', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
 
 timeplot <- itl3.cp %>% 
   filter(SIC07_description == sector) 
@@ -3281,8 +3283,77 @@ ggplot(timeplot %>%
   theme(plot.title = element_text(face = 'bold'))
 
 
-timeplot <- timeplot %>% 
-  mutate(percent_sector_regional_proportion = sector_regional_proportion * 100)
+# timeplot <- timeplot %>% 
+#   mutate(percent_sector_regional_proportion = sector_regional_proportion * 100)
+
+
+
+#Hmm, again, think I'd like to see all those plz!
+sectors <- unique(itl3.cp$SIC07_description)
+
+for(i in sectors){
+  
+  timeplot <- itl3.cp %>% 
+    filter(SIC07_description == i) 
+  
+  #Use zoo's rollapply function to get a moving average
+  timeplot <- timeplot %>% 
+    group_by(ITL_region_name) %>% 
+    arrange(year) %>% 
+    mutate(
+      LQ_movingav = rollapply(LQ,3,mean,align='right',fill=NA),
+      percent_movingav = rollapply(sector_regional_proportion * 100,3,mean,align='right',fill=NA)
+    )
+  
+  #Or pick top size values
+  #Largest % in 2021
+  largest_percents <- timeplot %>% 
+    filter(year == 2021) %>% 
+    arrange(-percent_movingav)
+  
+  #Keep only the top ten places and order them
+  timeplot <- timeplot %>% 
+    mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = largest_percents$ITL_region_name)) %>% 
+    filter(ITL_region_name %in% c(largest_percents$ITL_region_name[1:10],'Sheffield','Barnsley, Doncaster and Rotherham'))
+  
+  
+  places = c('Sheffield','Barnsley, Doncaster and Rotherham')
+  
+  #Mark the ITL of interest so it can be clearer in the plot
+  timeplot <- timeplot %>%
+    mutate(
+      ITL2ofinterest = ifelse(ITL_region_name %in% places, 'ITL of interest','other'),
+    )
+  
+  p <- ggplot(timeplot %>% 
+           rename(`ITL region` = ITL_region_name) %>% 
+           filter(!is.na(percent_movingav)),#remove NAs from dates so the x axis doesn't show them
+         aes(x = year, y = percent_movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+    geom_point() +
+    geom_line() +
+    scale_size_manual(values = c(4,1)) +
+    scale_color_brewer(palette = 'Paired', direction = 1) +
+    ylab('Regional GVA percent') +
+    # scale_y_log10() +
+    guides(size = "none", linetype = "none") +
+    ggtitle(
+      paste0(i,'\n', paste0(places, collapse = ', '), ' highlighted in thicker lines')
+    ) +
+    theme(plot.title = element_text(face = 'bold'))
+  
+  ggsave(plot = p, filename = paste0('local/localimages/Shef_3places_GVAsectors/',i,'.png'), height = 8, width = 13)
+  
+  
+}
+
+
+
+
+
+
+
+
+
 
 
 
@@ -3720,6 +3791,107 @@ for(i in unique(gvax$INDUSTRY_NAME_REDUCED)){
   tmap_save(tm = m, filename = paste0('local/localimages/gva_perFTworker_trendmaps/',i,'_emp.png'), width = 1500, dpi = 300)
   
 }
+
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#USE GVA PER WORKER DATA TO LOOK AT JOB COUNTS AT THIS SECTOR LEVEL----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#To keep this clear, we can drop most of this and rerun proportions / LQ for jobs at this scale
+#Useful for matching what we already have
+#Note, imputed rental dropped because it doesn't contain any jobs...
+gva_jobs5 <- readRDS('local/data/misc/gva_per_worker_from5digitSIC_BRESsums.rds')
+
+#There was kind of an argument for doing that generally, but we'll leave that for now
+#Have checked, doesn't make radical difference...
+jobs <- gva_jobs5 %>% 
+  select(-c(region_totalsize:LQ_log),-c(ratio:total_GB_GVA_peryear))
+
+  
+#Get proportion values based on job counts
+#Actuallyu don't need to do this, do we? It gets calculated in the proportion plot
+# jobs <- jobs %>% 
+#   split(.$DATE) %>% 
+#   map(add_location_quotient_and_proportions, 
+#       regionvar = GEOGRAPHY_NAME,
+#       lq_var = INDUSTRY_NAME,
+#       valuevar = JOBCOUNT_FT) %>% 
+#   bind_rows()
+
+#Check what that looks like for the same periods and comparisons for GVA as the existing story
+# debugonce(twod_proportionplot)
+p <- twod_proportionplot(
+  df = jobs,
+  regionvar = GEOGRAPHY_NAME,
+  category_var = INDUSTRY_NAME, 
+  valuevar = JOBCOUNT_FT, 
+  timevar = DATE, 
+  # start_time = 2008,
+  # end_time = 2021,
+  start_time = 2015,
+  end_time = 2021,
+  compasspoints_to_display = c('NE','SE'),
+  # compasspoints_to_display = c('NW','SW'),
+  # compasspoints_to_display = c('NE','NW'),
+  x_regionnames = 'South Yorkshire',
+  y_regionnames = jobs$GEOGRAPHY_NAME[jobs$GEOGRAPHY_NAME!='South Yorkshire']
+)
+
+#add these after
+p <- p + 
+  xlab('South Yorkshire GVA proportions') +
+  ylab('Rest of UK (minus SY) GVA proportions') +
+  scale_y_log10() +
+  scale_x_log10() +
+  coord_fixed(xlim = c(0.1,11), ylim = c(0.1,11))# good for log scale
+
+p
+
+
+
+
+
+#SOUTH YORKSHIRE COMPARED TO REST OF NORTH, JOBS WISE
+north_minus_sy <- jobs$GEOGRAPHY_NAME[grepl('Greater Manc|Merseyside|West Y|Cumbria|Cheshire|Lancashire|East Y|North Y|Tees|Northumb', jobs$GEOGRAPHY_NAME, ignore.case = T)] %>% unique
+
+p <- twod_proportionplot(
+  df = jobs,
+  regionvar = GEOGRAPHY_NAME,
+  category_var = INDUSTRY_NAME, 
+  valuevar = JOBCOUNT_FT, 
+  timevar = DATE, 
+  # start_time = 2008,
+  # end_time = 2021,
+  start_time = 2015,
+  end_time = 2021,
+  # compasspoints_to_display = c('NE','SE'),
+  # compasspoints_to_display = c('SE'),
+  compasspoints_to_display = c('NE'),
+  # compasspoints_to_display = c('NW','SW'),
+  # compasspoints_to_display = c('NE','NW'),
+  x_regionnames = 'South Yorkshire',
+  y_regionnames = north_minus_sy
+)
+
+#add these after
+p <- p + 
+  xlab('South Yorkshire GVA proportions') +
+  ylab('Rest of UK (minus SY) GVA proportions') +
+  scale_y_log10() +
+  scale_x_log10() +
+  coord_fixed(xlim = c(0.1,11), ylim = c(0.1,11))# good for log scale
+
+p
+
+
+
+
+
+
+
+
 
 
 

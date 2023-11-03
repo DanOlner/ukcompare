@@ -3120,16 +3120,16 @@ sectorLQorder <- itl3.cp %>% filter(
 yeartoplot$SIC07_description <- factor(yeartoplot$SIC07_description, levels = sectorLQorder, ordered = T)
 
 # Reduce to SY LQ 1+
-# lq.selection <- yeartoplot %>% filter(
-#   ITL_region_name == place,
-#   # slope > 1,#LQ grew relatively over time
-#   LQ > 1
-# )
+lq.selection <- yeartoplot %>% filter(
+  ITL_region_name == place,
+  # slope > 1,#LQ grew relatively over time
+  LQ > 1
+)
 # 
-# #Keep only sectors that were LQ > 1 from the main plotting df
-# yeartoplot <- yeartoplot %>% filter(
-#   SIC07_description %in% lq.selection$SIC07_description
-# )
+#Keep only sectors that were LQ > 1 from the main plotting df
+yeartoplot <- yeartoplot %>% filter(
+  SIC07_description %in% lq.selection$SIC07_description
+)
 
 #All the names
 unique(itl3.cp$ITL_region_name)[order(unique(itl3.cp$ITL_region_name))]
@@ -3162,17 +3162,51 @@ p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p,
 p <- p + 
   annotate(
     "text",
-    label = "Manchester: diamonds\nLeeds: squares\nBarnsley/Doncaster/Rotherham: empty circles",
-    x = 0.05, y = 20,
+    label = "Sheffield: Circles\nB/D/R: diamonds",
+    x = 0.05, y = 10,
     
   )
 
 p
 
 
+
+
+
+
+
 #Place 3 places in priority...
+#Filter down to a single year
+yeartoplot <- itl3.cp %>% filter(year == 2021)
+
+#Add slopes into data to get LQ plots
+yeartoplot <- yeartoplot %>% 
+  left_join(
+    LQ_slopes,
+    by = c('ITL_region_name','SIC07_description')
+  )
+
+#Get min/max values for LQ over time as well, for each sector and place, to add as bars so range of sector is easy to see
+minmaxes <- itl3.cp %>% 
+  group_by(SIC07_description,ITL_region_name) %>% 
+  summarise(
+    min_LQ_all_time = min(LQ),
+    max_LQ_all_time = max(LQ)
+  )
+
+#Join min and max
+yeartoplot <- yeartoplot %>% 
+  left_join(
+    minmaxes,
+    by = c('ITL_region_name','SIC07_description')
+  )
+
+place = yeartoplot$ITL_region_name[grepl(pattern = 'Rother',x = yeartoplot$ITL_region_name, ignore.case = T)] %>% unique
+
+#Get a vector with sectors ordered by the place's LQs, descending order
+#Use this next to factor-order the SIC sectors
 sectorLQorder <- itl3.cp %>% filter(
-  ITL_region_name == 'Barnsley, Doncaster and Rotherham',
+  ITL_region_name == place,
   year == 2021
 ) %>% 
   arrange(-LQ) %>% 
@@ -3182,6 +3216,17 @@ sectorLQorder <- itl3.cp %>% filter(
 #Turn the sector column into a factor and order by LCR's LQs
 yeartoplot$SIC07_description <- factor(yeartoplot$SIC07_description, levels = sectorLQorder, ordered = T)
 
+# Reduce to SY LQ 1+
+lq.selection <- yeartoplot %>% filter(
+  ITL_region_name == place,
+  # slope > 1,#LQ grew relatively over time
+  LQ > 1
+)
+# 
+#Keep only sectors that were LQ > 1 from the main plotting df
+yeartoplot <- yeartoplot %>% filter(
+  SIC07_description %in% lq.selection$SIC07_description
+)
 
 
 
@@ -3199,12 +3244,12 @@ p <- LQ_baseplot(df = yeartoplot, alpha = 0, sector_name = SIC07_description,
 #                             sector_name = SIC07_description, change_over_time = slope, LQ_column = LQ)
 
 p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
-                            placename = place, shapenumber = 23,
+                            placename = 'Sheffield', shapenumber = 23,
                             region_name = ITL_region_name,
                             sector_name = SIC07_description, change_over_time = slope, LQ_column = LQ)
 
 p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
-                            placename = 'Barnsley, Doncaster and Rotherham', shapenumber = 16,
+                            placename = place, shapenumber = 16,
                             min_LQ_all_time = min_LQ_all_time,max_LQ_all_time = max_LQ_all_time,#Include minmax
                             value_column = value, sector_regional_proportion = sector_regional_proportion,#include numbers
                             region_name = ITL_region_name,
@@ -3212,7 +3257,7 @@ p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p,
 p <- p + 
   annotate(
     "text",
-    label = "Manchester: diamonds\nLeeds: squares\nBarnsley/Doncaster/Rotherham: empty circles",
+    label = " ",
     x = 0.05, y = 20,
     
   )

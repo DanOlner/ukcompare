@@ -1,5 +1,5 @@
 ---
-title: "GVA + jobs growth data story"
+title: "GVA + jobs growth: data to help get to a story"
 author: "Dan Olner"
 date: "2023-10-31"
 output: powerpoint_presentation
@@ -51,8 +51,31 @@ itl3.cp <- itl3.cp %>%
 
 ```
 
+# STORY SUMMARY ATTEMPT #1
+
+South Yorkshire is in a different situation than 1998-2007, where large structural change occurred (including compared to parts of the North). More recently, SY has seen growth in sectors more heavily concentrated here, including in manufacturing and health.
+
+In comparison to Greater Manchester, Liverpool City Region & West Yorkshire, South Yorkshire’s relatively large sectors are uniquely concentrated here.
+
+Examining granular job data shows job growth in South Yorkshire’s relatively concentrated sectors is most strongly present in health, transport and manufacturing.
+
+Significant growth over time in GVA per full-time worker has happened in a mix of tradeable and non tradeable sectors
+
+---
+
+The geography of GVA per worker change suggests large regional clusters that South Yorkshire could ride, even if not significantly strong in, such as health and scientific research + development / and other professional scientific and technical.
+
+There are important differences between Sheffield versus Barnsley/Doncaster/Rotherham. Separating them, for example, brings out that telecoms and IT appears as a strong growth sector in Sheffield. B/D/R has growth in wholesale (growing everywhere, in both GVA and GVA-per-worker terms) and some select manufacturing.
+
+Significant increases over time for GVA show up in Sheffield for health and manufacturing sectors, as well as warehousing. Sheffield is near the top nationally for education; a split occurred after 2010, seeing B/D/R’s education GVA separate from Sheffield’s and drop.
+
+Some of Sheffield and B/D/R’s manufacturing sectors go with the national trend of strong, steady decline (basic and fabricated), some do not follow the same pattern (‘other manufacturing’).
+
+---
 
 # SOUTH YORKSHIRE COMPARISONS: RAW GVA
+
+---
 
 ## Current story of structural change, using change in per-sector raw GVA
 
@@ -238,6 +261,8 @@ p <- p +
 p
 
 ```
+
+
 ## South Yorkshire vs rest of the North #2/2
 
 Similarly for the more recent period 2016-2021, SY SICs more concentrated here that grew in raw GVA largely manufacturing, but include health, telecoms (This comes up later). 
@@ -1009,89 +1034,6 @@ tm_shape(map) +
   
 ```
 
-## MAP: Change in GVA per worker. Basic metals
-
-Notes
-
-```{r, fig.width = 7, fig.height = 12}
-itl2.geo <- st_read('../data/geographies/International_Territorial_Level_2_January_2021_UK_BFE_V2_2022_-4735199360818908762/ITL2_JAN_2021_UK_BFE_V2.shp', quiet = T) %>% st_simplify(preserveTopology = T, dTolerance = 100)
-
-#Fix names
-#Note: no Northern Ireland because of BRES link, which is GB only
-itl2.geo$ITL221NM[itl2.geo$ITL221NM == 'Northumberland, and Tyne and Wear'] <- 'Northumberland and Tyne and Wear'
-itl2.geo$ITL221NM[itl2.geo$ITL221NM == 'West Wales and The Valleys'] <- 'West Wales'
-
-#Join map data to a subset of the GVA data
-sector = gvax$INDUSTRY_NAME_REDUCED[grepl(pattern = 'basic metal', x = gvax$INDUSTRY_NAME_REDUCED, ignore.case = T)] %>% unique
-
-map <- itl2.geo %>% 
-  right_join(
-    gvax %>% filter(INDUSTRY_NAME_REDUCED == sector),
-    by = c('ITL221NM'='GEOGRAPHY_NAME')
-  ) %>% mutate(slope100 = slope * 100)
-
-
-tm_shape(map) +
-  tm_polygons('slope100', n = 9, title="") +
-  tm_layout(title = sector, legend.bg.color = 'white', legend.bg.alpha = 0.5) +
-  tm_shape(
-    map %>% filter(!crosseszero90)
-  ) +
-  tm_borders(col='blue', lwd = 3)
-  
-```
-
-## MAP: Change in GVA per worker. food / beverage / services
-
-Note: non-tradeable sector, GVA per worker apparently shrinking everywhere. Land transport is similarly shrinking in per-worker GVA nationwide.
-
-
-```{r, fig.width = 7, fig.height = 12}
-#Join map data to a subset of the GVA data
-sector = gvax$INDUSTRY_NAME_REDUCED[grepl(pattern = 'food beverage', x = gvax$INDUSTRY_NAME_REDUCED, ignore.case = T)] %>% unique
-
-map <- itl2.geo %>% 
-  right_join(
-    gvax %>% filter(INDUSTRY_NAME_REDUCED == sector),
-    by = c('ITL221NM'='GEOGRAPHY_NAME')
-  ) %>% mutate(slope100 = slope * 100)
-
-
-tm_shape(map) +
-  tm_polygons('slope100', n = 9, title="") +
-  tm_layout(title = sector, legend.bg.color = 'white', legend.bg.alpha = 0.5) +
-  tm_shape(
-    map %>% filter(!crosseszero90)
-  ) +
-  tm_borders(col='blue', lwd = 3)
-  
-```
-
-
-## MAP: Change in GVA per worker. Head offices and management consultancy
-
-Head offices and management consultancy bucking Northern trends in both South Yorkshire and West Yorkshire.
-
-```{r, fig.width = 7, fig.height = 12}
-#Join map data to a subset of the GVA data
-sector = gvax$INDUSTRY_NAME_REDUCED[grepl(pattern = 'management consultancy', x = gvax$INDUSTRY_NAME_REDUCED, ignore.case = T)] %>% unique
-
-map <- itl2.geo %>% 
-  right_join(
-    gvax %>% filter(INDUSTRY_NAME_REDUCED == sector),
-    by = c('ITL221NM'='GEOGRAPHY_NAME')
-  ) %>% mutate(slope100 = slope * 100)
-
-
-tm_shape(map) +
-  tm_polygons('slope100', n = 9, title="") +
-  tm_layout(title = sector, legend.bg.color = 'white', legend.bg.alpha = 0.5) +
-  tm_shape(
-    map %>% filter(!crosseszero90)
-  ) +
-  tm_borders(col='blue', lwd = 3)
-  
-```
 
 ## MAP: Change in GVA per worker. Health
 
@@ -1145,7 +1087,7 @@ tm_shape(map) +
 
 ## MAP: Change in GVA per worker. Other professional, scientific technical
 
-Other professional, scientific technical: South Yorkshire appears to again be in a cluster spread across central England.
+Other professional, scientific technical: South Yorkshire appears to again be in a cluster spread across central England (significant positive change in neighbouring areas, not in SY).
 
 ```{r, fig.width = 7, fig.height = 12}
 #Join map data to a subset of the GVA data
@@ -1213,12 +1155,12 @@ tm_shape(map) +
 
 ---
 
-## 2017-21 GVA CHANGE 'NORTHEAST' (BOTH INCREASE)
+## 2017-21 GVA CHANGE 'NORTHEAST' (BOTH INCREASE) #1/4
 
-* Some notes
-* Some more notes
+The next few slides compare GVA % changes between Sheffield vs Barnsley/Doncaster/Rotherham. Sectors to the right of the diagonal line are larger GVA-wise in Sheffield.
 
-Some non bullet point notes
+These are sectors growing in GVA % in both. Telecoms in Sheffield is noteable: a very high % when disaggregated from South Yorkshire (more on that below).
+
 
 ```{r, fig.width = 10, fig.height = 10}
 xplace = 'Sheffield'
@@ -1257,9 +1199,9 @@ p
 
 ```
 
-## 2017-21 GVA CHANGE 'SOUTHEAST' (SHEFFIELD INCREASE, OTHERS DEC)
+## 2017-21 GVA CHANGE 'SOUTHEAST' (SHEFFIELD INCREASE, OTHERS DEC) #2/4
 
-* Some notes
+Growing in Sheffield, shrinking in Barnsley/Doncaster/Rotherham. 
 
 ```{r, fig.width = 10, fig.height = 10}
 xplace = 'Sheffield'
@@ -1298,9 +1240,9 @@ p
 
 ```
 
-## 2017-21 GVA CHANGE 'NORTHWEST' (3 PLACES INCREASE, SHEFFIELD DEC)
+## 2017-21 GVA CHANGE 'NORTHWEST' (3 PLACES INCREASE, SHEFFIELD DEC) #3/4
 
-* Some notes
+Growing sectors in Barnsley/Doncaster/Rotherham, shrinking in Sheffield - three that are concentrated in Barnsley/Doncaster/Rotherham, including a growing manufacturing sector (manuf wood paper printing).
 
 ```{r, fig.width = 10, fig.height = 10}
 xplace = 'Sheffield'
@@ -1339,9 +1281,9 @@ p
 
 ```
 
-## 2017-21 GVA CHANGE 'SOUTHWEST' (BOTH DECREASE)
+## 2017-21 GVA CHANGE 'SOUTHWEST' (BOTH DECREASE) #4/4
 
-* Some notes
+Shrinking in both, a mix of concentrations (professional, scientific, technical shrinking is notable?)
 
 ```{r, fig.width = 10, fig.height = 10}
 xplace = 'Sheffield'
@@ -1382,14 +1324,11 @@ p
 
 
 
+## Sheffield GVA change 2017-21, significant POSITIVE slopes #1/4
 
+Significant (95% confidence intervals) changes in raw GVA over time for Sheffield, increases in this slide. Health signficant here where it isn't in B/D/R.
 
-
-
-
-## Sheffield GVA change 2017-21, significant POSITIVE slopes
-
-Notes
+A few manufacturing sectors where no GVA-per-worker trend was discernible. 
 
 ```{r, fig.width = 10, fig.height = 9}
 #PULL OUT SHEFFIELD AND ROTHERHAM SIG GVA GROWTH TRENDS
@@ -1454,9 +1393,9 @@ ggplot(itl3.gva.plot,
 
 ```
 
-## Sheffield GVA change 2017-21, significant NEGATIVE slopes
+## Sheffield GVA change 2017-21, significant NEGATIVE slopes #2/4
 
-Notes
+Significant negative slopes largely sectors shrinking elsewhere.
 
 ```{r, fig.width = 10, fig.height = 9}
 
@@ -1492,9 +1431,9 @@ ggplot(itl3.gva.plot,
 
 
 
-## Barnsley, Doncaster, Rotherham GVA change 2017-21, significant POSITIVE slopes
+## Barnsley, Doncaster, Rotherham GVA change 2017-21, significant POSITIVE slopes #3/4
 
-Notes
+Wholesale trade is growing everywhere, both absolutely and in GVA-per-worker terms. That shows up here. 'Manuf electronic, optical electrical' also notable.
 
 ```{r, fig.width = 10, fig.height = 9}
 place = 'Barnsley, Doncaster and Rotherham'
@@ -1547,9 +1486,9 @@ ggplot(itl3.gva.plot,
 
 
 
-## Barnsley, Doncaster, Rotherham GVA change 2017-21, significant NEGATIVE slopes
+## Barnsley, Doncaster, Rotherham GVA change 2017-21, significant NEGATIVE slopes #4/4
 
-Notes
+Transport manufacture decline notable?
 
 ```{r, fig.width = 10, fig.height = 9}
 place = 'Barnsley, Doncaster and Rotherham'
@@ -1602,9 +1541,9 @@ ggplot(itl3.gva.plot,
 
 ## Some Sheffield vs Barnsley / Doncaster / Rotherham contrasts in GVA change over time: Telecoms and IT
 
-Notes
+Ending with a few slides comparing Sheffield and B/D/R to the top ten or so other places (in % GVA in 2021) and looking at change over time.
 
-Log scale
+Here: Sheffield telecoms and IT has been steadily growing and is a decent chunk of GVA now (about 7%).
 
 ```{r, fig.width=10, fig.height=6}
 sector <- itl3.cp$SIC07_description[grepl('telecom', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
@@ -1663,9 +1602,7 @@ ggplot(timeplot %>%
 
 ## Education, Sheffield vs Barnsley / Doncaster / Rotherham GVA change 
 
-Notes
-
-Not a log scale this time
+Sheffield is near the top nationally for education GVA %; B/D/R diverged from 2010 onwards. Sheffield bucked a general post-2010 dip.
 
 ```{r, fig.width=10, fig.height=6}
 sector <- itl3.cp$SIC07_description[grepl('education', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
@@ -1725,7 +1662,7 @@ ggplot(timeplot %>%
 
 ## Health, Sheffield vs Barnsley / Doncaster / Rotherham GVA change 
 
-Notes
+A similar split in health, though neither are near the top in %GVA terms, both followed the national trend.
 
 
 ```{r, fig.width=10, fig.height=6}
@@ -1785,7 +1722,9 @@ ggplot(timeplot %>%
 
 ## Basic + Fabricated metal manufacture, Sheffield vs Barnsley / Doncaster / Rotherham GVA change 
 
-Notes
+Showing the national picture for the % of the UK's economy that basic and fabricated metal manufacture takes, and the steady decline. 
+
+B/D/R is bucking that slightly in more recent years...
 
 
 ```{r, fig.width=10, fig.height=6}
@@ -1845,10 +1784,10 @@ ggplot(timeplot %>%
 
 ## "Other manufacturing", Sheffield vs Barnsley / Doncaster / Rotherham GVA change 
 
-Notes
+Though it's not true for all manufacturing; here, some increase across South Yorkshire. 
 
 ```{r, fig.width=10, fig.height=6}
-sector <- itl3.cp$SIC07_description[grepl('fabricated', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
+sector <- itl3.cp$SIC07_description[grepl('other manuf', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
 
 timeplot <- itl3.cp %>% 
   filter(SIC07_description == sector) 
@@ -1905,7 +1844,8 @@ ggplot(timeplot %>%
 
 ## Manufacture of wood & paper products, & printing, Sheffield vs Barnsley / Doncaster / Rotherham GVA change 
 
-Notes
+B/D/R doing well in wood/paper products manufacture more recently.
+
 
 ```{r, fig.width=10, fig.height=6}
 sector <- itl3.cp$SIC07_description[grepl('wood and paper', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
@@ -1963,71 +1903,13 @@ ggplot(timeplot %>%
 
 
 
-## Wholesale trade, Sheffield vs Barnsley / Doncaster / Rotherham GVA change 
-
-Wholesale trade's GVA per worker is increasing everywhere, as well as increasing in its proportion of overall GVA. Barnsley, Doncaster & Rotherham are quite a bit larger than Sheffield for this sector (though both some way from places with the largest % of their GVA from this sector).
-
-```{r, fig.width=10, fig.height=6}
-sector <- itl3.cp$SIC07_description[grepl('wholesale trade', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
-
-timeplot <- itl3.cp %>% 
-  filter(SIC07_description == sector) 
-
-#Use zoo's rollapply function to get a moving average
-timeplot <- timeplot %>% 
-  group_by(ITL_region_name) %>% 
-  arrange(year) %>% 
-  mutate(
-    LQ_movingav = rollapply(LQ,3,mean,align='right',fill=NA),
-    percent_movingav = rollapply(sector_regional_proportion * 100,3,mean,align='right',fill=NA)
-  )
-
-#Or pick top size values
-#Largest % in 2021
-largest_percents <- timeplot %>% 
-  filter(year == 2021) %>% 
-  arrange(-percent_movingav)
-
-#Keep only the top ten places and order them
-timeplot <- timeplot %>% 
-  mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = largest_percents$ITL_region_name)) %>% 
-  filter(ITL_region_name %in% c(largest_percents$ITL_region_name[1:10],'Sheffield','Barnsley, Doncaster and Rotherham'))
-
-
-places = c('Sheffield','Barnsley, Doncaster and Rotherham')
-
-#Mark the ITL of interest so it can be clearer in the plot
-timeplot <- timeplot %>%
-  mutate(
-    ITL2ofinterest = ifelse(ITL_region_name %in% places, 'ITL of interest','other'),
-  )
-
-ggplot(timeplot %>% 
-         rename(`ITL region` = ITL_region_name) %>% 
-         filter(!is.na(percent_movingav)),#remove NAs from dates so the x axis doesn't show them
-       aes(x = year, y = percent_movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
-  geom_point() +
-  geom_line() +
-  scale_size_manual(values = c(4,1)) +
-  scale_color_brewer(palette = 'Paired', direction = 1) +
-  ylab('Regional GVA percent') +
-  # scale_y_log10() +
-  guides(size = "none", linetype = "none") +
-  ggtitle(
-    paste0(sector,'\n', paste0(places, collapse = ', '), ' highlighted in thicker lines')
-  ) +
-  theme(plot.title = element_text(face = 'bold'))
-
-
-```
-
 
 ## Specialised construction activities, Sheffield vs Barnsley / Doncaster / Rotherham GVA change 
 
-Barnsley / Doncaster / Rotherham are some way larger in specialised construction activities than Sheffield, and close to being in the top group of ITL3 areas for % GVA in this (mostly non-tradeable) sector.
+Barnsley / Doncaster / Rotherham are some way larger in specialised construction activities than Sheffield, and close to being in the top group of ITL3 areas for % GVA in this (mostly non-tradeable) sector. Post-covid dip is evident, but B/D/R still very high %.
 
 ```{r, fig.width=10, fig.height=6}
-sector <- itl3.cp$SIC07_description[grepl('motor trades', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
+sector <- itl3.cp$SIC07_description[grepl('specialised constr', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
 
 timeplot <- itl3.cp %>% 
   filter(SIC07_description == sector) 
@@ -2085,7 +1967,7 @@ ggplot(timeplot %>%
 
 ## Motor trades (log scale), Sheffield vs Barnsley / Doncaster / Rotherham GVA change 
 
-Notes
+Motor trades growing in both, but again a larger proportion in B/D/R. 
 
 ```{r, fig.width=10, fig.height=6}
 sector <- itl3.cp$SIC07_description[grepl('motor trades', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique

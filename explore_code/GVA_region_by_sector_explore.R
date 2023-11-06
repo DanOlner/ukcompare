@@ -3257,8 +3257,8 @@ p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p,
 p <- p + 
   annotate(
     "text",
-    label = " ",
-    x = 0.05, y = 20,
+    label = "B/D/R: Circles, Sheffield: diamonds",
+    x = 0.05, y = 2,
     
   )
 

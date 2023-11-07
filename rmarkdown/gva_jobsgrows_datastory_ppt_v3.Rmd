@@ -1,0 +1,2624 @@
+---
+title: "GVA + jobs growth in South Yorkshire"
+author: "Dan Olner"
+date: "2023-10-31"
+output: powerpoint_presentation
+---
+
+```{r setup, include=FALSE}
+#Don't think DPI makes a difference... oh yes it does, ace (not in Word though?)
+knitr::opts_chunk$set(echo = F, warning = F, error = F, message = F, comment=NA, fig.width = 12, fig.height = 12)
+
+library(tidyverse)
+library(cowplot)
+library(zoo)
+library(sf)
+library(tmap)
+library(flextable)
+source('../functions/misc_functions.R')
+options(scipen = 99)#Avoids scientific notation
+```
+
+```{r loaddata}
+itl2.cp <- read_csv('../data/sectors/ITL2currentprices_long.csv') %>% 
+  mutate(
+    INDUSTRY_NAME_REDUCED = gsub(x = SIC07_description, pattern = 'of |and |acture|acturing| activities| equipment| products', replacement = '')
+  )
+
+itl2.cp <- itl2.cp %>% 
+  split(.$year) %>% 
+  map(add_location_quotient_and_proportions, 
+      regionvar = ITL_region_name,
+      lq_var = SIC07_description,
+      valuevar = value) %>% 
+  bind_rows()
+
+
+
+itl3.cp <- read_csv('../data/ITL3currentprices_long.csv') %>% 
+  mutate(
+    INDUSTRY_NAME_REDUCED = gsub(x = SIC07_description, pattern = 'of |and |acture|acturing| activities| equipment| products', replacement = '')
+  )
+
+itl3.cp <- itl3.cp %>% 
+  split(.$year) %>% 
+  map(add_location_quotient_and_proportions, 
+      regionvar = ITL_region_name,
+      lq_var = SIC07_description,
+      valuevar = value) %>% 
+  bind_rows()
+
+
+```
+
+# SOME SUMMARY POINTS
+
+South Yorkshire is in a different situation than 1998-2007, where large structural change occurred (including compared to parts of the North). More recently, SY has seen growth in sectors more heavily concentrated here, including in manufacturing and health.
+
+In comparison to Greater Manchester, Liverpool City Region & West Yorkshire, South Yorkshire’s relatively large sectors are uniquely concentrated here.
+
+---
+
+Examining granular job data shows job growth in South Yorkshire’s relatively concentrated sectors is most strongly present in health, transport and manufacturing.
+
+Significant growth over time in GVA per full-time worker has happened in a mix of tradeable and non tradeable sectors
+
+---
+
+The geography of GVA per worker suggests large regional clusters that South Yorkshire could ride, even if not significantly strong in, such as health and scientific research + development / and other professional scientific and technical.
+
+There are important differences between Sheffield versus Barnsley/Doncaster/Rotherham. E.g. Telecoms and IT is a strong growth sector in Sheffield. B/D/R has growth in wholesale (growing everywhere) and some select manufacturing.
+
+---
+
+Significant increases over time for GVA show up in Sheffield for health and manufacturing sectors, as well as warehousing. Sheffield is near the top nationally for education; a split occurred after 2010, seeing B/D/R’s education GVA separate from Sheffield’s and drop.
+
+Some of Sheffield and B/D/R’s manufacturing sectors go with the national trend of steady decline (basic and fabricated), some do not follow the same pattern (e.g. ‘other manufacturing’).
+
+---
+
+South Yorkshire's low skill equilibrium is visible in the SIC v SOC data, though also its skilled workers in some sectors. GM/WY/LCR comparisons show how distinct GM is.
+
+---
+
+
+
+
+
+# SIC vs SOC: skills comparisons
+
+---
+
+## South Yorkshire v Greater Manchester
+
+The SIC (industrial) vs SOC (occupational) data includes data for setting error bars - here, this is used for 95% confidence intervals to find likely genuinely different proportions in number of 16+ employed in difference skill vs sectors.
+
+This example shows how few sectors are separable (black error bars) when comparing South Yorkshire to Greater Manchester, but...
+
+```{r}
+z <- readRDS('../data/sicsoc.rds')
+
+sy <- z %>% filter(GEOGRAPHY_NAME %in% c('South Yorkshire','Greater Manchester'))
+
+sy.w <- sy %>% 
+  select(-OBS_VALUE) %>% 
+  pivot_wider(values_from = OBS_VALUE_REGIONALPERCENT, names_from = MEASURES_NAME) %>% 
+  mutate(
+    min_ci = Value - Confidence,
+    max_ci = Value + Confidence
+  )
+
+#Mark pairs where CIs do not overlap
+#Rather than messing around with figuring out lags
+#make a wider version and do differences there
+
+#https://stackoverflow.com/a/3269471
+#If (StartA <= EndB) and (EndA >= StartB) 
+sy.ww <- sy.w %>%
+  select(GEOGRAPHY_NAME,SIC2007,SOC2020,min_ci,max_ci) %>% 
+  pivot_wider(
+    names_from = GEOGRAPHY_NAME, values_from = c(min_ci,max_ci),
+    values_fn = mean
+  ) %>% 
+  mutate(CIs_overlap = ifelse(
+    (.[,3] <= .[,6] & .[,5] <= .[,4]) |
+      (.[,4] <= .[,5] & .[,6] <= .[,3])  , 
+    F,T) %>% c(.))
+
+
+#Merge those back in
+#Applies to both places so can merge in on these
+sy.w <- sy.w %>% 
+  left_join(
+    sy.ww,
+    by = c('SIC2007','SOC2020')
+  )
+
+
+#Facet by SIC, plot SOC2020 counts
+ggplot(
+  sy.w %>% filter(SIC2007!='Total Services'), 
+  aes(x = SOC2020, y = Value, fill = GEOGRAPHY_NAME)
+) +
+  geom_bar(stat='identity', position = 'dodge') +
+  # facet_wrap(~SIC2007) +
+  facet_wrap(~SIC2007, scales = 'free_x') +
+  geom_errorbar(aes(ymin = min_ci, ymax = max_ci, colour = CIs_overlap, size = CIs_overlap), position = position_dodge()) +
+  coord_flip() +
+  xlab("% of total employed") +
+  ylab("") +
+  theme(legend.title=element_blank(), plot.title = element_text(face = 'bold')) +
+  ggtitle("Occupation (SOC2020) vs sector (SIC2007), SY and GM") +
+  scale_color_manual(values = c('black','grey')) +
+  scale_size_manual(values = c(1,0.5)) +
+  guides(colour = F, size = F)
+
+```
+
+
+
+
+
+## South Yorkshire vs all other ITL2 regions
+
+... that approach can be used to compare to all other regions, to look for overall patterns.
+
+Greener = higher proportion than comparator place
+Redder = lower proportion
+
+SY has higher proportions for many lower skilled SICSOCs / lower for many higher skilled.
+
+But it also has bands of higher numbers of skilled workers in construction/manufacturing.
+
+
+```{r}
+z <- readRDS('../data/sicsoc.rds')
+
+#Sooo can we get all that data to see where skills differ everywhere for SY significantly?
+get_all_places_sicsocs <- function(geography_name,comparator_name){
+  
+  sy <- z %>% filter(GEOGRAPHY_NAME %in% c(comparator_name,geography_name))
+  
+  sy.w <- sy %>% 
+    select(-OBS_VALUE) %>% 
+    pivot_wider(values_from = OBS_VALUE_REGIONALPERCENT, names_from = MEASURES_NAME) %>% 
+    mutate(
+      min_ci = Value - Confidence,
+      max_ci = Value + Confidence
+    )
+  
+  #Mark pairs where CIs do not overlap
+  #Rather than messing around with figuring out lags
+  #make a wider version and do differences there
+  
+  #https://stackoverflow.com/a/3269471
+  #If (StartA <= EndB) and (EndA >= StartB) 
+  sy.ww <- sy.w %>%
+    select(GEOGRAPHY_NAME,SIC2007,SOC2020,min_ci,max_ci) %>% 
+    pivot_wider(
+      names_from = GEOGRAPHY_NAME, values_from = c(min_ci,max_ci),
+      values_fn = mean
+    ) %>% 
+    mutate(CIs_overlap = ifelse(
+      (.[,3] <= .[,6] & .[,5] <= .[,4]) |
+        (.[,4] <= .[,5] & .[,6] <= .[,3])  , 
+      F,T))#Make generic
+  
+  #Merge those back in
+  #Applies to both places so can merge in on these
+  
+  #Find difference between actual value, then display if sig (which won't show effect size properly, but...)
+  sy.w %>% 
+    left_join(
+      sy.ww,
+      by = c('SIC2007','SOC2020')
+    ) %>% 
+    group_by(SIC2007,SOC2020) %>% 
+    mutate(
+      valdiff = lag(Value) - Value
+    ) %>% 
+    filter(GEOGRAPHY_NAME == geography_name) %>% 
+    select(GEOGRAPHY_NAME,SOC2020,SIC2007,CIs_overlap,valdiff)
+  
+}
+  
+comparator = 'South Yorkshire'
+# comparator = 'Greater Manchester'
+# comparator = 'West Yorkshire'
+
+allz <- purrr::map(
+  .f = get_all_places_sicsocs, 
+  .x = unique(z$GEOGRAPHY_NAME[z$GEOGRAPHY_NAME!=comparator]),
+  comparator_name = comparator
+  ) %>% bind_rows
+
+
+# allz <- purrr::map(.f = get_all_places_sicsocs, .x = unique(z$GEOGRAPHY_NAME[z$GEOGRAPHY_NAME!='South Yorkshire'])) %>% bind_rows
+
+allz <- allz %>% 
+  unite(sicsoc, c('SOC2020','SIC2007'), sep = ' || ', remove = F) %>% 
+  mutate(
+    valdiff = ifelse(!CIs_overlap, valdiff, NA)
+  ) 
+
+
+valz <- c(range(allz$valdiff[allz$SIC2007!='Total Services'], na.rm = T), 0)
+scale_values <- function(x){(x-min(x))/(max(x)-min(x))}
+scaled <- scale_values(valz)
+zerocutoff <- scaled[3]
+
+b <- c(
+  rep('#FF5733',9),
+  rep('#CDDC39',9),
+  rep('#00BCD4',9),
+  rep('#9C27B0',9),
+  rep('#3F51B5',9),
+  rep('#E91E63',9),
+  rep('#009688',9),
+  rep('#FFEB3B',9),
+  rep('#607D8B',9)
+)
+
+ggplot(allz %>% filter(SIC2007!='Total Services'), aes(x = substr(GEOGRAPHY_NAME,0,20), y = sicsoc, fill= valdiff)) + 
+  geom_tile() +
+  scale_fill_gradientn(
+    colours = c("red", "white", "darkgreen"),
+    values = c(0, zerocutoff, 1)#https://stackoverflow.com/a/58725778/5023561
+  ) +
+  theme(axis.text.x = element_text(angle = 270, vjust = 0.5, hjust=0)) +
+  ggtitle(comparator) +
+  theme(plot.title = element_text(face = 'bold'),axis.text.y = element_text(colour = b)) +
+  ylab("") +
+  xlab("")
+
+
+
+
+
+```
+
+
+## West Yorkshire
+
+West Yorkshire is actually quite similar to SY, skillsw-wise, for those sectors where 95% CIs don't cross.
+
+
+```{r}
+# comparator = 'South Yorkshire'
+# comparator = 'Greater Manchester'
+comparator = 'West Yorkshire'
+
+allz <- purrr::map(
+  .f = get_all_places_sicsocs, 
+  .x = unique(z$GEOGRAPHY_NAME[z$GEOGRAPHY_NAME!=comparator]),
+  comparator_name = comparator
+  ) %>% bind_rows
+
+
+# allz <- purrr::map(.f = get_all_places_sicsocs, .x = unique(z$GEOGRAPHY_NAME[z$GEOGRAPHY_NAME!='South Yorkshire'])) %>% bind_rows
+
+allz <- allz %>% 
+  unite(sicsoc, c('SOC2020','SIC2007'), sep = ' || ', remove = F) %>% 
+  mutate(
+    valdiff = ifelse(!CIs_overlap, valdiff, NA)
+  ) 
+
+
+valz <- c(range(allz$valdiff[allz$SIC2007!='Total Services'], na.rm = T), 0)
+scale_values <- function(x){(x-min(x))/(max(x)-min(x))}
+scaled <- scale_values(valz)
+zerocutoff <- scaled[3]
+
+#E63946 - A bright red tone
+#F1FAEE - A very light (almost white) pastel green
+#A8DADC - A soft, muted teal
+#457B9D - A desaturated dark blue
+#F4A261 - A sandy brown
+#2A9D8F - A medium sea green
+#6C757D - A neutral dark gray
+
+
+ggplot(allz %>% filter(SIC2007!='Total Services'), aes(x = substr(GEOGRAPHY_NAME,0,20), y = sicsoc, fill= valdiff)) + 
+  geom_tile() +
+  scale_fill_gradientn(
+    colours = c("red", "white", "darkgreen"),
+    values = c(0, zerocutoff, 1)#https://stackoverflow.com/a/58725778/5023561
+  ) +
+  theme(axis.text.x = element_text(angle = 270, vjust = 0.5, hjust=0)) +
+  ggtitle(comparator) +
+  theme(plot.title = element_text(face = 'bold'),axis.text.y = element_text(colour = b)) +
+  ylab("") +
+  xlab("")
+
+
+
+
+
+```
+
+
+## Liverpool City Region
+
+Liverpool City Region shows its higher numbers of public admin workers in higher skills bands
+
+But lower for skilled labour.
+
+```{r}
+# comparator = 'South Yorkshire'
+comparator = 'Merseyside'
+# comparator = 'West Yorkshire'
+
+allz <- purrr::map(
+  .f = get_all_places_sicsocs, 
+  .x = unique(z$GEOGRAPHY_NAME[z$GEOGRAPHY_NAME!=comparator]),
+  comparator_name = comparator
+  ) %>% bind_rows
+
+
+# allz <- purrr::map(.f = get_all_places_sicsocs, .x = unique(z$GEOGRAPHY_NAME[z$GEOGRAPHY_NAME!='South Yorkshire'])) %>% bind_rows
+
+allz <- allz %>% 
+  unite(sicsoc, c('SOC2020','SIC2007'), sep = ' || ', remove = F) %>% 
+  mutate(
+    valdiff = ifelse(!CIs_overlap, valdiff, NA)
+  ) 
+
+
+valz <- c(range(allz$valdiff[allz$SIC2007!='Total Services'], na.rm = T), 0)
+scale_values <- function(x){(x-min(x))/(max(x)-min(x))}
+scaled <- scale_values(valz)
+zerocutoff <- scaled[3]
+
+#E63946 - A bright red tone
+#F1FAEE - A very light (almost white) pastel green
+#A8DADC - A soft, muted teal
+#457B9D - A desaturated dark blue
+#F4A261 - A sandy brown
+#2A9D8F - A medium sea green
+#6C757D - A neutral dark gray
+
+
+ggplot(allz %>% filter(SIC2007!='Total Services'), aes(x = substr(GEOGRAPHY_NAME,0,20), y = sicsoc, fill= valdiff)) + 
+  geom_tile() +
+  scale_fill_gradientn(
+    colours = c("red", "white", "darkgreen"),
+    values = c(0, zerocutoff, 1)#https://stackoverflow.com/a/58725778/5023561
+  ) +
+  theme(axis.text.x = element_text(angle = 270, vjust = 0.5, hjust=0)) +
+  ggtitle(comparator) +
+  theme(plot.title = element_text(face = 'bold'),axis.text.y = element_text(colour = b)) +
+  ylab("") +
+  xlab("")
+
+
+
+
+
+```
+
+
+
+
+## Greater Manchester
+
+Greater Manchester is quite different from any of those comparators.
+
+Lower low skilled, lower high skilled - higher professional and managerial in many sectors.
+
+
+```{r}
+# comparator = 'South Yorkshire'
+comparator = 'Greater Manchester'
+# comparator = 'West Yorkshire'
+
+allz <- purrr::map(
+  .f = get_all_places_sicsocs, 
+  .x = unique(z$GEOGRAPHY_NAME[z$GEOGRAPHY_NAME!=comparator]),
+  comparator_name = comparator
+  ) %>% bind_rows
+
+
+# allz <- purrr::map(.f = get_all_places_sicsocs, .x = unique(z$GEOGRAPHY_NAME[z$GEOGRAPHY_NAME!='South Yorkshire'])) %>% bind_rows
+
+allz <- allz %>% 
+  unite(sicsoc, c('SOC2020','SIC2007'), sep = ' || ', remove = F) %>% 
+  mutate(
+    valdiff = ifelse(!CIs_overlap, valdiff, NA)
+  ) 
+
+
+valz <- c(range(allz$valdiff[allz$SIC2007!='Total Services'], na.rm = T), 0)
+scale_values <- function(x){(x-min(x))/(max(x)-min(x))}
+scaled <- scale_values(valz)
+zerocutoff <- scaled[3]
+
+#E63946 - A bright red tone
+#F1FAEE - A very light (almost white) pastel green
+#A8DADC - A soft, muted teal
+#457B9D - A desaturated dark blue
+#F4A261 - A sandy brown
+#2A9D8F - A medium sea green
+#6C757D - A neutral dark gray
+
+
+ggplot(allz %>% filter(SIC2007!='Total Services'), aes(x = substr(GEOGRAPHY_NAME,0,20), y = sicsoc, fill= valdiff)) + 
+  geom_tile() +
+  scale_fill_gradientn(
+    colours = c("red", "white", "darkgreen"),
+    values = c(0, zerocutoff, 1)#https://stackoverflow.com/a/58725778/5023561
+  ) +
+  theme(axis.text.x = element_text(angle = 270, vjust = 0.5, hjust=0)) +
+  ggtitle(comparator) +
+  theme(plot.title = element_text(face = 'bold'),axis.text.y = element_text(colour = b)) +
+  ylab("") +
+  xlab("")
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+---
+
+# SOUTH YORKSHIRE: GVA DIRECTIONS vs UK
+
+---
+
+## Current story of structural change, using change in per-sector raw GVA
+
+1. For sectors that had decreasing raw GVA in the UK and SY between 1998 and 2007 (going ‘south west’ on this plot), South Yorkshire had a higher concentration of them. Large structural change in that period, mainly in manufacturing.
+
+Note: numbers in brackets are the percent in GVA of that economy - South Yorkshire first (x-axis) then the rest of the UK (y axis). Especically useful because of log scale.
+
+```{r, fig.width=12,fig.height=12}
+
+p <- twod_proportionplot(
+  df = itl2.cp,
+  regionvar = ITL_region_name,
+  category_var = INDUSTRY_NAME_REDUCED, 
+  valuevar = value, 
+  timevar = year, 
+  # start_time = 2008,
+  # end_time = 2021,
+  start_time = 1998,
+  end_time = 2007,
+  compasspoints_to_display = c('SW'),
+  # compasspoints_to_display = c('NE','NW'),
+  x_regionnames = 'South Yorkshire',
+  y_regionnames = itl2.cp$ITL_region_name[itl2.cp$ITL_region_name!='South Yorkshire']
+)
+
+#add these after
+p <- p + 
+  xlab('South Yorkshire GVA proportions') +
+  ylab('Rest of UK (minus SY) GVA proportions') +
+  scale_y_log10() +
+  scale_x_log10() +
+  coord_fixed(xlim = c(0.1,11), ylim = c(0.1,11))# good for log scale
+
+p
+
+```
+
+## 1998-07 South Yorkshire vs rest of UK
+
+2. For 1998 to 2007 in the opposite direction, UK and SY increasing raw-GVA sectors were concentrated elsewhere other than South Yorkshire, mostly. Large public sector increases seen in the top right was happening relatively evenly across the UK.
+
+
+```{r, fig.width=12,fig.height=12}
+p <- twod_proportionplot(
+  df = itl2.cp,
+  regionvar = ITL_region_name,
+  category_var = INDUSTRY_NAME_REDUCED, 
+  valuevar = value, 
+  timevar = year, 
+  # start_time = 2008,
+  # end_time = 2021,
+  start_time = 1998,
+  end_time = 2007,
+  compasspoints_to_display = c('NE'),
+  # compasspoints_to_display = c('NE','NW'),
+  x_regionnames = 'South Yorkshire',
+  y_regionnames = itl2.cp$ITL_region_name[itl2.cp$ITL_region_name!='South Yorkshire']
+)
+
+#add these after
+p <- p + 
+  xlab('South Yorkshire GVA proportions') +
+  ylab('Rest of UK (minus SY) GVA proportions') +
+  scale_y_log10() +
+  scale_x_log10() +
+  coord_fixed(xlim = c(0.1,11), ylim = c(0.1,11))# good for log scale
+
+p
+
+```
+
+
+## More recent years, South Yorkshire vs rest of UK, increasing raw GVA
+
+3. The story in more recent years is quite different for sector GVA size. 
+
+Looking at 2016-2021 for all increasing raw-GVA sectors that grew in SY (went ‘north east’ or ‘south east’ on the plot), there are many more raw GVA growth sectors concentrated in SY (right of the diagonal line)…
+
+Growing sectors 2016-21 that are also more concentrated in SY make up 29.2% of the economy’s GVA (human health alone is 8.9%).
+
+
+```{r, fig.width=12,fig.height=12}
+p <- twod_proportionplot(
+  df = itl2.cp,
+  regionvar = ITL_region_name,
+  category_var = INDUSTRY_NAME_REDUCED, 
+  valuevar = value, 
+  timevar = year, 
+  # start_time = 2008,
+  # end_time = 2021,
+  start_time = 2016,
+  end_time = 2021,
+  compasspoints_to_display = c('NE','SE'),
+  # compasspoints_to_display = c('NE','NW'),
+  x_regionnames = 'South Yorkshire',
+  y_regionnames = itl2.cp$ITL_region_name[itl2.cp$ITL_region_name!='South Yorkshire']
+)
+
+#add these after
+p <- p + 
+  xlab('South Yorkshire GVA proportions') +
+  ylab('Rest of UK (minus SY) GVA proportions') +
+  scale_y_log10() +
+  scale_x_log10() +
+  coord_fixed(xlim = c(0.1,11), ylim = c(0.1,11))# good for log scale
+
+p
+
+```
+
+
+## More recent years, South Yorkshire vs rest of UK, decreasing raw GVA
+
+4. In that more recent time period (2016-2021), raw-GVA-decreasing sectors in SY (going SW and NW on this plot) are largely less concentrated in South Yorkshire, with some exceptions.
+
+2016-21 decreasing sectors that are also relatively concentrated in SY (LQ > 1) make up 13.4% of the SY economy’s GVA.
+
+
+
+```{r, fig.width=12,fig.height=12}
+p <- twod_proportionplot(
+  df = itl2.cp,
+  regionvar = ITL_region_name,
+  category_var = INDUSTRY_NAME_REDUCED, 
+  valuevar = value, 
+  timevar = year, 
+  # start_time = 2008,
+  # end_time = 2021,
+  start_time = 2016,
+  end_time = 2021,
+  compasspoints_to_display = c('NW','SW'),
+  # compasspoints_to_display = c('NE','NW'),
+  x_regionnames = 'South Yorkshire',
+  y_regionnames = itl2.cp$ITL_region_name[itl2.cp$ITL_region_name!='South Yorkshire']
+)
+
+#add these after
+p <- p + 
+  xlab('South Yorkshire GVA proportions') +
+  ylab('Rest of UK (minus SY) GVA proportions') +
+  scale_y_log10() +
+  scale_x_log10() +
+  coord_fixed(xlim = c(0.1,11), ylim = c(0.1,11))# good for log scale
+
+p
+
+```
+
+
+## South Yorkshire vs rest of the North #1/2
+
+Comparing to the North of England shows that the pattern for South Yorkshire of having fewer increasing raw-GVA sectors concentrated there is similar when comparing to the UK as a whole. Public sectors grew as a percentage, but probably due to other sectors doing less well.
+
+
+```{r, fig.width=12,fig.height=12}
+north_minus_sy <- itl2.cp$ITL_region_name[grepl('Greater Manc|Merseyside|West Y|Cumbria|Cheshire|Lancashire|East Y|North Y|Tees|Northumb|South Y', itl2.cp$ITL_region_name, ignore.case = T)] %>% unique
+
+
+p <- twod_proportionplot(
+  df = itl2.cp,
+  regionvar = ITL_region_name,
+  category_var = INDUSTRY_NAME_REDUCED, 
+  valuevar = value, 
+  timevar = year, 
+  start_time = 1998,
+  end_time = 2007,
+  # start_time = 2016,
+  # end_time = 2021,
+  # compasspoints_to_display = c('NW','SW'),
+  compasspoints_to_display = c('NE','SE'),
+  x_regionnames = 'South Yorkshire',
+  y_regionnames = north_minus_sy
+)
+
+#add these after
+p <- p + 
+  xlab('South Yorkshire GVA proportions') +
+  ylab('Rest of North England (minus SY) GVA proportions') +
+  scale_y_log10() +
+  scale_x_log10() +
+  coord_fixed(xlim = c(0.1,11), ylim = c(0.1,11))# good for log scale
+
+p
+
+```
+
+
+## South Yorkshire vs rest of the North #2/2
+
+Similarly for the more recent period 2016-2021, SY SICs more concentrated here that grew in raw GVA largely manufacturing, but include health, telecoms (This comes up later). 
+
+```{r, fig.width=12,fig.height=12}
+north_minus_sy <- itl2.cp$ITL_region_name[grepl('Greater Manc|Merseyside|West Y|Cumbria|Cheshire|Lancashire|East Y|North Y|Tees|Northumb|South Y', itl2.cp$ITL_region_name, ignore.case = T)] %>% unique
+
+
+p <- twod_proportionplot(
+  df = itl2.cp,
+  regionvar = ITL_region_name,
+  category_var = INDUSTRY_NAME_REDUCED, 
+  valuevar = value, 
+  timevar = year, 
+  # start_time = 1998,
+  # end_time = 2007,
+  start_time = 2016,
+  end_time = 2021,
+  # compasspoints_to_display = c('NW','SW'),
+  compasspoints_to_display = c('NE','SE'),
+  x_regionnames = 'South Yorkshire',
+  y_regionnames = north_minus_sy
+)
+
+#add these after
+p <- p + 
+  xlab('South Yorkshire GVA proportions') +
+  ylab('Rest of North England (minus SY) GVA proportions') +
+  scale_y_log10() +
+  scale_x_log10() +
+  coord_fixed(xlim = c(0.1,11), ylim = c(0.1,11))# good for log scale
+
+p
+
+```
+
+# SOUTH YORKSHIRE COMPARISONS: JOB COUNTS FOR 2 AND 5 DIGIT SIC SECTORS
+
+## Job proportion change for SY job increases, at 2 digit SIC, vs rest of UK
+
+Proportion of full time jobs increasing in SY (in the same SIC categories as above) for 2016-21 - apart from manufacturing, health and warehousing jump out (warehousing has increased from 2 to 4% of SY employment, approximately.)
+
+
+```{r, , fig.width=12,fig.height=12}
+gva_jobs5 <- readRDS('../data/gva_per_worker_from5digitSIC_BRESsums.rds') %>% 
+  mutate(
+    INDUSTRY_NAME_REDUCED = gsub(x = INDUSTRY_NAME, pattern = 'of |and |acture|acturing| activities| equipment| products', replacement = '')
+  )
+
+#There was kind of an argument for doing that generally, but we'll leave that for now
+#Have checked, doesn't make radical difference...
+jobs <- gva_jobs5 %>% 
+  select(-c(region_totalsize:LQ_log),-c(ratio:total_GB_GVA_peryear))
+
+  
+#Get proportion values based on job counts
+#Actuallyu don't need to do this, do we? It gets calculated in the proportion plot
+# jobs <- jobs %>% 
+#   split(.$DATE) %>% 
+#   map(add_location_quotient_and_proportions, 
+#       regionvar = GEOGRAPHY_NAME,
+#       lq_var = INDUSTRY_NAME,
+#       valuevar = JOBCOUNT_FT) %>% 
+#   bind_rows()
+
+#Check what that looks like for the same periods and comparisons for GVA as the existing story
+# debugonce(twod_proportionplot)
+p <- twod_proportionplot(
+  df = jobs,
+  regionvar = GEOGRAPHY_NAME,
+  category_var = INDUSTRY_NAME_REDUCED, 
+  valuevar = JOBCOUNT_FT, 
+  timevar = DATE, 
+  # start_time = 2008,
+  # end_time = 2021,
+  start_time = 2015,
+  end_time = 2021,
+  compasspoints_to_display = c('NE','SE'),
+  # compasspoints_to_display = c('NW','SW'),
+  # compasspoints_to_display = c('NE','NW'),
+  x_regionnames = 'South Yorkshire',
+  y_regionnames = jobs$GEOGRAPHY_NAME[jobs$GEOGRAPHY_NAME!='South Yorkshire']
+)
+
+#add these after
+p <- p + 
+  xlab('South Yorkshire GVA proportions') +
+  ylab('Rest of UK (minus SY) GVA proportions') +
+  scale_y_log10() +
+  scale_x_log10() +
+  coord_fixed(xlim = c(0.1,11), ylim = c(0.1,11))# good for log scale
+
+p
+
+```
+
+
+
+## Zooming in to 5 digit SIC job count change #1/2
+
+Here and in the next slide: zooming into the smaller 5-digit SIC categories, looking just at 5-digit sectors that (a) have a job LQ > 1 in SY and increasing proportionally in SY.
+
+This slide: increasing in SY, decreasing elsewhere.
+
+This and the next slide use 5 digit SICs to see which subsectors are growing, and then sums them to get a broader sectoral picture...
+
+```{r}
+itl2.lq <- readRDS('../data/bres_5digit_fulltime.rds') %>% 
+   mutate(
+    INDUSTRY_NAME_REDUCED = gsub(x = INDUSTRY_NAME, pattern = 'of |and |acture|acturing| activities| equipment| products', replacement = '')
+  )
+
+#range(itl2.lq$DATE)
+
+#Range of sectors to display
+sectors.to.display <- itl2.lq %>% 
+  ungroup() %>% 
+  filter(
+    GEOGRAPHY_NAME == 'South Yorkshire',
+    DATE == 2021,
+    LQ > 1,
+    sector_regional_proportion * 100 > 0.25
+  ) %>% 
+  select(INDUSTRY_NAME_REDUCED) %>% 
+  pull %>% 
+  unique
+
+
+
+p <- twod_proportionplot(
+  df = itl2.lq,
+  regionvar = GEOGRAPHY_NAME,
+  category_var = INDUSTRY_NAME_REDUCED, 
+  valuevar = COUNT, 
+  timevar = DATE, 
+  start_time = 2015,
+  end_time = 2021,
+  compasspoints_to_display = c('SE'),
+  # compasspoints_to_display = c('NW','SW'),
+  # compasspoints_to_display = c('NE','NW'),
+  x_regionnames = 'South Yorkshire',
+  y_regionnames = itl2.lq$GEOGRAPHY_NAME[itl2.lq$GEOGRAPHY_NAME!='South Yorkshire'],
+  sectors_to_display = sectors.to.display
+)
+
+#add these after
+p <- p + 
+  xlab('South Yorkshire FT job count proportions') +
+  ylab('Rest of UK (minus SY) GVA proportions') +
+  scale_y_log10() +
+  scale_x_log10() +
+  coord_fixed(xlim = c(0.1,11), ylim = c(0.1,11))# good for log scale
+
+p
+
+
+```
+
+## Zooming in to 5 digit SIC job count change #2/2
+
+This slide: increasing in SY & increasing elsewhere.
+
+The next slide sums the last two into SIC section letters, to see where SY-concentrated and growing job counts are big-picture largest. Health, transport/storage and manufacturing are in the top three in terms of their percent of jobs.
+
+
+```{r}
+# debugonce(twod_proportionplot)
+p <- twod_proportionplot(
+  df = itl2.lq,
+  regionvar = GEOGRAPHY_NAME,
+  category_var = INDUSTRY_NAME_REDUCED, 
+  valuevar = COUNT, 
+  timevar = DATE, 
+  start_time = 2015,
+  end_time = 2021,
+  compasspoints_to_display = c('NE'),
+  # compasspoints_to_display = c('NW','SW'),
+  # compasspoints_to_display = c('NE','NW'),
+  x_regionnames = 'South Yorkshire',
+  y_regionnames = itl2.lq$GEOGRAPHY_NAME[itl2.lq$GEOGRAPHY_NAME!='South Yorkshire'],
+  sectors_to_display = sectors.to.display
+)
+
+#add these after
+p <- p + 
+  xlab('South Yorkshire FT job count proportions') +
+  ylab('Rest of UK (minus SY) GVA proportions') +
+  scale_y_log10() +
+  scale_x_log10() +
+  coord_fixed(xlim = c(0.1,11), ylim = c(0.1,11))# good for log scale
+
+p
+
+
+```
+
+
+
+## Summing jobs for 5-digit SICs, LQ > 1 and growing in proportion in SY
+
+Next slide's table is the previous two slides' sectors, binned into SIC sections
+
+---
+
+```{r}
+#Get compass points, so can filter down to the ones we want to examine
+compasspoints <- return_compasspoints(df = itl2.lq,
+  regionvar = GEOGRAPHY_NAME,
+  category_var = INDUSTRY_NAME_REDUCED, 
+  valuevar = COUNT, 
+  timevar = DATE, 
+  start_time = 2015,
+  end_time = 2021,
+  x_regionnames = 'South Yorkshire',
+  y_regionnames = itl2.lq$GEOGRAPHY_NAME[itl2.lq$GEOGRAPHY_NAME!='South Yorkshire']
+)
+
+
+#Already filtered down to a list of sectors above with sectors.to.display
+#But can filter down further now with extra compass criteria
+# sectors.to.examine <- itl2.lq %>% 
+#   ungroup() %>% 
+#   filter(
+#     GEOGRAPHY_NAME == 'South Yorkshire',
+#     DATE == 2021,
+#     # LQ > 1,
+#     sector_regional_proportion * 100 > 0.25,
+#     INDUSTRY_NAME_REDUCED %in% compasspoints$INDUSTRY_NAME_REDUCED[compasspoints$compass %in% c('NE','SE')]
+  # ) 
+# %>% 
+#   select(INDUSTRY_NAME_REDUCED) %>% 
+#   pull %>% 
+#   unique
+
+#Now, see which 2 digit categories those are in, and summarise
+#How many unique 2SICs are there / how many in each?
+# sectors.to.examine %>% 
+#   mutate(
+#     INDUSTRY_NAME_REDUCED = gsub(x = SIC_2DIGIT_NAME, pattern = 'of |and |acture|acturing| activities| equipment| products', replacement = ''),
+#     INDUSTRY_NAME_REDUCED = substr(INDUSTRY_NAME_REDUCED,start = 6, stop = 60)
+#   ) %>% 
+#   group_by(INDUSTRY_NAME_REDUCED) %>% 
+#   summarise(sectorcount = n(), job_percent = sum(sector_regional_proportion)*100) %>% 
+#   arrange(-job_percent) %>% 
+#   print(n = 30)
+
+#Industrial groups
+# sic_letters <- read_csv('https://raw.githubusercontent.com/saintsjd/sic4-list/master/sic-codes.csv')
+# saveRDS(sic_letters,'local/data/sicletterlookup.rds')
+# sic_letters <- readRDS('local/data/sicletterlookup.rds')
+
+#Doing manually...
+# write_csv(itl2.lq %>% ungroup() %>% select(SIC_2DIGIT_CODE,SIC_2DIGIT_NAME) %>% distinct, 'local/data/2digitSICcodes.csv')
+sic.sections <- read_csv('../data/2digitSICcodes_w_sections.csv')
+
+#Check match... tick, import/export didn't break anything
+# table(sic.sections$SIC_2DIGIT_CODE %in% itl2.lq$SIC_2DIGIT_CODE)
+
+itl2.lq <- itl2.lq %>% 
+  left_join(
+    sic.sections %>% select(-SIC_2DIGIT_NAME),
+    by = 'SIC_2DIGIT_CODE'
+  )
+
+#Already filtered down to a list of sectors above with sectors.to.display
+#But can filter down further now with extra compass criteria
+sectors.to.examine <- itl2.lq %>% 
+  ungroup() %>% 
+  filter(
+    GEOGRAPHY_NAME == 'South Yorkshire',
+    DATE == 2021,
+    LQ > 1,
+    sector_regional_proportion * 100 > 0.25,
+    INDUSTRY_NAME_REDUCED %in% compasspoints$INDUSTRY_NAME_REDUCED[compasspoints$compass %in% c('NE','SE')]
+  ) 
+
+
+rez <- sectors.to.examine %>% 
+  mutate(
+    INDUSTRY_NAME_REDUCED = gsub(x = SIC_2DIGIT_NAME, pattern = 'of |and |acture|acturing| activities| equipment| products', replacement = ''),
+    INDUSTRY_NAME_REDUCED = substr(INDUSTRY_NAME_REDUCED,start = 6, stop = 60)
+  ) %>% 
+  group_by(SIC_SECTION_NAME) %>% 
+  summarise(`sector count` = n(), job_percent = round(sum(sector_regional_proportion)*100,2)) %>% 
+  arrange(-job_percent) 
+
+ft <- flextable(rez) %>% 
+  width(width = 1.5) %>%
+  fontsize(size = 9) %>% 
+  fontsize(size = 9, part = 'header') %>% 
+  padding(padding = 0, part = "all") %>% 
+  autofit()
+  
+ft
+
+
+```
+
+
+---
+
+# GVA LOCATION QUOTIENTS: SY v GREATER MANCHESTER, LIVERPOOL CITY REGION & WEST YORKSHIRE
+
+---
+
+## South Yorkshire LQ > 1 in 2021 vs WY, LCR & GM, LQ trends for 11-21
+
+This and the next slide compare South Yorkshire to Greater Manchester, Liverpool City Region & West Yorkshire using raw GVA LQs - how relatively large each sector is compared to the UK as a whole, and where the three other regions compare. 
+
+Here, the 3 other regions are mostly less concentrated in the sectors that South Yorkshire is relatively stronger in, GVA-wise (notable exceptions: WY for urniture, LCR for health). 
+
+Generally, South Yorkshire's relative GVA strengths are smaller in these comparators.
+
+```{r SY_v_3places_LQplot_laterTrends, fig.width = 10, fig.height = 10}
+#Use
+#LQ_slopes %>% filter(slope==0)
+#To see which didn't get slopes (only 8 rows in the current data)
+LQ_slopes <- compute_slope_or_zero(
+  data = itl2.cp %>% filter(year %in% 2011:2021), 
+  ITL_region_name, SIC07_description,#slopes will be found within whatever grouping vars are added here
+  y = LQ_log, x = year)
+
+#Filter down to a single year
+yeartoplot <- itl2.cp %>% filter(year == 2021)
+
+#Add slopes into data to get LQ plots
+yeartoplot <- yeartoplot %>% 
+  left_join(
+    LQ_slopes,
+    by = c('ITL_region_name','SIC07_description')
+  )
+
+#Get min/max values for LQ over time as well, for each sector and place, to add as bars so range of sector is easy to see
+minmaxes <- itl2.cp %>% 
+  group_by(SIC07_description,ITL_region_name) %>% 
+  summarise(
+    min_LQ_all_time = min(LQ),
+    max_LQ_all_time = max(LQ)
+  )
+
+#Join min and max
+yeartoplot <- yeartoplot %>% 
+  left_join(
+    minmaxes,
+    by = c('ITL_region_name','SIC07_description')
+  )
+
+
+place = 'South Yorkshire'
+
+#Get a vector with sectors ordered by the place's LQs, descending order
+#Use this next to factor-order the SIC sectors
+sectorLQorder <- itl2.cp %>% filter(
+  ITL_region_name == place,
+  year == 2021,
+  # LQ < 1
+  LQ > 1
+) %>% 
+  arrange(-LQ) %>% 
+  select(INDUSTRY_NAME_REDUCED) %>% 
+  pull()
+
+#Keep only sectors that were LQ > 1 from the main plotting df
+yeartoplot <- yeartoplot %>% filter(
+  # SIC07_description %in% lq.selection$SIC07_description
+  INDUSTRY_NAME_REDUCED %in% sectorLQorder
+)
+
+#Redo factor order just with subset (otherwise can cause problems)
+#Might not need the baseplot if doing this. Or, shouldn't actually.
+#That was mainly to get factors to behave
+yeartoplot$SIC07_description <- factor(yeartoplot$SIC07_description,
+                                       levels = sectorLQorder,
+                                       ordered = T)
+
+yeartoplot$INDUSTRY_NAME_REDUCED <- factor(yeartoplot$INDUSTRY_NAME_REDUCED,
+                                       levels = sectorLQorder,
+                                       ordered = T)
+
+#Repeat but overlay other places
+# debugonce(LQ_baseplot)
+p <- LQ_baseplot(df = yeartoplot, alpha = 0, sector_name = INDUSTRY_NAME_REDUCED, 
+                 LQ_column = LQ, change_over_time = slope)
+
+p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
+                            placename = 'Greater Manchester', shapenumber = 23,
+                            region_name = ITL_region_name,#The next four, the function needs them all 
+                            sector_name = INDUSTRY_NAME_REDUCED, change_over_time = slope, LQ_column = LQ)
+
+p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
+                            placename = 'Merseyside', shapenumber = 22,
+                            region_name = ITL_region_name,
+                            sector_name = INDUSTRY_NAME_REDUCED, change_over_time = slope, LQ_column = LQ)
+ 
+p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p,
+                            placename = 'West Yorkshire', shapenumber = 21,
+                            region_name = ITL_region_name,
+                            sector_name = INDUSTRY_NAME_REDUCED, change_over_time = slope, LQ_column = LQ)
+
+p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
+                            placename = place, shapenumber = 16,
+                            min_LQ_all_time = min_LQ_all_time,max_LQ_all_time = max_LQ_all_time,#Include minmax
+                            value_column = value, sector_regional_proportion = sector_regional_proportion,#include numbers
+                            region_name = ITL_region_name,
+                            sector_name = INDUSTRY_NAME_REDUCED, change_over_time = slope, LQ_column = LQ)
+p <- p + 
+  annotate(
+    "text",
+    label = "South Yorkshire: solid circles\nGreater Manchester: diamonds\nMerseyside: squares\nWest Yorkshire: empty circles",
+    x = 0.05, y = 10,
+    
+  )
+
+p
+
+
+```
+
+
+## South Yorkshire LQ < 1 in 2021 vs WY, LCR & GM, LQ trends for 11-21
+
+Conversely, in sectors where South Yorkshire is less concentrated than average, there's a much wider variability across the other four places. South Yorkshire seems distinct in its specialisms.
+
+```{r SY_v_3places_LQplot_laterTrendsdropping, fig.width = 11, fig.height = 11}
+#Use
+#LQ_slopes %>% filter(slope==0)
+#To see which didn't get slopes (only 8 rows in the current data)
+LQ_slopes <- compute_slope_or_zero(
+  data = itl2.cp %>% filter(year %in% 2011:2021), 
+  ITL_region_name, SIC07_description,#slopes will be found within whatever grouping vars are added here
+  y = LQ_log, x = year)
+
+#Filter down to a single year
+yeartoplot <- itl2.cp %>% filter(year == 2021)
+
+#Add slopes into data to get LQ plots
+yeartoplot <- yeartoplot %>% 
+  left_join(
+    LQ_slopes,
+    by = c('ITL_region_name','SIC07_description')
+  )
+
+#Get min/max values for LQ over time as well, for each sector and place, to add as bars so range of sector is easy to see
+minmaxes <- itl2.cp %>% 
+  group_by(SIC07_description,ITL_region_name) %>% 
+  summarise(
+    min_LQ_all_time = min(LQ),
+    max_LQ_all_time = max(LQ)
+  )
+
+#Join min and max
+yeartoplot <- yeartoplot %>% 
+  left_join(
+    minmaxes,
+    by = c('ITL_region_name','SIC07_description')
+  )
+
+
+place = 'South Yorkshire'
+
+#Get a vector with sectors ordered by the place's LQs, descending order
+#Use this next to factor-order the SIC sectors
+sectorLQorder <- itl2.cp %>% filter(
+  ITL_region_name == place,
+  year == 2021,
+  LQ < 1
+  # LQ > 1
+) %>% 
+  arrange(-LQ) %>% 
+  select(INDUSTRY_NAME_REDUCED) %>% 
+  pull()
+
+#Keep only sectors that were LQ > 1 from the main plotting df
+yeartoplot <- yeartoplot %>% filter(
+  # SIC07_description %in% lq.selection$SIC07_description
+  INDUSTRY_NAME_REDUCED %in% sectorLQorder
+)
+
+#Redo factor order just with subset (otherwise can cause problems)
+#Might not need the baseplot if doing this. Or, shouldn't actually.
+#That was mainly to get factors to behave
+yeartoplot$SIC07_description <- factor(yeartoplot$SIC07_description,
+                                       levels = sectorLQorder,
+                                       ordered = T)
+
+yeartoplot$INDUSTRY_NAME_REDUCED <- factor(yeartoplot$INDUSTRY_NAME_REDUCED,
+                                       levels = sectorLQorder,
+                                       ordered = T)
+
+#Repeat but overlay other places
+# debugonce(LQ_baseplot)
+p <- LQ_baseplot(df = yeartoplot, alpha = 0, sector_name = INDUSTRY_NAME_REDUCED, 
+                 LQ_column = LQ, change_over_time = slope)
+
+p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
+                            placename = 'Greater Manchester', shapenumber = 23,
+                            region_name = ITL_region_name,#The next four, the function needs them all 
+                            sector_name = INDUSTRY_NAME_REDUCED, change_over_time = slope, LQ_column = LQ)
+
+p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
+                            placename = 'Merseyside', shapenumber = 22,
+                            region_name = ITL_region_name,
+                            sector_name = INDUSTRY_NAME_REDUCED, change_over_time = slope, LQ_column = LQ)
+ 
+p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p,
+                            placename = 'West Yorkshire', shapenumber = 21,
+                            region_name = ITL_region_name,
+                            sector_name = INDUSTRY_NAME_REDUCED, change_over_time = slope, LQ_column = LQ)
+
+p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
+                            placename = place, shapenumber = 16,
+                            min_LQ_all_time = min_LQ_all_time,max_LQ_all_time = max_LQ_all_time,#Include minmax
+                            value_column = value, sector_regional_proportion = sector_regional_proportion,#include numbers
+                            region_name = ITL_region_name,
+                            sector_name = INDUSTRY_NAME_REDUCED, change_over_time = slope, LQ_column = LQ)
+p <- p + 
+  annotate(
+    "text",
+    label = "South Yorkshire: solid circles\nGreater Manchester: diamonds\nMerseyside: squares\nWest Yorkshire: empty circles",
+    x = 0.05, y = 10,
+    
+  )
+
+p
+
+
+```
+
+# LOOKING FOR SECTORS WITH SIGNIFICANT CHANGES IN GVA PER FULL TIME WORKER
+
+## SOUTH YORKSHIRE GVA PER FULL TIME WORKER, SIGNIFICANT **POSITIVE** CHANGE 2015-2021 #1/2
+
+GVA per worker data is volatile, but it is possible to pull out some sectors where it has likely increased (2015-2021). This chart: 90% confidence intervals for increases in GVA per worker for SY. Black = doesn't cross zero (some confidence value is positive), orange = edge case (e.g. education and fabricated metals), grey = likely not a positive trend (but geographical patterns may suggest differently, see below.)
+
+Numbers next to sector names show what % of other places have a significant neg or pos change in GVA per worker). So e.g. finance is growing in SY but is sig in 65% of other places too.
+
+Positive per worker GVA growth is a mix of tradeable and not. wholesale trade is increasing across the country, nearly everywhere. Services to buildings and landscapes, South Yorkshire is growing; a lot of other places are not.
+
+
+```{r, fig.width = 10, fig.height = 10}
+gva_jobs5 <- readRDS('../data/gva_per_worker_from5digitSIC_BRESsums.rds')
+
+#Log it up
+gva_jobs5 <- gva_jobs5 %>% 
+  mutate(
+    log_GVA_aspercentofGBtotal_perFTjob = log(GVA_aspercentofGBtotal_perFTjob),
+    log_GVA_aspercentofGBtotal_perEMPLOYMENT = log(GVA_aspercentofGBtotal_perEMPLOYMENT)
+  )
+
+#FT employees
+# FT_slopes <- get_slope_and_se_safely(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_NAME, y = "GVA_aspercentofGBtotal_perFTjob", x = "DATE") %>%
+FT_slopes <- get_slope_and_se_safely(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_NAME, y = "log_GVA_aspercentofGBtotal_perFTjob", x = "DATE") %>%
+  mutate(
+    min95 = slope - (se * 1.96),
+    max95 = slope + (se * 1.96),
+    min90 = slope - (se * 1.645),
+    max90 = slope + (se * 1.645),
+    crosseszero95 = min95 * max95 < 0,#mark if crosses zero
+    crosseszero90 = min90 * max90 < 0,#mark if crosses zero
+    slopepolarity = ifelse(slope > 0, 'increasing', 'decreasing')
+  )
+
+
+gvax <- gva_jobs5 %>% filter(DATE == 2021) %>% 
+  left_join(
+    FT_slopes,
+    by = c('INDUSTRY_NAME','GEOGRAPHY_NAME')
+  ) %>% mutate(
+    INDUSTRY_NAME_REDUCED = gsub(x = INDUSTRY_NAME, pattern = 'of |and |acture|acturing| activities| equipment| products', replacement = '')
+  )
+
+place = 'South Yorkshire'
+# place = 'Greater Manchester'
+# place = 'West Yorkshire'
+# place = 'Inner London - West'
+
+gva_sy <- gvax %>% 
+  filter(
+    GEOGRAPHY_NAME == place,
+    !is.na(slope),
+    slope > 0
+    ) 
+
+
+#colour edge cases
+gva_sy <- gva_sy %>% 
+  mutate(
+    casecolour = case_when(
+      !crosseszero90 ~ 'black',
+      slopepolarity == 'decreasing' & max90 * 100 < 1 ~ 'orange',
+      slopepolarity == 'increasing' & min90 * 100 > -1 ~ 'orange',
+      .default = 'gray'
+    )
+  )
+
+b <- gva_sy$casecolour[order(gva_sy$slope)]
+
+#Proportions of each
+gvax_props <- gvax %>% 
+  group_by(INDUSTRY_NAME) %>% 
+  summarise(
+    prop.sig90.dec = mean(slopepolarity=='decreasing' & !crosseszero90, na.rm = T),
+    prop.sig90.inc = mean(slopepolarity=='increasing' & !crosseszero90, na.rm = T)
+  ) %>% 
+  mutate(
+    INDUSTRY_NAME_REDUCED = gsub(x = INDUSTRY_NAME, pattern = 'of |and |acture|acturing| activities| equipment| products', replacement = '')
+  )
+
+#For adding in proportions of other places with sig change
+gva_sy <- gva_sy %>% 
+  left_join(
+    gvax_props %>% select(-INDUSTRY_NAME),
+    by = 'INDUSTRY_NAME_REDUCED'
+  )
+
+#90% CIs
+#Facetting doesn't work for the axis text colouring
+ggplot(gva_sy, 
+       aes(x = slope *100, 
+           y = fct_reorder(paste0(INDUSTRY_NAME_REDUCED," (<",round(prop.sig90.dec*100,0),"%,>",round(prop.sig90.inc*100,0),"%, SY GVA ",round(sector_regional_proportion*100,1),"%)"),slope), 
+           colour = casecolour, size = casecolour)) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(xmin = min90*100, xmax = max90*100)) +
+  geom_vline(xintercept = 0, colour = 'red', alpha = 0.5) +
+  scale_size_manual(values = c(1,1,0.5)) +
+  scale_colour_manual(values = c('black','grey','orange')) +
+  # scale_colour_manual(values = c('firebrick4','gray30')) +
+  theme(axis.text.y = element_text(colour = b)) +
+  guides(colour = F, size = F) +
+  ylab("") +
+  xlab("Approx. % change per year in GVA per full time worker")
+
+
+
+```
+
+
+## SOUTH YORKSHIRE GVA PER FULL TIME WORKER, SIGNIFICANT **NEGATIVE** CHANGE 2015-2021 #2/2
+
+In the negative trends (GVA per worker has dropped over time), no huge surprises. Health is an edge case - see the map below, it has been growing elsewhere in a cluster around South Yorkshire, so a question about why not in SY...?
+
+Note food/beverage services - pattern is everywhere, not just SY.
+
+```{r, fig.width = 10, fig.height = 10}
+gva_jobs5 <- readRDS('../data/gva_per_worker_from5digitSIC_BRESsums.rds')
+
+#Log it up
+gva_jobs5 <- gva_jobs5 %>% 
+  mutate(
+    log_GVA_aspercentofGBtotal_perFTjob = log(GVA_aspercentofGBtotal_perFTjob),
+    log_GVA_aspercentofGBtotal_perEMPLOYMENT = log(GVA_aspercentofGBtotal_perEMPLOYMENT)
+  )
+
+#FT employees
+# FT_slopes <- get_slope_and_se_safely(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_NAME, y = "GVA_aspercentofGBtotal_perFTjob", x = "DATE") %>%
+FT_slopes <- get_slope_and_se_safely(data = gva_jobs5, GEOGRAPHY_NAME, INDUSTRY_NAME, y = "log_GVA_aspercentofGBtotal_perFTjob", x = "DATE") %>%
+  mutate(
+    min95 = slope - (se * 1.96),
+    max95 = slope + (se * 1.96),
+    min90 = slope - (se * 1.645),
+    max90 = slope + (se * 1.645),
+    crosseszero95 = min95 * max95 < 0,#mark if crosses zero
+    crosseszero90 = min90 * max90 < 0,#mark if crosses zero
+    slopepolarity = ifelse(slope > 0, 'increasing', 'decreasing')
+  )
+
+
+gvax <- gva_jobs5 %>% filter(DATE == 2021) %>% 
+  left_join(
+    FT_slopes,
+    by = c('INDUSTRY_NAME','GEOGRAPHY_NAME')
+  ) %>% mutate(
+    INDUSTRY_NAME_REDUCED = gsub(x = INDUSTRY_NAME, pattern = 'of |and |acture|acturing| activities| equipment| products', replacement = '')
+  )
+
+place = 'South Yorkshire'
+# place = 'Greater Manchester'
+# place = 'West Yorkshire'
+# place = 'Inner London - West'
+
+gva_sy <- gvax %>% 
+  filter(
+    GEOGRAPHY_NAME == place,
+    !is.na(slope),
+    slope < 0
+    ) 
+
+
+#colour edge cases
+gva_sy <- gva_sy %>% 
+  mutate(
+    casecolour = case_when(
+      !crosseszero90 ~ 'black',
+      slopepolarity == 'decreasing' & max90 * 100 < 1 ~ 'orange',
+      slopepolarity == 'increasing' & min90 * 100 > -1 ~ 'orange',
+      .default = 'gray'
+    )
+  )
+
+b <- gva_sy$casecolour[order(gva_sy$slope)]
+
+
+gvax_props <- gvax %>% 
+  group_by(INDUSTRY_NAME) %>% 
+  summarise(
+    prop.sig90.dec = mean(slopepolarity=='decreasing' & !crosseszero90, na.rm = T),
+    prop.sig90.inc = mean(slopepolarity=='increasing' & !crosseszero90, na.rm = T)
+  ) %>% 
+  mutate(
+    INDUSTRY_NAME_REDUCED = gsub(x = INDUSTRY_NAME, pattern = 'of |and |acture|acturing| activities| equipment| products', replacement = '')
+  )
+
+#For adding in proportions of other places with sig change
+gva_sy <- gva_sy %>% 
+  left_join(
+    gvax_props %>% select(-INDUSTRY_NAME),
+    by = 'INDUSTRY_NAME_REDUCED'
+  )
+
+#90% CIs
+#Facetting doesn't work for the axis text colouring
+ggplot(gva_sy, 
+       aes(x = slope *100, 
+            y = fct_reorder(paste0(INDUSTRY_NAME_REDUCED," (<",round(prop.sig90.dec*100,0),"%,>",round(prop.sig90.inc*100,0),"%, SY GVA ",round(sector_regional_proportion*100,1),"%)"),slope),  
+           colour = casecolour, size = casecolour)) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(xmin = min90*100, xmax = max90*100)) +
+  geom_vline(xintercept = 0, colour = 'red', alpha = 0.5) +
+  scale_size_manual(values = c(1,1,0.5)) +
+  scale_colour_manual(values = c('black','grey','orange')) +
+  # scale_colour_manual(values = c('firebrick4','gray30')) +
+  theme(axis.text.y = element_text(colour = b)) +
+  guides(colour = F, size = F) +
+  ylab("") +
+  xlab("Approx. % change per year in GVA per full time worker")
+
+
+
+```
+
+
+## MAP: Change in GVA per worker. Fabricated metals
+
+Blue outlined areas have 90% confidence intervals above/below zero.
+
+Edge case for GVA per worker growth in South Yorkshire - regional cluster strengths, but split East West.
+
+
+```{r, fig.width = 7, fig.height = 12}
+itl2.geo <- st_read('../data/geographies/International_Territorial_Level_2_January_2021_UK_BFE_V2_2022_-4735199360818908762/ITL2_JAN_2021_UK_BFE_V2.shp', quiet = T) %>% st_simplify(preserveTopology = T, dTolerance = 100)
+
+#Fix names
+#Note: no Northern Ireland because of BRES link, which is GB only
+itl2.geo$ITL221NM[itl2.geo$ITL221NM == 'Northumberland, and Tyne and Wear'] <- 'Northumberland and Tyne and Wear'
+itl2.geo$ITL221NM[itl2.geo$ITL221NM == 'West Wales and The Valleys'] <- 'West Wales'
+
+#Join map data to a subset of the GVA data
+sector = gvax$INDUSTRY_NAME_REDUCED[grepl(pattern = 'fabricated', x = gvax$INDUSTRY_NAME_REDUCED, ignore.case = T)] %>% unique
+
+map <- itl2.geo %>% 
+  right_join(
+    gvax %>% filter(INDUSTRY_NAME_REDUCED == sector),
+    by = c('ITL221NM'='GEOGRAPHY_NAME')
+  ) %>% mutate(slope100 = slope * 100)
+
+
+tm_shape(map) +
+  tm_polygons('slope100', n = 9, title="") +
+  tm_layout(title = sector, legend.bg.color = 'white', legend.bg.alpha = 0.5) +
+  tm_shape(
+    map %>% filter(!crosseszero90)
+  ) +
+  tm_borders(col='blue', lwd = 3)
+  
+```
+
+
+## MAP: Change in GVA per worker. Health
+
+Heath clearly growth potential, though not currently appearing to grow per worker in South Yorkshire.
+
+```{r, fig.width = 7, fig.height = 12}
+#Join map data to a subset of the GVA data
+sector = gvax$INDUSTRY_NAME_REDUCED[grepl(pattern = 'health', x = gvax$INDUSTRY_NAME_REDUCED, ignore.case = T)] %>% unique
+
+map <- itl2.geo %>% 
+  right_join(
+    gvax %>% filter(INDUSTRY_NAME_REDUCED == sector),
+    by = c('ITL221NM'='GEOGRAPHY_NAME')
+  ) %>% mutate(slope100 = slope * 100)
+
+
+tm_shape(map) +
+  tm_polygons('slope100', n = 9, title="") +
+  tm_layout(title = sector, legend.bg.color = 'white', legend.bg.alpha = 0.5) +
+  tm_shape(
+    map %>% filter(!crosseszero90)
+  ) +
+  tm_borders(col='blue', lwd = 3)
+  
+```
+
+## MAP: Change in GVA per worker. Scientific research & development
+
+Scientific research & development: though South Yorkshire entirely in "no significant GVA per worker growth". surrounding strong growth suggests it's possible to change that, plus...
+
+```{r, fig.width = 7, fig.height = 12}
+#Join map data to a subset of the GVA data
+sector = gvax$INDUSTRY_NAME_REDUCED[grepl(pattern = 'scientific research', x = gvax$INDUSTRY_NAME_REDUCED, ignore.case = T)] %>% unique
+
+map <- itl2.geo %>% 
+  right_join(
+    gvax %>% filter(INDUSTRY_NAME_REDUCED == sector),
+    by = c('ITL221NM'='GEOGRAPHY_NAME')
+  ) %>% mutate(slope100 = slope * 100)
+
+
+tm_shape(map) +
+  tm_polygons('slope100', n = 9, title="") +
+  tm_layout(title = sector, legend.bg.color = 'white', legend.bg.alpha = 0.5) +
+  tm_shape(
+    map %>% filter(!crosseszero90)
+  ) +
+  tm_borders(col='blue', lwd = 3)
+  
+```
+
+## MAP: Change in GVA per worker. Other professional, scientific technical
+
+Other professional, scientific technical: South Yorkshire appears to again be in a cluster spread across central England (significant positive change in neighbouring areas, not in SY).
+
+```{r, fig.width = 7, fig.height = 12}
+#Join map data to a subset of the GVA data
+sector = gvax$INDUSTRY_NAME_REDUCED[grepl(pattern = 'scientific tech', x = gvax$INDUSTRY_NAME_REDUCED, ignore.case = T)] %>% unique
+
+map <- itl2.geo %>% 
+  right_join(
+    gvax %>% filter(INDUSTRY_NAME_REDUCED == sector),
+    by = c('ITL221NM'='GEOGRAPHY_NAME')
+  ) %>% mutate(slope100 = slope * 100)
+
+
+tm_shape(map) +
+  tm_polygons('slope100', n = 9, title="") +
+  tm_layout(title = sector, legend.bg.color = 'white', legend.bg.alpha = 0.5) +
+  tm_shape(
+    map %>% filter(!crosseszero90)
+  ) +
+  tm_borders(col='blue', lwd = 3)
+  
+```
+
+
+## MAP: Change in GVA per worker. Repair & installation of machinery & equipment
+
+Repair & installation of machinery & equipment: South Yorkshire doing well in a very mixed national picture.
+
+```{r, fig.width = 7, fig.height = 12}
+#Join map data to a subset of the GVA data
+sector = gvax$INDUSTRY_NAME_REDUCED[grepl(pattern = 'installation', x = gvax$INDUSTRY_NAME_REDUCED, ignore.case = T)] %>% unique
+
+map <- itl2.geo %>% 
+  right_join(
+    gvax %>% filter(INDUSTRY_NAME_REDUCED == sector),
+    by = c('ITL221NM'='GEOGRAPHY_NAME')
+  ) %>% mutate(slope100 = slope * 100)
+
+
+tm_shape(map) +
+  tm_polygons('slope100', n = 9, title="") +
+  tm_layout(title = sector, legend.bg.color = 'white', legend.bg.alpha = 0.5) +
+  tm_shape(
+    map %>% filter(!crosseszero90)
+  ) +
+  tm_borders(col='blue', lwd = 3)
+  
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# COMPARING SHEFFIELD VS BARNSLEY/DONCASTER ROTHERHAM GVA
+
+---
+
+## Sheffield vs Barnsley/Doncaster/Rotherham raw GVA LQ plots #1/2
+
+1: Sheffield raw GVA LQs (circles) comparing to B/D/R (diamonds). Things to note:
+
+Relatively smaller number of sectors relatively concentrated in Sheffield
+
+Quite a few with higher concentration in B/D/R.
+
+
+```{r}
+LQ_slopes <- get_slope_and_se_safely(
+  data = itl3.cp, 
+  ITL_region_name, SIC07_description,#slopes will be found within whatever grouping vars are added here
+  y = LQ_log, x = year)
+
+#Filter down to a single year
+yeartoplot <- itl3.cp %>% filter(year == 2021)
+
+#Add slopes into data to get LQ plots
+yeartoplot <- yeartoplot %>% 
+  left_join(
+    LQ_slopes,
+    by = c('ITL_region_name','SIC07_description')
+  )
+
+#Get min/max values for LQ over time as well, for each sector and place, to add as bars so range of sector is easy to see
+minmaxes <- itl3.cp %>% 
+  group_by(SIC07_description,ITL_region_name) %>% 
+  summarise(
+    min_LQ_all_time = min(LQ),
+    max_LQ_all_time = max(LQ)
+  )
+
+#Join min and max
+yeartoplot <- yeartoplot %>% 
+  left_join(
+    minmaxes,
+    by = c('ITL_region_name','SIC07_description')
+  )
+
+place = 'Sheffield'
+
+#Get a vector with sectors ordered by the place's LQs, descending order
+#Use this next to factor-order the SIC sectors
+sectorLQorder <- itl3.cp %>% filter(
+  ITL_region_name == place,
+  year == 2021
+) %>% 
+  arrange(-LQ) %>% 
+  select(SIC07_description) %>% 
+  pull()
+
+#Turn the sector column into a factor and order by LCR's LQs
+yeartoplot$SIC07_description <- factor(yeartoplot$SIC07_description, levels = sectorLQorder, ordered = T)
+
+# Reduce to SY LQ 1+
+lq.selection <- yeartoplot %>% filter(
+  ITL_region_name == place,
+  # slope > 1,#LQ grew relatively over time
+  LQ > 1
+)
+# 
+#Keep only sectors that were LQ > 1 from the main plotting df
+yeartoplot <- yeartoplot %>% filter(
+  SIC07_description %in% lq.selection$SIC07_description
+)
+
+
+p <- LQ_baseplot(df = yeartoplot, alpha = 0, sector_name = SIC07_description, 
+                 LQ_column = LQ, change_over_time = slope)
+
+p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
+                            placename = 'Barnsley, Doncaster and Rotherham', shapenumber = 23,
+                            region_name = ITL_region_name,
+                            sector_name = SIC07_description, change_over_time = slope, LQ_column = LQ)
+
+p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
+                            placename = place, shapenumber = 16,
+                            min_LQ_all_time = min_LQ_all_time,max_LQ_all_time = max_LQ_all_time,#Include minmax
+                            value_column = value, sector_regional_proportion = sector_regional_proportion,#include numbers
+                            region_name = ITL_region_name,
+                            sector_name = SIC07_description, change_over_time = slope, LQ_column = LQ)
+p <- p + 
+  annotate(
+    "text",
+    label = "Sheffield: Circles\nB/D/R: diamonds",
+    x = 0.05, y = 2,
+    
+  )
+
+p
+
+
+```
+
+
+## Sheffield vs Barnsley/Doncaster/Rotherham raw GVA LQ plots #2/2
+
+2: Looking at the GVA LQ data from B/D/R perspective:
+
+More sectors with relative raw GVA concentration in B/D/R. 
+
+Of those, many with equivalents in Sheffield that are less concentrated - exceptions being three largely public sectors (public admin/defence, health, education) and fabricated metal products.
+
+```{r}
+yeartoplot <- itl3.cp %>% filter(year == 2021)
+
+#Add slopes into data to get LQ plots
+yeartoplot <- yeartoplot %>% 
+  left_join(
+    LQ_slopes,
+    by = c('ITL_region_name','SIC07_description')
+  )
+
+#Get min/max values for LQ over time as well, for each sector and place, to add as bars so range of sector is easy to see
+minmaxes <- itl3.cp %>% 
+  group_by(SIC07_description,ITL_region_name) %>% 
+  summarise(
+    min_LQ_all_time = min(LQ),
+    max_LQ_all_time = max(LQ)
+  )
+
+#Join min and max
+yeartoplot <- yeartoplot %>% 
+  left_join(
+    minmaxes,
+    by = c('ITL_region_name','SIC07_description')
+  )
+
+place = yeartoplot$ITL_region_name[grepl(pattern = 'Rother',x = yeartoplot$ITL_region_name, ignore.case = T)] %>% unique
+
+#Get a vector with sectors ordered by the place's LQs, descending order
+#Use this next to factor-order the SIC sectors
+sectorLQorder <- itl3.cp %>% filter(
+  ITL_region_name == place,
+  year == 2021
+) %>% 
+  arrange(-LQ) %>% 
+  select(SIC07_description) %>% 
+  pull()
+
+#Turn the sector column into a factor and order by LCR's LQs
+yeartoplot$SIC07_description <- factor(yeartoplot$SIC07_description, levels = sectorLQorder, ordered = T)
+
+# Reduce to SY LQ 1+
+lq.selection <- yeartoplot %>% filter(
+  ITL_region_name == place,
+  # slope > 1,#LQ grew relatively over time
+  LQ > 1
+)
+# 
+#Keep only sectors that were LQ > 1 from the main plotting df
+yeartoplot <- yeartoplot %>% filter(
+  SIC07_description %in% lq.selection$SIC07_description
+)
+
+
+
+p <- LQ_baseplot(df = yeartoplot, alpha = 0, sector_name = SIC07_description, 
+                 LQ_column = LQ, change_over_time = slope)
+
+p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
+                            placename = 'Sheffield', shapenumber = 23,
+                            region_name = ITL_region_name,
+                            sector_name = SIC07_description, change_over_time = slope, LQ_column = LQ)
+
+p <- addplacename_to_LQplot(df = yeartoplot, plot_to_addto = p, 
+                            placename = place, shapenumber = 16,
+                            min_LQ_all_time = min_LQ_all_time,max_LQ_all_time = max_LQ_all_time,#Include minmax
+                            value_column = value, sector_regional_proportion = sector_regional_proportion,#include numbers
+                            region_name = ITL_region_name,
+                            sector_name = SIC07_description, change_over_time = slope, LQ_column = LQ)
+p <- p + 
+  annotate(
+    "text",
+    label = "B/D/R: Circles, Sheffield: diamonds",
+    x = 0.05, y = 2,
+    
+  )
+
+p
+
+
+
+
+```
+
+
+
+## 2017-21 GVA CHANGE 'NORTHEAST' (BOTH INCREASE) #1/4
+
+The next few slides compare GVA % changes between Sheffield vs Barnsley/Doncaster/Rotherham. Sectors to the right of the diagonal line are larger GVA-wise in Sheffield.
+
+These are sectors growing in GVA % in both. Telecoms in Sheffield is noteable: a very high % when disaggregated from South Yorkshire (more on that below).
+
+
+```{r, fig.width = 10, fig.height = 10}
+xplace = 'Sheffield'
+yplace = 'Barnsley, Doncaster and Rotherham'
+
+p <- twod_proportionplot(
+  df = itl3.cp,
+  regionvar = ITL_region_name,
+  category_var = INDUSTRY_NAME_REDUCED, 
+  valuevar = value, 
+  timevar = year, 
+  start_time = 2017,
+  end_time = 2021,
+  # start_time = 1998,
+  # end_time = 2007,
+  # compasspoints_to_display = c('SE','SW'),
+  compasspoints_to_display = c('NE'),
+  # compasspoints_to_display = c('SE'),
+  # compasspoints_to_display = c('NW'),
+  # compasspoints_to_display = c('SW'),
+  x_regionnames = xplace,
+  y_regionnames = yplace
+)
+
+#add these after
+p <- p + 
+  xlab(paste0(xplace,' GVA proportions')) +
+  ylab(paste0(yplace,' GVA proportions')) +
+  scale_y_log10() +
+  scale_x_log10() +
+  coord_fixed(xlim = c(0.1,11), ylim = c(0.1,11))# good for log scale
+
+p
+
+
+
+```
+
+## 2017-21 GVA CHANGE 'SOUTHEAST' (SHEFFIELD INCREASE, OTHERS DEC) #2/4
+
+Growing in Sheffield, shrinking in Barnsley/Doncaster/Rotherham. 
+
+```{r, fig.width = 10, fig.height = 10}
+xplace = 'Sheffield'
+yplace = 'Barnsley, Doncaster and Rotherham'
+
+p <- twod_proportionplot(
+  df = itl3.cp,
+  regionvar = ITL_region_name,
+  category_var = INDUSTRY_NAME_REDUCED, 
+  valuevar = value, 
+  timevar = year, 
+  start_time = 2017,
+  end_time = 2021,
+  # start_time = 1998,
+  # end_time = 2007,
+  # compasspoints_to_display = c('SE','SW'),
+  # compasspoints_to_display = c('NE'),
+  compasspoints_to_display = c('SE'),
+  # compasspoints_to_display = c('NW'),
+  # compasspoints_to_display = c('SW'),
+  x_regionnames = xplace,
+  y_regionnames = yplace
+)
+
+#add these after
+p <- p + 
+  xlab(paste0(xplace,' GVA proportions')) +
+  ylab(paste0(yplace,' GVA proportions')) +
+  scale_y_log10() +
+  scale_x_log10() +
+  coord_fixed(xlim = c(0.1,11), ylim = c(0.1,11))# good for log scale
+
+p
+
+
+
+```
+
+## 2017-21 GVA CHANGE 'NORTHWEST' (3 PLACES INCREASE, SHEFFIELD DEC) #3/4
+
+Growing sectors in Barnsley/Doncaster/Rotherham, shrinking in Sheffield - three that are concentrated in Barnsley/Doncaster/Rotherham, including a growing manufacturing sector (manuf wood paper printing).
+
+```{r, fig.width = 10, fig.height = 10}
+xplace = 'Sheffield'
+yplace = 'Barnsley, Doncaster and Rotherham'
+
+p <- twod_proportionplot(
+  df = itl3.cp,
+  regionvar = ITL_region_name,
+  category_var = INDUSTRY_NAME_REDUCED, 
+  valuevar = value, 
+  timevar = year, 
+  start_time = 2017,
+  end_time = 2021,
+  # start_time = 1998,
+  # end_time = 2007,
+  # compasspoints_to_display = c('SE','SW'),
+  # compasspoints_to_display = c('NE'),
+  # compasspoints_to_display = c('SE'),
+  compasspoints_to_display = c('NW'),
+  # compasspoints_to_display = c('SW'),
+  x_regionnames = xplace,
+  y_regionnames = yplace
+)
+
+#add these after
+p <- p + 
+  xlab(paste0(xplace,' GVA proportions')) +
+  ylab(paste0(yplace,' GVA proportions')) +
+  scale_y_log10() +
+  scale_x_log10() +
+  coord_fixed(xlim = c(0.1,11), ylim = c(0.1,11))# good for log scale
+
+p
+
+
+
+```
+
+## 2017-21 GVA CHANGE 'SOUTHWEST' (BOTH DECREASE) #4/4
+
+Shrinking in both, a mix of concentrations (professional, scientific, technical shrinking is notable?)
+
+```{r, fig.width = 10, fig.height = 10}
+xplace = 'Sheffield'
+yplace = 'Barnsley, Doncaster and Rotherham'
+
+p <- twod_proportionplot(
+  df = itl3.cp,
+  regionvar = ITL_region_name,
+  category_var = INDUSTRY_NAME_REDUCED, 
+  valuevar = value, 
+  timevar = year, 
+  start_time = 2017,
+  end_time = 2021,
+  # start_time = 1998,
+  # end_time = 2007,
+  # compasspoints_to_display = c('SE','SW'),
+  # compasspoints_to_display = c('NE'),
+  # compasspoints_to_display = c('SE'),
+  # compasspoints_to_display = c('NW'),
+  compasspoints_to_display = c('SW'),
+  x_regionnames = xplace,
+  y_regionnames = yplace
+)
+
+#add these after
+p <- p + 
+  xlab(paste0(xplace,' GVA proportions')) +
+  ylab(paste0(yplace,' GVA proportions')) +
+  scale_y_log10() +
+  scale_x_log10() +
+  coord_fixed(xlim = c(0.1,11), ylim = c(0.1,11))# good for log scale
+
+p
+
+
+
+```
+
+
+
+## Sheffield GVA change 2017-21, significant POSITIVE slopes #1/4
+
+Significant (95% confidence intervals) changes in raw GVA over time for Sheffield, increases in this slide. Health signficant here where it isn't in B/D/R.
+
+A few manufacturing sectors where no GVA-per-worker trend was discernible. 
+
+```{r, fig.width = 10, fig.height = 9}
+#PULL OUT SHEFFIELD AND ROTHERHAM SIG GVA GROWTH TRENDS
+itl3.cp <- itl3.cp %>% 
+  mutate(
+    log_sector_regional_proportion = log(sector_regional_proportion),
+    INDUSTRY_NAME_REDUCED = gsub(x = SIC07_description, pattern = 'of |and |acture|acturing| activities| equipment| products', replacement = '')
+    )
+
+#Slopes only for more recent data
+gva_slopes <- get_slope_and_se_safely(data = itl3.cp %>% filter(year %in% 2017:2021), 
+                                      ITL_region_name, SIC07_description, y = "log_sector_regional_proportion", x = "year") %>%
+  mutate(
+    min95 = slope - (se * 1.96),
+    max95 = slope + (se * 1.96),
+    min90 = slope - (se * 1.645),
+    max90 = slope + (se * 1.645),
+    crosseszero95 = min95 * max95 < 0,#mark if crosses zero
+    crosseszero90 = min90 * max90 < 0,#mark if crosses zero
+    slopepolarity = ifelse(slope > 0, 'increasing', 'decreasing')
+  )
+
+
+
+itl3.gvax <- itl3.cp %>% filter(year == 2021) %>% 
+  left_join(
+    gva_slopes,
+    by = c('SIC07_description','ITL_region_name')
+  )
+
+place = 'Sheffield'
+# place = 'Barnsley, Doncaster and Rotherham'
+
+
+itl3.gva.plot <- itl3.gvax %>% 
+  filter(
+    ITL_region_name == place,
+    !is.na(slope),
+    slope > 0
+  ) 
+
+
+#https://stackoverflow.com/a/38862452
+a <- ifelse(itl3.gva.plot$crosseszero95[order(itl3.gva.plot$slope)], "Grey", "Black")
+
+itl3.gva.plot <- itl3.gva.plot %>% 
+  mutate(INDUSTRY_NAME_REDUCED_W_PERCENT = paste0(INDUSTRY_NAME_REDUCED," (",round(sector_regional_proportion * 100,2),"%)"))
+
+#95% CIs
+ggplot(itl3.gva.plot, 
+       aes(x = slope * 100, y = fct_reorder(INDUSTRY_NAME_REDUCED_W_PERCENT,slope), colour = crosseszero95, size = crosseszero95)) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(xmin = min95 * 100, xmax = max95 * 100)) +
+  geom_vline(xintercept = 0, colour = 'red', alpha = 0.5) +
+  scale_size_manual(values = c(1,0.5)) +
+  scale_colour_manual(values = c('firebrick4','gray30')) +
+  theme(axis.text.y = element_text(colour = a)) +
+  guides(colour = F, size = F) +
+  ylab("") +
+  xlab("Approx. % change per year in GVA proportion")
+
+
+```
+
+## Sheffield GVA change 2017-21, significant NEGATIVE slopes #2/4
+
+Significant negative slopes largely sectors shrinking elsewhere.
+
+```{r, fig.width = 10, fig.height = 9}
+
+itl3.gva.plot <- itl3.gvax %>% 
+  filter(
+    ITL_region_name == place,
+    !is.na(slope),
+    slope < 0
+  ) 
+
+
+#https://stackoverflow.com/a/38862452
+a <- ifelse(itl3.gva.plot$crosseszero95[order(itl3.gva.plot$slope)], "Grey", "Black")
+
+itl3.gva.plot <- itl3.gva.plot %>% 
+  mutate(INDUSTRY_NAME_REDUCED_W_PERCENT = paste0(INDUSTRY_NAME_REDUCED," (",round(sector_regional_proportion * 100,2),"%)"))
+
+#95% CIs
+ggplot(itl3.gva.plot, 
+       aes(x = slope * 100, y = fct_reorder(INDUSTRY_NAME_REDUCED_W_PERCENT,slope), colour = crosseszero95, size = crosseszero95)) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(xmin = min95 * 100, xmax = max95 * 100)) +
+  geom_vline(xintercept = 0, colour = 'red', alpha = 0.5) +
+  scale_size_manual(values = c(1,0.5)) +
+  scale_colour_manual(values = c('firebrick4','gray30')) +
+  theme(axis.text.y = element_text(colour = a)) +
+  guides(colour = F, size = F) +
+  ylab("") +
+  xlab("Approx. % change per year in GVA proportion")
+
+
+```
+
+
+
+## Barnsley, Doncaster, Rotherham GVA change 2017-21, significant POSITIVE slopes #3/4
+
+Wholesale trade is growing everywhere, both absolutely and in GVA-per-worker terms. That shows up here. 'Manuf electronic, optical electrical' also notable.
+
+```{r, fig.width = 10, fig.height = 9}
+place = 'Barnsley, Doncaster and Rotherham'
+
+
+itl3.gva.plot <- itl3.gvax %>% 
+  filter(
+    ITL_region_name == place,
+    slope > 0,
+    !is.na(slope)
+  ) 
+
+
+#https://stackoverflow.com/a/38862452
+a <- ifelse(itl3.gva.plot$crosseszero95[order(itl3.gva.plot$slope)], "Grey", "Black")
+
+itl3.gva.plot <- itl3.gva.plot %>% 
+  mutate(INDUSTRY_NAME_REDUCED_W_PERCENT = paste0(INDUSTRY_NAME_REDUCED," (",round(sector_regional_proportion * 100,2),"%)"))
+
+#95% CIs
+ggplot(itl3.gva.plot, 
+       aes(x = slope * 100, y = fct_reorder(INDUSTRY_NAME_REDUCED_W_PERCENT,slope), colour = crosseszero95, size = crosseszero95)) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(xmin = min95 * 100, xmax = max95 * 100)) +
+  geom_vline(xintercept = 0, colour = 'red', alpha = 0.5) +
+  scale_size_manual(values = c(1,0.5)) +
+  scale_colour_manual(values = c('firebrick4','gray30')) +
+  theme(axis.text.y = element_text(colour = a)) +
+  ylab("") +
+  guides(colour = F, size = F) +
+  xlab("Approx. % change per year in GVA proportion")
+
+# b <- ifelse(itl3.gva.plot$crosseszero90[order(itl3.gva.plot$slope)], "Grey", "Black")
+# 
+# #90% CIs
+# #Facetting doesn't work for the axis text colouring
+# ggplot(itl3.gva.plot, 
+#        aes(x = slope *100, y = fct_reorder(INDUSTRY_NAME_REDUCED,slope), colour = crosseszero90, size = crosseszero90)) +
+#   geom_point(size = 2) +
+#   geom_errorbar(aes(xmin = min90*100, xmax = max90*100)) +
+#   geom_vline(xintercept = 0, colour = 'red', alpha = 0.5) +
+#   scale_size_manual(values = c(1,0.5)) +
+#   scale_colour_manual(values = c('firebrick4','gray30')) +
+#   theme(axis.text.y = element_text(colour = b)) 
+
+
+
+```
+
+
+
+
+## Barnsley, Doncaster, Rotherham GVA change 2017-21, significant NEGATIVE slopes #4/4
+
+Transport manufacture decline notable?
+
+```{r, fig.width = 10, fig.height = 9}
+place = 'Barnsley, Doncaster and Rotherham'
+
+
+itl3.gva.plot <- itl3.gvax %>% 
+  filter(
+    ITL_region_name == place,
+    slope < 0,
+    !is.na(slope)
+  ) 
+
+
+#https://stackoverflow.com/a/38862452
+a <- ifelse(itl3.gva.plot$crosseszero95[order(itl3.gva.plot$slope)], "Grey", "Black")
+
+itl3.gva.plot <- itl3.gva.plot %>% 
+  mutate(INDUSTRY_NAME_REDUCED_W_PERCENT = paste0(INDUSTRY_NAME_REDUCED," (",round(sector_regional_proportion * 100,2),"%)"))
+
+#95% CIs
+ggplot(itl3.gva.plot, 
+       aes(x = slope * 100, y = fct_reorder(INDUSTRY_NAME_REDUCED_W_PERCENT,slope), colour = crosseszero95, size = crosseszero95)) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(xmin = min95 * 100, xmax = max95 * 100)) +
+  geom_vline(xintercept = 0, colour = 'red', alpha = 0.5) +
+  scale_size_manual(values = c(1,0.5)) +
+  scale_colour_manual(values = c('firebrick4','gray30')) +
+  theme(axis.text.y = element_text(colour = a)) +
+  ylab("") +
+  xlab("Approx. % change per year in GVA proportion") +
+  guides(colour = F, size = F)
+
+# b <- ifelse(itl3.gva.plot$crosseszero90[order(itl3.gva.plot$slope)], "Grey", "Black")
+# 
+# #90% CIs
+# #Facetting doesn't work for the axis text colouring
+# ggplot(itl3.gva.plot, 
+#        aes(x = slope *100, y = fct_reorder(INDUSTRY_NAME_REDUCED,slope), colour = crosseszero90, size = crosseszero90)) +
+#   geom_point(size = 2) +
+#   geom_errorbar(aes(xmin = min90*100, xmax = max90*100)) +
+#   geom_vline(xintercept = 0, colour = 'red', alpha = 0.5) +
+#   scale_size_manual(values = c(1,0.5)) +
+#   scale_colour_manual(values = c('firebrick4','gray30')) +
+#   theme(axis.text.y = element_text(colour = b)) 
+
+
+
+```
+
+
+## Some Sheffield vs Barnsley / Doncaster / Rotherham contrasts in GVA change over time: Telecoms and IT
+
+Ending with a few slides comparing Sheffield and B/D/R to the top ten or so other places (in % GVA in 2021) and looking at change over time.
+
+Here: Sheffield telecoms and IT has been steadily growing and is a decent chunk of GVA now (about 7%).
+
+```{r, fig.width=10, fig.height=6}
+sector <- itl3.cp$SIC07_description[grepl('telecom', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
+
+timeplot <- itl3.cp %>% 
+  filter(SIC07_description == sector) 
+
+#Use zoo's rollapply function to get a moving average
+timeplot <- timeplot %>% 
+  group_by(ITL_region_name) %>% 
+  arrange(year) %>% 
+  mutate(
+    LQ_movingav = rollapply(LQ,3,mean,align='right',fill=NA),
+    percent_movingav = rollapply(sector_regional_proportion * 100,3,mean,align='right',fill=NA)
+  )
+
+#Or pick top size values
+#Largest % in 2021
+largest_percents <- timeplot %>% 
+  filter(year == 2021) %>% 
+  arrange(-percent_movingav)
+
+#Keep only the top ten places and order them
+timeplot <- timeplot %>% 
+  mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = largest_percents$ITL_region_name)) %>% 
+  filter(ITL_region_name %in% c(largest_percents$ITL_region_name[1:10],'Sheffield','Barnsley, Doncaster and Rotherham'))
+
+
+places = c('Sheffield','Barnsley, Doncaster and Rotherham')
+
+#Mark the ITL of interest so it can be clearer in the plot
+timeplot <- timeplot %>%
+  mutate(
+    ITL2ofinterest = ifelse(ITL_region_name %in% places, 'ITL of interest','other'),
+  )
+
+ggplot(timeplot %>% 
+         rename(`ITL region` = ITL_region_name) %>% 
+         filter(!is.na(percent_movingav)),#remove NAs from dates so the x axis doesn't show them
+       aes(x = year, y = percent_movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+  geom_point() +
+  geom_line() +
+  scale_size_manual(values = c(4,1)) +
+  scale_color_brewer(palette = 'Paired', direction = 1) +
+  ylab('Regional GVA percent') +
+  # scale_y_log10() +
+  guides(size = "none", linetype = "none") +
+  ggtitle(
+    paste0(sector,'\n', paste0(places, collapse = ', '), ' highlighted in thicker lines')
+  ) +
+  theme(plot.title = element_text(face = 'bold'))
+
+
+```
+
+
+## Education, Sheffield vs Barnsley / Doncaster / Rotherham GVA change 
+
+Sheffield is near the top nationally for education GVA %; B/D/R diverged from 2010 onwards. Sheffield bucked a general post-2010 dip.
+
+```{r, fig.width=10, fig.height=6}
+sector <- itl3.cp$SIC07_description[grepl('education', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
+
+timeplot <- itl3.cp %>% 
+  filter(SIC07_description == sector) 
+
+#Use zoo's rollapply function to get a moving average
+timeplot <- timeplot %>% 
+  group_by(ITL_region_name) %>% 
+  arrange(year) %>% 
+  mutate(
+    LQ_movingav = rollapply(LQ,3,mean,align='right',fill=NA),
+    percent_movingav = rollapply(sector_regional_proportion * 100,3,mean,align='right',fill=NA)
+  )
+
+#Or pick top size values
+#Largest % in 2021
+largest_percents <- timeplot %>% 
+  filter(year == 2021) %>% 
+  arrange(-percent_movingav)
+
+#Keep only the top ten places and order them
+timeplot <- timeplot %>% 
+  mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = largest_percents$ITL_region_name)) %>% 
+  filter(ITL_region_name %in% c(largest_percents$ITL_region_name[1:10],'Sheffield','Barnsley, Doncaster and Rotherham'))
+
+
+places = c('Sheffield','Barnsley, Doncaster and Rotherham')
+
+#Mark the ITL of interest so it can be clearer in the plot
+timeplot <- timeplot %>%
+  mutate(
+    ITL2ofinterest = ifelse(ITL_region_name %in% places, 'ITL of interest','other'),
+  )
+
+ggplot(timeplot %>% 
+         rename(`ITL region` = ITL_region_name) %>% 
+         filter(!is.na(percent_movingav)),#remove NAs from dates so the x axis doesn't show them
+       aes(x = year, y = percent_movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+  geom_point() +
+  geom_line() +
+  scale_size_manual(values = c(4,1)) +
+  scale_color_brewer(palette = 'Paired', direction = 1) +
+  ylab('Regional GVA percent') +
+  scale_y_log10() +
+  guides(size = "none", linetype = "none") +
+  ggtitle(
+    paste0(sector,'\n', paste0(places, collapse = ', '), ' highlighted in thicker lines')
+  ) +
+  theme(plot.title = element_text(face = 'bold'))
+
+
+```
+
+
+
+## Health, Sheffield vs Barnsley / Doncaster / Rotherham GVA change 
+
+A similar split in health, though neither are near the top in %GVA terms, both followed the national trend.
+
+
+```{r, fig.width=10, fig.height=6}
+sector <- itl3.cp$SIC07_description[grepl('health', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
+
+timeplot <- itl3.cp %>% 
+  filter(SIC07_description == sector) 
+
+#Use zoo's rollapply function to get a moving average
+timeplot <- timeplot %>% 
+  group_by(ITL_region_name) %>% 
+  arrange(year) %>% 
+  mutate(
+    LQ_movingav = rollapply(LQ,3,mean,align='right',fill=NA),
+    percent_movingav = rollapply(sector_regional_proportion * 100,3,mean,align='right',fill=NA)
+  )
+
+#Or pick top size values
+#Largest % in 2021
+largest_percents <- timeplot %>% 
+  filter(year == 2021) %>% 
+  arrange(-percent_movingav)
+
+#Keep only the top ten places and order them
+timeplot <- timeplot %>% 
+  mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = largest_percents$ITL_region_name)) %>% 
+  filter(ITL_region_name %in% c(largest_percents$ITL_region_name[1:10],'Sheffield','Barnsley, Doncaster and Rotherham'))
+
+
+places = c('Sheffield','Barnsley, Doncaster and Rotherham')
+
+#Mark the ITL of interest so it can be clearer in the plot
+timeplot <- timeplot %>%
+  mutate(
+    ITL2ofinterest = ifelse(ITL_region_name %in% places, 'ITL of interest','other'),
+  )
+
+ggplot(timeplot %>% 
+         rename(`ITL region` = ITL_region_name) %>% 
+         filter(!is.na(percent_movingav)),#remove NAs from dates so the x axis doesn't show them
+       aes(x = year, y = percent_movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+  geom_point() +
+  geom_line() +
+  scale_size_manual(values = c(4,1)) +
+  scale_color_brewer(palette = 'Paired', direction = 1) +
+  ylab('Regional GVA percent') +
+  # scale_y_log10() +
+  guides(size = "none", linetype = "none") +
+  ggtitle(
+    paste0(sector,'\n', paste0(places, collapse = ', '), ' highlighted in thicker lines')
+  ) +
+  theme(plot.title = element_text(face = 'bold'))
+
+
+```
+
+
+## Basic + Fabricated metal manufacture, Sheffield vs Barnsley / Doncaster / Rotherham GVA change 
+
+Showing the national picture for the % of the UK's economy that basic and fabricated metal manufacture takes, and the steady decline. 
+
+B/D/R is bucking that slightly in more recent years...
+
+
+```{r, fig.width=10, fig.height=6}
+sector <- itl3.cp$SIC07_description[grepl('fabricated', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
+
+timeplot <- itl3.cp %>% 
+  filter(SIC07_description == sector) 
+
+#Use zoo's rollapply function to get a moving average
+timeplot <- timeplot %>% 
+  group_by(ITL_region_name) %>% 
+  arrange(year) %>% 
+  mutate(
+    LQ_movingav = rollapply(LQ,3,mean,align='right',fill=NA),
+    percent_movingav = rollapply(sector_regional_proportion * 100,3,mean,align='right',fill=NA)
+  )
+
+#Or pick top size values
+#Largest % in 2021
+largest_percents <- timeplot %>% 
+  filter(year == 2021) %>% 
+  arrange(-percent_movingav)
+
+#Keep only the top ten places and order them
+timeplot <- timeplot %>% 
+  mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = largest_percents$ITL_region_name)) %>% 
+  filter(ITL_region_name %in% c(largest_percents$ITL_region_name[1:10],'Sheffield','Barnsley, Doncaster and Rotherham'))
+
+
+places = c('Sheffield','Barnsley, Doncaster and Rotherham')
+
+#Mark the ITL of interest so it can be clearer in the plot
+timeplot <- timeplot %>%
+  mutate(
+    ITL2ofinterest = ifelse(ITL_region_name %in% places, 'ITL of interest','other'),
+  )
+
+ggplot(timeplot %>% 
+         rename(`ITL region` = ITL_region_name) %>% 
+         filter(!is.na(percent_movingav)),#remove NAs from dates so the x axis doesn't show them
+       aes(x = year, y = percent_movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+  geom_point() +
+  geom_line() +
+  scale_size_manual(values = c(4,1)) +
+  scale_color_brewer(palette = 'Paired', direction = 1) +
+  ylab('Regional GVA percent') +
+  # scale_y_log10() +
+  guides(size = "none", linetype = "none") +
+  ggtitle(
+    paste0(sector,'\n', paste0(places, collapse = ', '), ' highlighted in thicker lines')
+  ) +
+  theme(plot.title = element_text(face = 'bold'))
+
+
+```
+
+
+## "Other manufacturing", Sheffield vs Barnsley / Doncaster / Rotherham GVA change 
+
+Though it's not true for all manufacturing; here, some increase across South Yorkshire. 
+
+```{r, fig.width=10, fig.height=6}
+sector <- itl3.cp$SIC07_description[grepl('other manuf', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
+
+timeplot <- itl3.cp %>% 
+  filter(SIC07_description == sector) 
+
+#Use zoo's rollapply function to get a moving average
+timeplot <- timeplot %>% 
+  group_by(ITL_region_name) %>% 
+  arrange(year) %>% 
+  mutate(
+    LQ_movingav = rollapply(LQ,3,mean,align='right',fill=NA),
+    percent_movingav = rollapply(sector_regional_proportion * 100,3,mean,align='right',fill=NA)
+  )
+
+#Or pick top size values
+#Largest % in 2021
+largest_percents <- timeplot %>% 
+  filter(year == 2021) %>% 
+  arrange(-percent_movingav)
+
+#Keep only the top ten places and order them
+timeplot <- timeplot %>% 
+  mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = largest_percents$ITL_region_name)) %>% 
+  filter(ITL_region_name %in% c(largest_percents$ITL_region_name[1:10],'Sheffield','Barnsley, Doncaster and Rotherham'))
+
+
+places = c('Sheffield','Barnsley, Doncaster and Rotherham')
+
+#Mark the ITL of interest so it can be clearer in the plot
+timeplot <- timeplot %>%
+  mutate(
+    ITL2ofinterest = ifelse(ITL_region_name %in% places, 'ITL of interest','other'),
+  )
+
+ggplot(timeplot %>% 
+         rename(`ITL region` = ITL_region_name) %>% 
+         filter(!is.na(percent_movingav)),#remove NAs from dates so the x axis doesn't show them
+       aes(x = year, y = percent_movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+  geom_point() +
+  geom_line() +
+  scale_size_manual(values = c(4,1)) +
+  scale_color_brewer(palette = 'Paired', direction = 1) +
+  ylab('Regional GVA percent') +
+  # scale_y_log10() +
+  guides(size = "none", linetype = "none") +
+  ggtitle(
+    paste0(sector,'\n', paste0(places, collapse = ', '), ' highlighted in thicker lines')
+  ) +
+  theme(plot.title = element_text(face = 'bold'))
+
+
+```
+
+
+
+## Manufacture of wood & paper products, & printing, Sheffield vs Barnsley / Doncaster / Rotherham GVA change 
+
+B/D/R doing well in wood/paper products manufacture more recently.
+
+
+```{r, fig.width=10, fig.height=6}
+sector <- itl3.cp$SIC07_description[grepl('wood and paper', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
+
+timeplot <- itl3.cp %>% 
+  filter(SIC07_description == sector) 
+
+#Use zoo's rollapply function to get a moving average
+timeplot <- timeplot %>% 
+  group_by(ITL_region_name) %>% 
+  arrange(year) %>% 
+  mutate(
+    LQ_movingav = rollapply(LQ,3,mean,align='right',fill=NA),
+    percent_movingav = rollapply(sector_regional_proportion * 100,3,mean,align='right',fill=NA)
+  )
+
+#Or pick top size values
+#Largest % in 2021
+largest_percents <- timeplot %>% 
+  filter(year == 2021) %>% 
+  arrange(-percent_movingav)
+
+#Keep only the top ten places and order them
+timeplot <- timeplot %>% 
+  mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = largest_percents$ITL_region_name)) %>% 
+  filter(ITL_region_name %in% c(largest_percents$ITL_region_name[1:10],'Sheffield','Barnsley, Doncaster and Rotherham'))
+
+
+places = c('Sheffield','Barnsley, Doncaster and Rotherham')
+
+#Mark the ITL of interest so it can be clearer in the plot
+timeplot <- timeplot %>%
+  mutate(
+    ITL2ofinterest = ifelse(ITL_region_name %in% places, 'ITL of interest','other'),
+  )
+
+ggplot(timeplot %>% 
+         rename(`ITL region` = ITL_region_name) %>% 
+         filter(!is.na(percent_movingav)),#remove NAs from dates so the x axis doesn't show them
+       aes(x = year, y = percent_movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+  geom_point() +
+  geom_line() +
+  scale_size_manual(values = c(4,1)) +
+  scale_color_brewer(palette = 'Paired', direction = 1) +
+  ylab('Regional GVA percent') +
+  # scale_y_log10() +
+  guides(size = "none", linetype = "none") +
+  ggtitle(
+    paste0(sector,'\n', paste0(places, collapse = ', '), ' highlighted in thicker lines')
+  ) +
+  theme(plot.title = element_text(face = 'bold'))
+
+
+```
+
+
+
+
+## Specialised construction activities, Sheffield vs Barnsley / Doncaster / Rotherham GVA change 
+
+Barnsley / Doncaster / Rotherham are some way larger in specialised construction activities than Sheffield, and close to being in the top group of ITL3 areas for % GVA in this (mostly non-tradeable) sector. Post-covid dip is evident, but B/D/R still very high %.
+
+```{r, fig.width=10, fig.height=6}
+sector <- itl3.cp$SIC07_description[grepl('specialised constr', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
+
+timeplot <- itl3.cp %>% 
+  filter(SIC07_description == sector) 
+
+#Use zoo's rollapply function to get a moving average
+timeplot <- timeplot %>% 
+  group_by(ITL_region_name) %>% 
+  arrange(year) %>% 
+  mutate(
+    LQ_movingav = rollapply(LQ,3,mean,align='right',fill=NA),
+    percent_movingav = rollapply(sector_regional_proportion * 100,3,mean,align='right',fill=NA)
+  )
+
+#Or pick top size values
+#Largest % in 2021
+largest_percents <- timeplot %>% 
+  filter(year == 2021) %>% 
+  arrange(-percent_movingav)
+
+#Keep only the top ten places and order them
+timeplot <- timeplot %>% 
+  mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = largest_percents$ITL_region_name)) %>% 
+  filter(ITL_region_name %in% c(largest_percents$ITL_region_name[1:10],'Sheffield','Barnsley, Doncaster and Rotherham'))
+
+
+places = c('Sheffield','Barnsley, Doncaster and Rotherham')
+
+#Mark the ITL of interest so it can be clearer in the plot
+timeplot <- timeplot %>%
+  mutate(
+    ITL2ofinterest = ifelse(ITL_region_name %in% places, 'ITL of interest','other'),
+  )
+
+ggplot(timeplot %>% 
+         rename(`ITL region` = ITL_region_name) %>% 
+         filter(!is.na(percent_movingav)),#remove NAs from dates so the x axis doesn't show them
+       aes(x = year, y = percent_movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+  geom_point() +
+  geom_line() +
+  scale_size_manual(values = c(4,1)) +
+  scale_color_brewer(palette = 'Paired', direction = 1) +
+  ylab('Regional GVA percent') +
+  scale_y_log10() +
+  guides(size = "none", linetype = "none") +
+  ggtitle(
+    paste0(sector,'\n', paste0(places, collapse = ', '), ' highlighted in thicker lines')
+  ) +
+  theme(plot.title = element_text(face = 'bold'))
+
+
+```
+
+
+
+
+## Motor trades (log scale), Sheffield vs Barnsley / Doncaster / Rotherham GVA change 
+
+Motor trades growing in both, but again a larger proportion in B/D/R. 
+
+```{r, fig.width=10, fig.height=6}
+sector <- itl3.cp$SIC07_description[grepl('motor trades', itl3.cp$SIC07_description ,ignore.case = T)] %>% unique
+
+timeplot <- itl3.cp %>% 
+  filter(SIC07_description == sector) 
+
+#Use zoo's rollapply function to get a moving average
+timeplot <- timeplot %>% 
+  group_by(ITL_region_name) %>% 
+  arrange(year) %>% 
+  mutate(
+    LQ_movingav = rollapply(LQ,3,mean,align='right',fill=NA),
+    percent_movingav = rollapply(sector_regional_proportion * 100,3,mean,align='right',fill=NA)
+  )
+
+#Or pick top size values
+#Largest % in 2021
+largest_percents <- timeplot %>% 
+  filter(year == 2021) %>% 
+  arrange(-percent_movingav)
+
+#Keep only the top ten places and order them
+timeplot <- timeplot %>% 
+  mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = largest_percents$ITL_region_name)) %>% 
+  filter(ITL_region_name %in% c(largest_percents$ITL_region_name[1:10],'Sheffield','Barnsley, Doncaster and Rotherham'))
+
+
+places = c('Sheffield','Barnsley, Doncaster and Rotherham')
+
+#Mark the ITL of interest so it can be clearer in the plot
+timeplot <- timeplot %>%
+  mutate(
+    ITL2ofinterest = ifelse(ITL_region_name %in% places, 'ITL of interest','other'),
+  )
+
+ggplot(timeplot %>% 
+         rename(`ITL region` = ITL_region_name) %>% 
+         filter(!is.na(percent_movingav)),#remove NAs from dates so the x axis doesn't show them
+       aes(x = year, y = percent_movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+  geom_point() +
+  geom_line() +
+  scale_size_manual(values = c(4,1)) +
+  scale_color_brewer(palette = 'Paired', direction = 1) +
+  ylab('Regional GVA percent') +
+  scale_y_log10() +
+  guides(size = "none", linetype = "none") +
+  ggtitle(
+    paste0(sector,'\n', paste0(places, collapse = ', '), ' highlighted in thicker lines')
+  ) +
+  theme(plot.title = element_text(face = 'bold'))
+
+
+```
+
+
+
+
+
+
+
+
+

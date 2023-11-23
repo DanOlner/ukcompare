@@ -3934,6 +3934,349 @@ p
 
 
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Chained volume GVA slopes for higher level sectors (sections)----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+#Ideally with some forecasting just based on those slopes
+#First, pull out sectors
+itl2.cv <- read_csv('data/sectors/Table 2b ITL2 UK chained volume measures in 2019 money value pounds million.csv')
+
+#no spaces plz!
+names(itl2.cv) <- gsub(x = names(itl2.cv), pattern = ' ', replacement = '_')
+
+#does it work just pulling out sectors with a single space in the second character slot?
+#That looks like it should be single letter sections
+#TICK!
+cvSICkeeps <- itl2.cv$SIC07_code[substr(itl2.cv$SIC07_code,2,2) == ' '] %>% unique
+
+itl2.cvs <- itl2.cv %>% 
+  filter(SIC07_code %in% cvSICkeeps) %>% 
+  pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'value') %>% 
+  mutate(year = as.numeric(year))
+
+
+#Trend lines, log values
+#Good for comparing and ranking % changes, but...
+slopes.log <- get_slope_and_se_safely(data = itl2.cvs, ITL_region_name,SIC07_description, y = log(value), x = year)
+
+#... also want these, so can project out forecasts from latest values
+slopes <- get_slope_and_se_safely(data = itl2.cvs, ITL_region_name,SIC07_description, y = value, x = year)
+
+
+
+
+#Pick a sector to plot separately for all places
+#Use grepl as a shortcut to search for sector names
+
+place = 'South Yorkshire'
+
+sector <- itl2.cvs$SIC07_description[grepl('manuf', itl2.cvs$SIC07_description ,ignore.case = T)] %>% unique
+
+timeplot <- itl2.cvs %>% 
+  filter(SIC07_description == sector) 
+
+#Use zoo's rollapply function to get a moving average
+timeplot <- timeplot %>% 
+  group_by(ITL_region_name) %>% 
+  arrange(year) %>% 
+  mutate(
+    movingav = rollapply(value,3,mean,align='right',fill=NA)
+    )
+
+#Or pick top size values
+#Largest % in 2021
+# place_selection <- timeplot %>% 
+#   filter(year == 2021) %>% 
+#   arrange(-movingav)
+
+
+#Use largest positive log slopes to filter
+place_selection <- slopes.log %>% filter(SIC07_description == sector) %>%
+  arrange(-slope)
+  # arrange(slope)#to get the reverse
+
+#Keep only the top ten places and order them
+timeplot <- timeplot %>% 
+  mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = place_selection$ITL_region_name)) %>%
+  filter(ITL_region_name %in% c(place_selection$ITL_region_name[1:10],place))#Make sure chosen place added
+
+#Mark the ITL of interest so it can be clearer in the plot
+timeplot <- timeplot %>%
+  mutate(
+    ITL2ofinterest = ifelse(ITL_region_name == place, 'ITL of interest','other'),
+  )
+
+ggplot(timeplot %>% 
+         rename(`ITL region` = ITL_region_name) %>% 
+         filter(!is.na(movingav)),#remove NAs from dates so the x axis doesn't show them
+       aes(x = year, y = movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+  geom_point() +
+  geom_line() +
+  scale_y_log10() +
+  scale_size_manual(values = c(2.5,1)) +
+  scale_color_brewer(palette = 'Paired', direction = 1) +
+  ylab('Regional GVA chained volume measure') +
+  guides(size = "none", linetype = "none") +
+  ggtitle(
+    paste0(sector,'\n', place, ' highlighted')
+  ) +
+  theme(plot.title = element_text(face = 'bold'))
+
+
+
+
+
+
+
+#Output all sectors and see...
+for(growing in c(T,F)){
+
+  for(sector in unique(itl2.cvs$SIC07_description)){
+  
+    timeplot <- itl2.cvs %>% 
+      filter(SIC07_description == sector) 
+    
+    #Use zoo's rollapply function to get a moving average
+    timeplot <- timeplot %>% 
+      group_by(ITL_region_name) %>% 
+      arrange(year) %>% 
+      mutate(
+        movingav = rollapply(value,3,mean,align='right',fill=NA)
+      )
+    
+    #Or pick top size values
+    #Largest % in 2021
+    # place_selection <- timeplot %>% 
+    #   filter(year == 2021) %>% 
+    #   arrange(-movingav)
+    
+    
+    #Use largest positive log slopes to filter
+    if(growing){
+      place_selection <- slopes.log %>% filter(SIC07_description == sector) %>%
+        arrange(-slope)
+    } else {
+      place_selection <- slopes.log %>% filter(SIC07_description == sector) %>%
+        arrange(slope)
+      }
+    
+    #Keep only the top ten places and order them
+    timeplot <- timeplot %>% 
+      mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = place_selection$ITL_region_name)) %>%
+      filter(ITL_region_name %in% c(place_selection$ITL_region_name[1:10],place))#Make sure chosen place added
+    
+    #Mark the ITL of interest so it can be clearer in the plot
+    timeplot <- timeplot %>%
+      mutate(
+        ITL2ofinterest = ifelse(ITL_region_name == place, 'ITL of interest','other'),
+      )
+    
+    p <- ggplot(timeplot %>% 
+             rename(`ITL region` = ITL_region_name) %>% 
+             filter(!is.na(movingav)),#remove NAs from dates so the x axis doesn't show them
+           aes(x = year, y = movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+      geom_point() +
+      geom_line() +
+      scale_y_log10() +
+      scale_size_manual(values = c(2.5,1)) +
+      scale_color_brewer(palette = 'Paired', direction = 1) +
+      ylab('Regional GVA chained volume measure') +
+      guides(size = "none", linetype = "none") +
+      ggtitle(
+        paste0(ifelse(growing,'HIGHEST GROWTH','LOWEST GROWTH'),'\n',sector,'\n', place, ' highlighted')
+      ) +
+      theme(plot.title = element_text(face = 'bold'))
+  
+    ggsave(plot = p, 
+           filename = paste0('local/localimages/chainedvolumeITL2_sectors/',sector,'_',ifelse(growing,'HIGHESTGROWTH','LOWESTGROWTH'),'_chainedvolumeITL2_sectors.png'), 
+           # filename = paste0('local/localimages/chainedvolumeITL2_sectors/',ifelse(growing,'HIGHESTGROWTH','LOWESTGROWTH'),'_',sector,'_chainedvolumeITL2_sectors.png'), 
+           width = 11, height = 7)
+  
+  
+  }
+
+}
+
+
+
+
+#Find out what slopes are statistically separarable
+#For e.g South Yorkshire: a full matrix grid of “which slopes are statistically separable”, pairing every sector against every other, to pick out any obvious patterns of growth difference (for maybe different time points). One plot per place.
+#Can then do the same for individual sectors: pair each place off against every other for that sector, giving another matrix. Then that’s one plot per sector, if we want to do that for all.
+#With variable factors being CI level 95% 90% etc…
+
+#Using the log slopes, so scale of sector itself doesn't matter
+
+#Will probably be good to function this up but let's do manually first
+
+#log slope CIs
+slopes.log <- slopes.log %>% 
+  mutate(
+    min.ci = slope - (se * 2.58),
+    max.ci = slope + (se * 2.58)#99%
+    # min.ci = slope - (se * 1.96),
+    # max.ci = slope + (se * 1.96)#95%
+  )
+
+#Thing to copy from sicsoc. This takes in two places and compares. We want to repeat for all pairs of sectors in this case
+# sy.ww <- sy.w %>%
+#   select(GEOGRAPHY_NAME,SIC2007,SOC2020,min_ci,max_ci) %>% 
+#   pivot_wider(
+#     names_from = GEOGRAPHY_NAME, values_from = c(min_ci,max_ci),
+#     values_fn = mean
+#   ) %>% 
+#   mutate(CIs_overlap = ifelse(
+#     (.[,3] <= .[,6] & .[,5] <= .[,4]) |
+#       (.[,4] <= .[,5] & .[,6] <= .[,3])  , 
+#     F,T))
+
+place = 'South Yorkshire'
+place = 'Greater Manchester'
+
+#Just for single place...
+slopes.log.1place <- slopes.log %>% 
+  filter(ITL_region_name == place)
+
+#All combinations of sectors
+combos <- expand.grid(SIC07_description1 = slopes.log.1place$SIC07_description, SIC07_description2 = slopes.log.1place$SIC07_description)
+#Remove dups
+#Actually, no, don't - we want to be able to show the slope value, if not overlapping, for every sector in the grid
+# combos <- combos[!duplicated(t(apply(combos, 1, sort))), ]
+
+
+#Merge in two repeated sets of the values and CIs to check for CI overlap for each pair
+combos <- combos %>% 
+  left_join(
+    slopes.log.1place %>% ungroup() %>% select(
+      SIC07_description,
+      slopeone = slope,
+      min.cione = min.ci,
+      max.cione = max.ci
+    ),
+    by = c('SIC07_description1' = 'SIC07_description')
+  )
+
+#Merge in two repeated sets of the values and CIs to check for CI overlap for each pair
+combos <- combos %>% 
+  left_join(
+    slopes.log.1place %>% ungroup() %>% select(
+      SIC07_description,
+      slopetwo = slope,
+      min.citwo = min.ci,
+      max.citwo = max.ci
+    ),
+    by = c('SIC07_description2' = 'SIC07_description')
+  )
+
+
+#Apply CI overlap test to all pairs
+#https://stackoverflow.com/a/3269471
+#If (StartA <= EndB) and (EndA >= StartB) 
+#This is the order in the comparative df
+#3. "min_ci_Greater Manchester"
+#4. "min_ci_South Yorkshire"
+#5. "max_ci_Greater Manchester"
+#6. "max_ci_South Yorkshire"   
+#Equivs are 4,7,5,8
+combos <- combos %>% 
+  mutate(CIs_overlap = ifelse(
+        (.[,4] <= .[,8] & .[,5] <= .[,7]) |
+          (.[,7] <= .[,5] & .[,8] <= .[,4])  ,
+        F,T)) %>% 
+  mutate(
+    slopediff = slopetwo - slopeone,#Add in slope differences
+    slopediff.sig = ifelse(CIs_overlap, F,T)#add in version with NAs for not sig
+    )
+
+
+
+
+zerocutoff = 0.5
+
+
+#Using colour for grid outline for sig values doesn't quite work, it draws messily
+#Add as extra layer over the top instead
+ggplot(combos, aes(x = substr(SIC07_description1,0,30), y = substr(SIC07_description2,0,30), fill= slopediff)) + 
+  geom_tile() +
+  scale_fill_gradientn(
+    colours = c("red", "white", "darkgreen"),
+    values = c(0, zerocutoff, 1)#https://stackoverflow.com/a/58725778/5023561
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 270, vjust = 0.5, hjust=0),
+    axis.title.x=element_blank(),
+    axis.title.y=element_blank()
+    ) +
+  # geom_tile(data = combos %>% filter(slopediff.sig), colour = 'white', size = 2) 
+  geom_tile(data = combos %>% filter(slopediff.sig), colour = 'black', size = 1)
+  
+
+
+
+#Pick a different data range
+slopes.log <- get_slope_and_se_safely(data = itl2.cvs, ITL_region_name,SIC07_description, y = log(value), x = year)
+slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2015:2021), ITL_region_name,SIC07_description, y = log(value), x = year)
+#Avoid covid
+slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2013:2019), ITL_region_name,SIC07_description, y = log(value), x = year)
+
+
+#Functioning up
+# debugonce(slopeDiffGrid)
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 99, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'South Yorkshire')
+
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 99, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'Merseyside')
+
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 99, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Manufacturing')
+
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 99, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Mining and quarrying')
+
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 99, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Information and communication')
+
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 99, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Other service activities')
+
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 99, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Accommodation and food service activities')
+
+
+#OK, let's output all the sectors and see see
+#Additional save string
+addstr <- "2013_2019"
+addstr <- "2015_2021"
+
+for(sector in unique(slopes.log$SIC07_description)){
+  
+  p <- slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = sector)
+  
+  ggsave(plot = p, filename = paste0('local/localimages/sector_slope_grids/',sector,'_',addstr,'.png'), width = 13, height = 13)
+  
+}
+
+
+
+#Repeat for all places
+for(place in unique(slopes.log$ITL_region_name)){
+  
+  p <- slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = place)
+  
+  ggsave(plot = p, filename = paste0('local/localimages/place_slope_grids/',place,'.png'), width = 13, height = 13)
+  
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

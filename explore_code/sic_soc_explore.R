@@ -158,6 +158,8 @@ saveRDS(z, 'local/data/sicsoc/NUTS2_2016_latestAPS_SIC2007_SOC2020.rds')
 #Ah nope, 'in employment' for actual job counts
 #“in employment” and “unemployed” sum to “econ active”.
 cell <- nomis_get_metadata(id = "NM_17_1", concept = "CELL")
+#Quarterly data, can get jan to dec with e.g. "2005-12" I think...
+cell <- nomis_get_metadata(id = "NM_17_1", concept = "time")
 #Just want this single table I think
 cell %>% filter(grepl('402719489', id, ignore.case = T)) 
 
@@ -165,8 +167,16 @@ in_employment <- nomis_get_data(id = "NM_17_1", time = "latest", geography = "TY
   select(DATE_NAME,GEOGRAPHY_NAME,GEOGRAPHY_CODE,CELL_NAME,MEASURES_NAME,OBS_VALUE,OBS_STATUS,OBS_STATUS_NAME) %>% 
   rename(ALL_IN_EMPLOYMENT_16PLUS = OBS_VALUE)
 
+#Ah, getting all the data time range easy - just don't ask for a time slot, gives you the lot
+#NO VALUES UNTIL JAN 2012. Do others exist in prev version?
+# in_employment <- nomis_get_data(id = "NM_17_1", geography = "TYPE438", cell = '402719489') %>% 
+#   select(DATE_NAME,GEOGRAPHY_NAME,GEOGRAPHY_CODE,CELL_NAME,MEASURES_NAME,OBS_VALUE,OBS_STATUS,OBS_STATUS_NAME) %>% 
+#   rename(ALL_IN_EMPLOYMENT_16PLUS = OBS_VALUE)
+
 #check we have a full set of values... tick
 table(is.na(in_employment$ALL_IN_EMPLOYMENT_16PLUS))
+
+
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

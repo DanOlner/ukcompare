@@ -460,6 +460,122 @@ return_compasspoints <- function(df, regionvar, category_var, valuevar, timevar,
 
 
 
+#Pass in a desired confidence interval in percent
+#Returns the correct +/- z score for applying to a standard error
+getZScore <- function(confidence_percent) {
+  # Convert the percentage to a proportion
+  confidence_proportion <- confidence_percent / 100
+  
+  # Calculate the two-tailed probability
+  alpha <- 1 - confidence_proportion
+  
+  # Calculate the one-tailed probability
+  alpha_half <- alpha / 2
+  
+  # Get the Z-score for the one-tailed probability
+  z_score <- qnorm(1 - alpha_half)
+  
+  return(z_score)
+}
+
+
+
+#Produce a ggplot visualisation of differences between OLS slopes (for time series here)
+#Between pairs of slopes e.g. all sectors in SY (or another particular place) compared to each other
+#Or all places paired for a particular sector
+slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_to_filter, filterval){
+  
+  column_to_grid <- enquo(column_to_grid)
+  column_to_filter <- enquo(column_to_filter) 
+  
+  #Filter down to single thing (sector, place etc)
+  slope_df <- slope_df %>% 
+    filter(!!column_to_filter == filterval)
+  
+  #Apply CIs
+  ci <- getZScore(confidence_interval)
+  
+  cat('CI = ',confidence_interval,', z score = ', ci, '\n')
+  
+  slope_df <- slope_df %>% 
+    mutate(
+      min.ci = slope - (se * ci),
+      max.ci = slope + (se * ci) 
+    )
+  
+  #Apply CI overlap test to all pairs
+  #https://stackoverflow.com/a/3269471
+  #If (StartA <= EndB) and (EndA >= StartB) 
+  
+  #Get all pair combos
+  combos <- expand.grid(gridcol1 = slope_df[quo_name(column_to_grid)] %>% pull, gridcol2 = slope_df[quo_name(column_to_grid)] %>% pull)
+  
+  #Merge in two repeated sets of the values and CIs to check for CI overlap for each pair
+  combos <- combos %>%
+    left_join(
+      slope_df %>% ungroup() %>% select(
+        !!column_to_grid,
+        slopeone = slope,
+        min.cione = min.ci,
+        max.cione = max.ci
+      ),
+      by = c('gridcol1' = quo_name(column_to_grid))
+    )
+
+  #Merge in two repeated sets of the values and CIs to check for CI overlap for each pair
+  combos <- combos %>%
+    left_join(
+      slope_df %>% ungroup() %>% select(
+        !!column_to_grid,
+        slopetwo = slope,
+        min.citwo = min.ci,
+        max.citwo = max.ci
+      ),
+      by = c('gridcol2' = quo_name(column_to_grid))
+    )
+
+  # 
+  # #Apply CI overlap test to all pairs
+  # #https://stackoverflow.com/a/3269471
+  # #If (StartA <= EndB) and (EndA >= StartB) 
+  combos <- combos %>% 
+    mutate(CIs_overlap = ifelse(
+      (.[,'min.cione'] <= .[,'max.citwo'] & .[,'max.cione'] <= .[,'min.citwo']) |
+        (.[,'min.citwo'] <= .[,'max.cione'] & .[,'max.citwo'] <= .[,'min.cione'])  , 
+      F,T)
+      # CIs_overlap = factor(CIs_overlap, ordered = T, levels = c(F,T))
+      ) %>% 
+    mutate(
+      slopediff = slopetwo - slopeone#Add in slope differences
+    )
+   
+  #Zero point of scale
+  #Though shouldn't be necessary here as symmetric differences mean the scale is always an exact mirror
+  valz <- c(range(combos$slopediff, na.rm = T), 0)
+  scale_values <- function(x){(x-min(x))/(max(x)-min(x))}
+  scaled <- scale_values(valz)
+  zerocutoff <- scaled[3]
+  
+  
+  
+  #Using colour for grid outline for sig values doesn't quite work, it draws messily
+  #Add as extra layer over the top instead
+  p <- ggplot(combos, aes(x = substr(gridcol1,0,30), y = substr(gridcol2,0,30), fill= slopediff, colour = CIs_overlap)) + 
+    geom_tile(width = 0.8, height = 0.8, size = 1) +
+    scale_fill_gradientn(
+      colours = c("red", "white", "darkgreen"),
+      values = c(0, zerocutoff, 1)#https://stackoverflow.com/a/58725778/5023561
+    ) +
+    theme(
+      axis.text.x = element_text(angle = 270, vjust = 0.5, hjust=0),
+      axis.title.x=element_blank(),
+      axis.title.y=element_blank()
+    ) +
+    scale_color_manual(values = setNames(c('black','white'),c(F,T))) 
+  
+  p
+    
+}
 
 
 

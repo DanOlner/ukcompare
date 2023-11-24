@@ -3958,6 +3958,9 @@ itl2.cvs <- itl2.cv %>%
   mutate(year = as.numeric(year))
 
 
+#Save that for elsewhere
+saveRDS(itl2.cvs, 'data/UKchainedvolume_itl2_SIC_sections.rds')
+
 #Trend lines, log values
 #Good for comparing and ranking % changes, but...
 slopes.log <- get_slope_and_se_safely(data = itl2.cvs, ITL_region_name,SIC07_description, y = log(value), x = year)
@@ -4032,6 +4035,7 @@ ggplot(timeplot %>%
 
 
 #Output all sectors and see...
+#NOTE, MAY BE EDITED TO OUTPUT RAW CHANGE NOT 3 YEAR SMOOTHED
 for(growing in c(T,F)){
 
   for(sector in unique(itl2.cvs$SIC07_description)){
@@ -4077,7 +4081,8 @@ for(growing in c(T,F)){
     p <- ggplot(timeplot %>% 
              rename(`ITL region` = ITL_region_name) %>% 
              filter(!is.na(movingav)),#remove NAs from dates so the x axis doesn't show them
-           aes(x = year, y = movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+           aes(x = year, y = value, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+           # aes(x = year, y = movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
       geom_point() +
       geom_line() +
       scale_y_log10() +
@@ -4091,7 +4096,8 @@ for(growing in c(T,F)){
       theme(plot.title = element_text(face = 'bold'))
   
     ggsave(plot = p, 
-           filename = paste0('local/localimages/chainedvolumeITL2_sectors/',sector,'_',ifelse(growing,'HIGHESTGROWTH','LOWESTGROWTH'),'_chainedvolumeITL2_sectors.png'), 
+           filename = paste0('local/localimages/chainedvolumeITL2_sectors_unsmoothed/',sector,'_',ifelse(growing,'HIGHESTGROWTH','LOWESTGROWTH'),'_chainedvolumeITL2_sectors.png'), 
+           # filename = paste0('local/localimages/chainedvolumeITL2_sectors/',sector,'_',ifelse(growing,'HIGHESTGROWTH','LOWESTGROWTH'),'_chainedvolumeITL2_sectors.png'), 
            # filename = paste0('local/localimages/chainedvolumeITL2_sectors/',ifelse(growing,'HIGHESTGROWTH','LOWESTGROWTH'),'_',sector,'_chainedvolumeITL2_sectors.png'), 
            width = 11, height = 7)
   
@@ -4099,6 +4105,56 @@ for(growing in c(T,F)){
   }
 
 }
+
+
+
+#I'd like a map as well e.g. for Information and communication. All high growth, but SY clearly in the high growth group.
+#What's the geography of that?
+itl2.geo <- st_read('data/geographies/International_Territorial_Level_2_January_2021_UK_BFE_V2_2022_-4735199360818908762/ITL2_JAN_2021_UK_BFE_V2.shp', quiet = T) %>% st_simplify(preserveTopology = T, dTolerance = 100)
+
+#Names match without alteration in this case, jolly good
+table(unique(slopes.log$ITL_region_name) %in% itl2.geo$ITL221NM)
+
+
+
+slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 1998:2021), ITL_region_name,SIC07_description, y = log(value), x = year) %>% 
+# slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2015:2021), ITL_region_name,SIC07_description, y = log(value), x = year) %>% 
+#Avoid covid
+# slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2013:2019), ITL_region_name,SIC07_description, y = log(value), x = year) %>% 
+  mutate(
+    min99 = slope - (se * getZScore(99)),
+    max99 = slope + (se * getZScore(99)),
+    min95 = slope - (se * getZScore(95)),
+    max95 = slope + (se * getZScore(95)),
+    min90 = slope - (se * getZScore(90)),
+    max90 = slope + (se * getZScore(90)),
+    crosseszero99 = min99 * max99 < 0,#mark if crosses zero
+    crosseszero95 = min95 * max95 < 0,#mark if crosses zero
+    crosseszero90 = min90 * max90 < 0,#mark if crosses zero
+    slopepolarity = ifelse(slope > 0, 'increasing', 'decreasing')
+  )
+
+
+
+#Pick sector
+sector = slopes.log$SIC07_description[grepl(pattern = 'manuf', x = slopes.log$SIC07_description, ignore.case = T)] %>% unique
+sector = slopes.log$SIC07_description[grepl(pattern = 'information', x = slopes.log$SIC07_description, ignore.case = T)] %>% unique
+
+# View(slopes.log %>% filter(SIC07_description == sector))
+
+map <- itl2.geo %>% 
+  right_join(
+    slopes.log %>% filter(SIC07_description == sector),
+    by = c('ITL221NM'='ITL_region_name')
+  ) %>% mutate(slope100 = slope * 100)
+
+tm_shape(map) +
+  tm_polygons('slope100', n = 3, title="") +
+  tm_layout(title = sector, legend.bg.color = 'white', legend.bg.alpha = 0.5) +
+  tm_shape(
+    map %>% filter(!crosseszero99)
+  ) +
+  tm_borders(col='blue', lwd = 3)
 
 
 
@@ -4225,11 +4281,11 @@ slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2013:
 
 #Functioning up
 # debugonce(slopeDiffGrid)
-slopeDiffGrid(slope_df = slopes.log, confidence_interval = 99, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'South Yorkshire')
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'South Yorkshire')
 
 slopeDiffGrid(slope_df = slopes.log, confidence_interval = 99, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'Merseyside')
 
-slopeDiffGrid(slope_df = slopes.log, confidence_interval = 99, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Manufacturing')
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Manufacturing')
 
 slopeDiffGrid(slope_df = slopes.log, confidence_interval = 99, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Mining and quarrying')
 

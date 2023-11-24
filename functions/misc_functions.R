@@ -571,7 +571,7 @@ slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_
       axis.title.x=element_blank(),
       axis.title.y=element_blank()
     ) +
-    scale_color_manual(values = setNames(c('black','white'),c(F,T))) 
+    scale_color_manual(values = setNames(c('black','white'),c(F,T)), guide = 'none')
   
   p
     

@@ -2819,3 +2819,213 @@ nyork <- itl2.lq %>%
   GEOGRAPHY_NAME == 'North Yorkshire'
   )
 
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#SIC SECTIONS / JOB COUNTS / SLOPE DIFF GRIDS----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Replicating work done on chained volume GVA in GVA_region_by_sector_explore section "Chained volume GVA slopes for higher level sectors (sections)"
+
+#First up is checking if BRES data already has SIC sections in
+itl2.lq <- readRDS('data/BRESopen_fulltimeemployees_ITL2_plusSIClookup.rds')
+
+#No, we need to bin into the sections
+unique(itl2.lq$SIC_2DIGIT_CODE)
+length(unique(itl2.lq$SIC_2DIGIT_CODE))#84
+#Using this, should be possible to match codes
+itl2.cvs <- readRDS('data/UKchainedvolume_itl2_SIC_sections.rds')
+unique(itl2.cvs$SIC07_code)
+
+#Had code elsewhere that did similar...?
+
+# Initialize an empty dataframe
+result_df <- data.frame(Letter = character(), Number = integer(), stringsAsFactors = FALSE)
+
+# Loop through each element of the vector
+for (sector in unique(itl2.cvs$SIC07_code)) {
+  # Split the string into the letter and the number range
+  parts <- strsplit(sector, "\\s*\\(|-|\\)\\s*")[[1]]
+  letter <- parts[1]
+  range_start <- as.integer(parts[2])
+  range_end <- as.integer(parts[3])
+  
+  #check if only one number per letter. If so, set range end to range start
+  range_end <- ifelse(is.na(range_end), range_start, range_end)
+  
+  # Create a dataframe for this sector
+  sector_df <- data.frame(Letter = rep(letter, range_end - range_start + 1),
+                          Number = seq(range_start, range_end),
+                          SIC_SECTION_CODE = rep(sector, range_end - range_start + 1),
+                          SIC_SECTION_NAME = rep(
+                            unique(itl2.cvs$SIC07_description[itl2.cvs$SIC07_code == sector]), 
+                            range_end - range_start + 1),
+                          stringsAsFactors = FALSE)
+  
+  # Append to the result dataframe
+  result_df <- rbind(result_df, sector_df)
+}
+
+
+#This is the slightly more efficient way chatGPT suggested, but I'll keep the above as it's more readable.
+# for (sector in unique(itl2.cvs$SIC07_code)) {
+#   # Split the string into the letter and the number(s)
+#   parts <- strsplit(sector, "\\s*\\(|-|\\)\\s*")[[1]]
+#   letter <- parts[1]
+#   range_start <- as.integer(parts[2])
+#   range_end <- if (length(parts) == 3) as.integer(parts[3]) else range_start
+#   
+#   # Create a dataframe for this sector
+#   sector_df <- data.frame(Letter = rep(letter, range_end - range_start + 1),
+#                           Number = seq(range_start, range_end),
+#                           stringsAsFactors = FALSE)
+#   
+#   # Append to the result dataframe
+#   result_df <- rbind(result_df, sector_df)
+# }
+# 
+
+#Next: expanded list from the sections has 87 entries
+#Original 2 digit only 84
+#This is probably because some 2 digit SIC codes don't exist that get filled in
+#But let's check that
+unique(itl2.lq$SIC_2DIGIT_CODE) %>% as.numeric
+result_df$Number[!result_df$Number %in% (unique(itl2.lq$SIC_2DIGIT_CODE) %>% as.numeric)]
+
+#7, 97,98 missing
+#7: mining of metal ores
+#97/98: activities of households as employers
+#The latter makes sense - the former, because no jobs at all in that sector??
+
+#So, easy to left join into the jobs DF as an SIC letter lookup anyway
+itl2.lq <- itl2.lq %>% 
+  mutate(numeric_SIC_2digit = as.numeric(SIC_2DIGIT_CODE)) %>% 
+  left_join(
+    result_df %>% select(-Letter),
+    by = c('numeric_SIC_2digit' = 'Number')
+    )
+
+
+#SUM JOB COUNTS FROM 5 DIGIT INTO SIC SECTIONS
+#(Which will be more accurate than using numbers from higher level SICs directly from BRES, because of rounding)
+itl2.jobs <- itl2.lq %>% 
+  group_by(DATE,GEOGRAPHY_NAME,SIC_SECTION_NAME) %>% 
+  summarise(
+    COUNT = sum(COUNT),
+    SIC_SECTION_CODE = min(SIC_SECTION_CODE)
+    ) %>% 
+  group_by(GEOGRAPHY_NAME,DATE) %>% 
+  arrange(SIC_SECTION_CODE)
+
+
+
+
+
+#OK, so let's look at just raw job number change over time per section before anything else
+jobslopes.log <- get_slope_and_se_safely(data = itl2.jobs, GEOGRAPHY_NAME,SIC_SECTION_NAME, y = log(COUNT), x = DATE)
+
+place = 'South Yorkshire'
+
+for(growing in c(T,F)){
+  
+  for(sector in unique(itl2.jobs$SIC_SECTION_NAME)){
+    
+    timeplot <- itl2.jobs %>% 
+      filter(SIC_SECTION_NAME == sector) 
+    
+    #Use zoo's rollapply function to get a moving average
+    timeplot <- timeplot %>% 
+      group_by(GEOGRAPHY_NAME) %>% 
+      arrange(DATE) %>% 
+      mutate(
+        movingav = rollapply(COUNT,3,mean,align='right',fill=NA)
+      )
+    
+    
+    #Use largest positive log slopes to filter
+    if(growing){
+      place_selection <- jobslopes.log %>% filter(SIC_SECTION_NAME == sector) %>%
+        arrange(-slope)
+    } else {
+      place_selection <- jobslopes.log %>% filter(SIC_SECTION_NAME == sector) %>%
+        arrange(slope)
+    }
+    
+    #Keep only the top ten places and order them
+    timeplot <- timeplot %>% 
+      mutate(GEOGRAPHY_NAME = factor(GEOGRAPHY_NAME, ordered = T, levels = place_selection$GEOGRAPHY_NAME)) %>%
+      filter(GEOGRAPHY_NAME %in% c(place_selection$GEOGRAPHY_NAME[1:10],place))#Make sure chosen place added
+    
+    #Mark the ITL of interest so it can be clearer in the plot
+    timeplot <- timeplot %>%
+      mutate(
+        ITL2ofinterest = ifelse(GEOGRAPHY_NAME == place, 'ITL of interest','other'),
+      )
+    
+    p <- ggplot(timeplot %>% 
+                  rename(`ITL region` = GEOGRAPHY_NAME),
+                  # filter(!is.na(movingav)),#remove NAs from dates so the x axis doesn't show them
+                aes(x = DATE, y = COUNT, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+      # aes(x = DATE, y = movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+      geom_point() +
+      geom_line() +
+      scale_y_log10() +
+      scale_size_manual(values = c(2.5,1)) +
+      scale_color_brewer(palette = 'Paired', direction = 1) +
+      ylab('Job count') +
+      guides(size = "none", linetype = "none") +
+      ggtitle(
+        paste0(ifelse(growing,'HIGHEST GROWTH','LOWEST GROWTH'),'\n',sector,'\n', place, ' highlighted')
+      ) +
+      theme(plot.title = element_text(face = 'bold'))
+    
+    ggsave(plot = p, 
+           filename = paste0('local/localimages/SICsections_jobcounts_ITL2_unsmoothed/',sector,'_',ifelse(growing,'HIGHESTGROWTH','LOWESTGROWTH'),'_chainedvolumeITL2_sectors.png'), 
+           # filename = paste0('local/localimages/chainedvolumeITL2_sectors/',sector,'_',ifelse(growing,'HIGHESTGROWTH','LOWESTGROWTH'),'_chainedvolumeITL2_sectors.png'), 
+           # filename = paste0('local/localimages/chainedvolumeITL2_sectors/',ifelse(growing,'HIGHESTGROWTH','LOWESTGROWTH'),'_',sector,'_chainedvolumeITL2_sectors.png'), 
+           width = 11, height = 7)
+    
+    
+  }
+  
+}
+
+
+#SLOPE GRIDS
+jobslopes.log <- get_slope_and_se_safely(data = itl2.jobs, GEOGRAPHY_NAME,SIC_SECTION_NAME, y = log(COUNT), x = DATE)
+# jobslopes.log <- get_slope_and_se_safely(data = itl2.jobs %>% filter(DATE %in% 2017:2021), GEOGRAPHY_NAME,SIC_SECTION_NAME, y = log(COUNT), x = DATE)
+#PRE COVID
+jobslopes.log <- get_slope_and_se_safely(data = itl2.jobs %>% filter(DATE %in% 2015:2019), GEOGRAPHY_NAME,SIC_SECTION_NAME, y = log(COUNT), x = DATE)
+
+slopeDiffGrid(slope_df = jobslopes.log, confidence_interval = 95, column_to_grid = SIC_SECTION_NAME, column_to_filter = GEOGRAPHY_NAME, filterval = 'South Yorkshire')
+
+#Anywhere standing out for particular sectors?
+slopeDiffGrid(slope_df = jobslopes.log, confidence_interval = 95, column_to_grid = GEOGRAPHY_NAME, column_to_filter = SIC_SECTION_NAME, filterval = 'Manufacturing')
+
+
+#Output all sectors, looking for anywhere SY is sig over other places (manuf, nada...)
+addstr <- "2013_2019"
+addstr <- "2015_2021"
+
+for(sector in unique(jobslopes.log$SIC_SECTION_NAME)){
+  
+  p <- slopeDiffGrid(slope_df = jobslopes.log, confidence_interval = 95, column_to_grid = GEOGRAPHY_NAME, column_to_filter = SIC_SECTION_NAME, filterval = sector)
+  
+  ggsave(plot = p, filename = paste0('local/localimages/JOBCOUNT_sector_slope_grids/',sector,'_',addstr,'.png'), width = 13, height = 13)
+  
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

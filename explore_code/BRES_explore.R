@@ -2917,7 +2917,8 @@ itl2.jobs <- itl2.lq %>%
   arrange(SIC_SECTION_CODE)
 
 
-
+#Save for elsewhere
+saveRDS(itl2.jobs,'data/itl2_BRES_jobs_SIC_sections.rds')
 
 
 #OK, so let's look at just raw job number change over time per section before anything else
@@ -2995,6 +2996,7 @@ jobslopes.log <- get_slope_and_se_safely(data = itl2.jobs, GEOGRAPHY_NAME,SIC_SE
 # jobslopes.log <- get_slope_and_se_safely(data = itl2.jobs %>% filter(DATE %in% 2017:2021), GEOGRAPHY_NAME,SIC_SECTION_NAME, y = log(COUNT), x = DATE)
 #PRE COVID
 jobslopes.log <- get_slope_and_se_safely(data = itl2.jobs %>% filter(DATE %in% 2015:2019), GEOGRAPHY_NAME,SIC_SECTION_NAME, y = log(COUNT), x = DATE)
+jobslopes.log <- get_slope_and_se_safely(data = itl2.jobs %>% filter(DATE %in% 2017:2021), GEOGRAPHY_NAME,SIC_SECTION_NAME, y = log(COUNT), x = DATE)
 
 slopeDiffGrid(slope_df = jobslopes.log, confidence_interval = 95, column_to_grid = SIC_SECTION_NAME, column_to_filter = GEOGRAPHY_NAME, filterval = 'South Yorkshire')
 
@@ -3003,14 +3005,15 @@ slopeDiffGrid(slope_df = jobslopes.log, confidence_interval = 95, column_to_grid
 
 
 #Output all sectors, looking for anywhere SY is sig over other places (manuf, nada...)
-addstr <- "2013_2019"
-addstr <- "2015_2021"
+daterange = c(2015:2019)
+daterange = c(2017:2021)
+jobslopes.log <- get_slope_and_se_safely(data = itl2.jobs %>% filter(DATE %in% daterange), GEOGRAPHY_NAME,SIC_SECTION_NAME, y = log(COUNT), x = DATE)
 
 for(sector in unique(jobslopes.log$SIC_SECTION_NAME)){
   
   p <- slopeDiffGrid(slope_df = jobslopes.log, confidence_interval = 95, column_to_grid = GEOGRAPHY_NAME, column_to_filter = SIC_SECTION_NAME, filterval = sector)
   
-  ggsave(plot = p, filename = paste0('local/localimages/JOBCOUNT_sector_slope_grids/',sector,'_',addstr,'.png'), width = 13, height = 13)
+  ggsave(plot = p, filename = paste0('local/localimages/JOBCOUNT_sector_slope_grids/',sector,'_',min(daterange),'_',max(daterange),'.png'), width = 13, height = 13)
   
 }
 

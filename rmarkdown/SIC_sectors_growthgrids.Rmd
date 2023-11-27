@@ -1,0 +1,87 @@
+---
+title: "SIC sectors: growth analysis"
+author: "Dan Olner"
+date: "2023-11-27"
+output: powerpoint_presentation
+---
+
+```{r setup, include=FALSE}
+#Don't think DPI makes a difference... oh yes it does, ace (not in Word though?)
+knitr::opts_chunk$set(echo = F, warning = F, error = F, message = F, comment=NA, fig.width = 12, fig.height = 12)
+
+library(tidyverse)
+library(cowplot)
+library(zoo)
+library(sf)
+library(tmap)
+library(flextable)
+source('../functions/misc_functions.R')
+options(scipen = 99)#Avoids scientific notation
+```
+
+```{r loaddata}
+itl2.cvs <- readRDS('../data/UKchainedvolume_itl2_SIC_sections.rds')
+
+itl2.jobs <- readRDS('../data/itl2_BRES_jobs_SIC_sections.rds')
+
+#Right join to match the fewer available years in the BRES data
+itl2.gvaperjob <- itl2.cvs %>% 
+  rename(gva = value) %>% 
+  right_join(
+    itl2.jobs %>% select(-SIC_SECTION_NAME) %>% rename(jobcount = COUNT),
+    by = c('year' = 'DATE','ITL_region_name' = 'GEOGRAPHY_NAME','SIC07_code' = 'SIC_SECTION_CODE')
+  ) %>% 
+  mutate(gvaperjob = (gva/jobcount) * 1000000)
+
+
+```
+
+
+# AIMS
+
+Separate out trend lines for jobs, GVA and GVA per job for South Yorkshire, for 20 SIC 'sections' including manufacturing
+
+
+## Example of separating trend lines
+
+This plot shows construction and manufacturing chained volume (inflation-adjusted) GVA for South Yorkshire, with 95% confidence intervals. The two trends are clearly statistically separable.
+
+The grid plot for South Yorkshire on the following slide does the same by comparing a matrix of every SIC section and indicating where trendlines are likely statistically separable from one another.
+
+```{r}
+#Sample plot comparing two slopes to show sig diff
+#manuf vs mining quarrying
+sampleplot <- itl2.cvs %>%
+  filter(
+    ITL_region_name == 'South Yorkshire',
+    # SIC07_description %in% c('Manufacturing','Mining and quarrying')
+    SIC07_description %in% c('Manufacturing','Construction')
+  )
+
+#default level is 0.95
+ggplot(sampleplot, aes(x=year,y=value,colour=SIC07_description )) +
+  geom_line(size=2) +
+  # scale_y_log10() +
+  geom_smooth(method='lm') 
+```
+
+## South Yorkshire trend matrix for 20 SIC sections' trendlines 2015 to 2021
+
+Key to the plot:
+
+> 
+
+```{r}
+# slopes.log <- get_slope_and_se_safely(data = itl2.cvs, ITL_region_name,SIC07_description, y = log(value), x = year)
+slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2015:2021), ITL_region_name,SIC07_description, y = log(value), x = year)
+
+p <- slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'South Yorkshire')
+
+p + coord_fixed()
+
+```
+
+
+
+
+

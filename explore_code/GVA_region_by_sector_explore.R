@@ -3935,10 +3935,8 @@ p
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Chained volume GVA slopes for higher level sectors (sections)----
+# CHAINED VOLUME GVA SLOPES FOR HIGHER LEVEL SECTORS (SECTIONS)----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-
 
 #Ideally with some forecasting just based on those slopes
 #First, pull out sectors
@@ -4271,6 +4269,34 @@ ggplot(combos, aes(x = substr(SIC07_description1,0,30), y = substr(SIC07_descrip
   
 
 
+#Sample plot comparing two slopes to show sig diff
+#manuf vs mining quarrying
+sampleplot <- itl2.cvs %>%
+  filter(
+    ITL_region_name == 'South Yorkshire',
+    # SIC07_description %in% c('Manufacturing','Mining and quarrying')
+    SIC07_description %in% c('Manufacturing','Construction')
+  )
+
+#default level is 0.95
+ggplot(sampleplot, aes(x=year,y=value,colour=SIC07_description )) +
+  geom_line(size=2) +
+  # scale_y_log10() +
+  geom_smooth(method='lm') 
+
+#Sample of two that are not separable
+sampleplot <- itl2.cvs %>%
+  filter(
+    ITL_region_name == 'South Yorkshire',
+    SIC07_description %in% c('Human health and social work activities','Education')
+  )
+
+#default level is 0.95
+ggplot(sampleplot, aes(x=year,y=value,colour=SIC07_description )) +
+  geom_line(size=2) +
+  # scale_y_log10() +
+  geom_smooth(method='lm') 
+
 
 #Pick a different data range
 slopes.log <- get_slope_and_se_safely(data = itl2.cvs, ITL_region_name,SIC07_description, y = log(value), x = year)
@@ -4297,29 +4323,128 @@ slopeDiffGrid(slope_df = slopes.log, confidence_interval = 99, column_to_grid = 
 
 
 #OK, let's output all the sectors and see see
-#Additional save string
-addstr <- "2013_2019"
-addstr <- "2015_2021"
+daterange = c(2013:2019)
+daterange = c(2015:2021)
+slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% daterange), ITL_region_name,SIC07_description, y = log(value), x = year)
 
 for(sector in unique(slopes.log$SIC07_description)){
   
   p <- slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = sector)
   
-  ggsave(plot = p, filename = paste0('local/localimages/sector_slope_grids/',sector,'_',addstr,'.png'), width = 13, height = 13)
+  ggsave(plot = p, filename = paste0('local/localimages/sector_slope_grids/',sector,'_',min(daterange),'_',max(daterange),'.png'), width = 13, height = 13)
   
 }
-
 
 
 #Repeat for all places
-for(place in unique(slopes.log$ITL_region_name)){
+# for(place in unique(slopes.log$ITL_region_name)){
+#   
+#   p <- slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = place)
+#   
+#   ggsave(plot = p, filename = paste0('local/localimages/place_slope_grids/',place,'.png'), width = 13, height = 13)
+#   
+# }
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#GVA PER WORKER, CHAINED VOLUME HIGHER LEVEL SECTORS----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+itl2.jobs <- readRDS('data/itl2_BRES_jobs_SIC_sections.rds')
+
+#Right join to match the fewer available years in the BRES data
+itl2.gvaperjob <- itl2.cvs %>% 
+  rename(gva = value) %>% 
+  right_join(
+    itl2.jobs %>% select(-SIC_SECTION_NAME) %>% rename(jobcount = COUNT),
+    by = c('year' = 'DATE','ITL_region_name' = 'GEOGRAPHY_NAME','SIC07_code' = 'SIC_SECTION_CODE')
+  ) %>% 
+  mutate(gvaperjob = (gva/jobcount) * 1000000)
+
+
+perjobslopes.log <- get_slope_and_se_safely(data = itl2.gvaperjob, ITL_region_name,SIC07_description, y = log(gvaperjob), x = year)
+
+
+#Output all sectors and see...
+#NOTE, MAY BE EDITED TO OUTPUT RAW CHANGE NOT 3 YEAR SMOOTHED
+place = 'South Yorkshire'
+
+for(growing in c(T,F)){
   
-  p <- slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = place)
-  
-  ggsave(plot = p, filename = paste0('local/localimages/place_slope_grids/',place,'.png'), width = 13, height = 13)
+  for(sector in unique(itl2.gvaperjob$SIC07_description)){
+    
+    timeplot <- itl2.gvaperjob %>% 
+      filter(SIC07_description == sector) 
+    
+    #Use zoo's rollapply function to get a moving average
+    timeplot <- timeplot %>% 
+      group_by(ITL_region_name) %>% 
+      arrange(year) %>% 
+      mutate(
+        movingav = rollapply(gvaperjob,3,mean,align='right',fill=NA)
+      )
+    
+    
+    #Use largest positive log slopes to filter
+    if(growing){
+      place_selection <- slopes.log %>% filter(SIC07_description == sector) %>%
+        arrange(-slope)
+    } else {
+      place_selection <- slopes.log %>% filter(SIC07_description == sector) %>%
+        arrange(slope)
+    }
+    
+    #Keep only the top ten places and order them
+    timeplot <- timeplot %>% 
+      mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = place_selection$ITL_region_name)) %>%
+      filter(ITL_region_name %in% c(place_selection$ITL_region_name[1:10],place))#Make sure chosen place added
+    
+    #Mark the ITL of interest so it can be clearer in the plot
+    timeplot <- timeplot %>%
+      mutate(
+        ITL2ofinterest = ifelse(ITL_region_name == place, 'ITL of interest','other'),
+      )
+    
+    p <- ggplot(timeplot %>% 
+                  rename(`ITL region` = ITL_region_name),
+                aes(x = year, y = gvaperjob, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+      # aes(x = year, y = movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+      geom_point() +
+      geom_line() +
+      scale_y_log10() +
+      scale_size_manual(values = c(2.5,1)) +
+      scale_color_brewer(palette = 'Paired', direction = 1) +
+      ylab('GVA per job, pounds') +
+      guides(size = "none", linetype = "none") +
+      ggtitle(
+        paste0(ifelse(growing,'HIGHEST GROWTH','LOWEST GROWTH'),'\n',sector,'\n', place, ' highlighted')
+      ) +
+      theme(plot.title = element_text(face = 'bold'))
+    
+    ggsave(plot = p, 
+           filename = paste0('local/localimages/chainedvolumeITL2_gvaperjob/',sector,'_',ifelse(growing,'HIGHESTGROWTH','LOWESTGROWTH'),'_chainedvolumeITL2_sectors.png'), 
+           # filename = paste0('local/localimages/chainedvolumeITL2_sectors/',sector,'_',ifelse(growing,'HIGHESTGROWTH','LOWESTGROWTH'),'_chainedvolumeITL2_sectors.png'), 
+           # filename = paste0('local/localimages/chainedvolumeITL2_sectors/',ifelse(growing,'HIGHESTGROWTH','LOWESTGROWTH'),'_',sector,'_chainedvolumeITL2_sectors.png'), 
+           width = 11, height = 7)
+    
+    
+  }
   
 }
 
+
+
+
+
+
+#Slopes and stuff
+perjobslopes.log <- get_slope_and_se_safely(data = itl2.gvaperjob, ITL_region_name,SIC07_description, y = log(gvaperjob), x = year)
+perjobslopes.log <- get_slope_and_se_safely(data = itl2.gvaperjob %>% filter(year %in% 2017:2021), ITL_region_name,SIC07_description, y = log(gvaperjob), x = year)
+perjobslopes.log <- get_slope_and_se_safely(data = itl2.gvaperjob %>% filter(year %in% 2015:2019), ITL_region_name,SIC07_description, y = log(gvaperjob), x = year)
+
+#Functioning up
+# debugonce(slopeDiffGrid)
+slopeDiffGrid(slope_df = perjobslopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'South Yorkshire')
 
 
 

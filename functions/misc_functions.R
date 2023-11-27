@@ -485,7 +485,7 @@ getZScore <- function(confidence_percent) {
 #Or all places paired for a particular sector
 slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_to_filter, filterval){
   
-  column_to_grid <- enquo(column_to_grid)
+  column_to_grid <- enquo(column_to_grid) 
   column_to_filter <- enquo(column_to_filter) 
   
   #Filter down to single thing (sector, place etc)
@@ -495,12 +495,13 @@ slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_
   #Apply CIs
   ci <- getZScore(confidence_interval)
   
-  cat('CI = ',confidence_interval,', z score = ', ci, '\n')
+  # cat('CI = ',confidence_interval,', z score = ', ci, '\n')
   
   slope_df <- slope_df %>% 
     mutate(
       min.ci = slope - (se * ci),
-      max.ci = slope + (se * ci)
+      max.ci = slope + (se * ci),
+      crosses.zero = min.ci * max.ci < 0
     )
   
   #Apply CI overlap test to all pairs
@@ -517,7 +518,8 @@ slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_
         !!column_to_grid,
         slopeone = slope,
         min.cione = min.ci,
-        max.cione = max.ci
+        max.cione = max.ci,
+        crosses.zero.one = crosses.zero
       ),
       by = c('gridcol1' = quo_name(column_to_grid))
     )
@@ -529,7 +531,8 @@ slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_
         !!column_to_grid,
         slopetwo = slope,
         min.citwo = min.ci,
-        max.citwo = max.ci
+        max.citwo = max.ci,
+        crosses.zero.two = crosses.zero
       ),
       by = c('gridcol2' = quo_name(column_to_grid))
     )
@@ -550,11 +553,46 @@ slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_
     )
    
   #Zero point of scale
-  #Though shouldn't be necessary here as symmetric differences mean the scale is always an exact mirror
+  #Though shouldn't be necessary here as symmetric differences across the matrix diagonal mean the scale is always an exact mirror
   valz <- c(range(combos$slopediff, na.rm = T), 0)
   scale_values <- function(x){(x-min(x))/(max(x)-min(x))}
   scaled <- scale_values(valz)
   zerocutoff <- scaled[3]
+  
+  
+  #Use x and y axis names to mark the polarity of those individual slopes
+  #And whether they cross zero
+  combos <- combos %>% 
+    mutate(
+      slopecolour_x = case_when(
+        !crosses.zero.one & slopeone > 0 ~ "#28da28",
+        crosses.zero.one & slopeone > 0 ~ "#96c493",
+        !crosses.zero.one & slopeone < 0 ~ "red",
+        crosses.zero.one & slopeone < 0 ~ "#ffcccc"
+      ),
+      slopecolour_y = case_when(
+        !crosses.zero.two & slopetwo > 0 ~ "#28da28",
+        crosses.zero.two & slopetwo > 0 ~ "#96c493",
+        !crosses.zero.two & slopetwo < 0 ~ "red",
+        crosses.zero.two & slopetwo < 0 ~ "#ffcccc"
+      )
+    )
+  
+  
+  #Get unique values from that for the column_to_grid column
+  #And order so matches x y axis order
+  #(Probably a neater way of doing this)
+  slopecolours_x <- combos %>% 
+    distinct(gridcol1, .keep_all = T) %>% 
+    arrange(gridcol1) %>% 
+    select(slopecolour_x) %>% 
+    pull
+  
+  slopecolours_y <- combos %>% 
+    distinct(gridcol2, .keep_all = T) %>% 
+    arrange(gridcol2) %>% 
+    select(slopecolour_y) %>% 
+    pull
   
   
   
@@ -567,7 +605,8 @@ slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_
       values = c(0, zerocutoff, 1)#https://stackoverflow.com/a/58725778/5023561
     ) +
     theme(
-      axis.text.x = element_text(angle = 270, vjust = 0.5, hjust=0),
+      axis.text.x = element_text(angle = 270, vjust = 0.5, hjust=0, colour = slopecolours_x),
+      axis.text.y = element_text(colour = slopecolours_y),
       axis.title.x=element_blank(),
       axis.title.y=element_blank()
     ) +

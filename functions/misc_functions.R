@@ -500,7 +500,7 @@ slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_
   slope_df <- slope_df %>% 
     mutate(
       min.ci = slope - (se * ci),
-      max.ci = slope + (se * ci) 
+      max.ci = slope + (se * ci)
     )
   
   #Apply CI overlap test to all pairs

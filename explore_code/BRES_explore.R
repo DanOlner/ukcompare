@@ -2980,7 +2980,7 @@ for(growing in c(T,F)){
       theme(plot.title = element_text(face = 'bold'))
     
     ggsave(plot = p, 
-           filename = paste0('local/localimages/SICsections_jobcounts_ITL2_unsmoothed/',sector,'_',ifelse(growing,'HIGHESTGROWTH','LOWESTGROWTH'),'_chainedvolumeITL2_sectors.png'), 
+           filename = paste0('local/localimages/JOBCOUNT_SICsections_jobcounts_ITL2_unsmoothed/',sector,'_',ifelse(growing,'HIGHESTGROWTH','LOWESTGROWTH'),'_chainedvolumeITL2_sectors.png'), 
            # filename = paste0('local/localimages/chainedvolumeITL2_sectors/',sector,'_',ifelse(growing,'HIGHESTGROWTH','LOWESTGROWTH'),'_chainedvolumeITL2_sectors.png'), 
            # filename = paste0('local/localimages/chainedvolumeITL2_sectors/',ifelse(growing,'HIGHESTGROWTH','LOWESTGROWTH'),'_',sector,'_chainedvolumeITL2_sectors.png'), 
            width = 11, height = 7)
@@ -2997,6 +2997,7 @@ jobslopes.log <- get_slope_and_se_safely(data = itl2.jobs, GEOGRAPHY_NAME,SIC_SE
 #PRE COVID
 jobslopes.log <- get_slope_and_se_safely(data = itl2.jobs %>% filter(DATE %in% 2015:2019), GEOGRAPHY_NAME,SIC_SECTION_NAME, y = log(COUNT), x = DATE)
 jobslopes.log <- get_slope_and_se_safely(data = itl2.jobs %>% filter(DATE %in% 2017:2021), GEOGRAPHY_NAME,SIC_SECTION_NAME, y = log(COUNT), x = DATE)
+jobslopes.log <- get_slope_and_se_safely(data = itl2.jobs %>% filter(DATE %in% 2015:2021), GEOGRAPHY_NAME,SIC_SECTION_NAME, y = log(COUNT), x = DATE)
 
 slopeDiffGrid(slope_df = jobslopes.log, confidence_interval = 95, column_to_grid = SIC_SECTION_NAME, column_to_filter = GEOGRAPHY_NAME, filterval = 'South Yorkshire')
 
@@ -3014,6 +3015,19 @@ for(sector in unique(jobslopes.log$SIC_SECTION_NAME)){
   p <- slopeDiffGrid(slope_df = jobslopes.log, confidence_interval = 95, column_to_grid = GEOGRAPHY_NAME, column_to_filter = SIC_SECTION_NAME, filterval = sector)
   
   ggsave(plot = p, filename = paste0('local/localimages/JOBCOUNT_sector_slope_grids/',sector,'_',min(daterange),'_',max(daterange),'.png'), width = 13, height = 13)
+  
+}
+
+
+
+daterange = c(2015:2021)
+jobslopes.log <- get_slope_and_se_safely(data = itl2.jobs %>% filter(DATE %in% daterange), GEOGRAPHY_NAME,SIC_SECTION_NAME, y = log(COUNT), x = DATE)
+
+for(sector in unique(jobslopes.log$SIC_SECTION_NAME)){
+  
+  p <- slopeDiffGrid(slope_df = jobslopes.log, confidence_interval = 95, column_to_grid = GEOGRAPHY_NAME, column_to_filter = SIC_SECTION_NAME, filterval = sector)
+  
+  ggsave(plot = p, filename = paste0('local/localimages/JOBCOUNT_sector_slope_grids_15to21/',sector,'_',min(daterange),'_',max(daterange),'.png'), width = 13, height = 13)
   
 }
 

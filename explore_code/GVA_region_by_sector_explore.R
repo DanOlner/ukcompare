@@ -4115,8 +4115,9 @@ table(unique(slopes.log$ITL_region_name) %in% itl2.geo$ITL221NM)
 
 
 
-slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 1998:2021), ITL_region_name,SIC07_description, y = log(value), x = year) %>% 
-# slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2015:2021), ITL_region_name,SIC07_description, y = log(value), x = year) %>% 
+# slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 1998:2021), ITL_region_name,SIC07_description, y = log(value), x = year) %>% 
+# slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2013:2019), ITL_region_name,SIC07_description, y = log(value), x = year) %>% 
+slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2015:2021), ITL_region_name,SIC07_description, y = log(value), x = year) %>%
 #Avoid covid
 # slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2013:2019), ITL_region_name,SIC07_description, y = log(value), x = year) %>% 
   mutate(
@@ -4137,6 +4138,7 @@ slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 1998:
 #Pick sector
 sector = slopes.log$SIC07_description[grepl(pattern = 'manuf', x = slopes.log$SIC07_description, ignore.case = T)] %>% unique
 sector = slopes.log$SIC07_description[grepl(pattern = 'information', x = slopes.log$SIC07_description, ignore.case = T)] %>% unique
+sector = slopes.log$SIC07_description[grepl(pattern = 'financ', x = slopes.log$SIC07_description, ignore.case = T)] %>% unique
 
 # View(slopes.log %>% filter(SIC07_description == sector))
 
@@ -4147,10 +4149,10 @@ map <- itl2.geo %>%
   ) %>% mutate(slope100 = slope * 100)
 
 tm_shape(map) +
-  tm_polygons('slope100', n = 3, title="") +
+  tm_polygons('slope100', n = 7, title="") +
   tm_layout(title = sector, legend.bg.color = 'white', legend.bg.alpha = 0.5) +
   tm_shape(
-    map %>% filter(!crosseszero99)
+    map %>% filter(!crosseszero95)
   ) +
   tm_borders(col='blue', lwd = 3)
 
@@ -4278,17 +4280,11 @@ sampleplot <- itl2.cvs %>%
     SIC07_description %in% c('Manufacturing','Construction')
   )
 
-#default level is 0.95
-ggplot(sampleplot, aes(x=year,y=value,colour=SIC07_description )) +
-  geom_line(size=2) +
-  # scale_y_log10() +
-  geom_smooth(method='lm') 
-
-#Sample of two that are not separable
 sampleplot <- itl2.cvs %>%
   filter(
-    ITL_region_name == 'South Yorkshire',
-    SIC07_description %in% c('Human health and social work activities','Education')
+    ITL_region_name == 'South Yorkshire'
+    # SIC07_description %in% c('Manufacturing','Mining and quarrying')
+    # SIC07_description %in% c('Manufacturing','Construction')
   )
 
 #default level is 0.95
@@ -4296,6 +4292,20 @@ ggplot(sampleplot, aes(x=year,y=value,colour=SIC07_description )) +
   geom_line(size=2) +
   # scale_y_log10() +
   geom_smooth(method='lm') 
+  # geom_smooth(method='lm', linetype=0) 
+
+# #Sample of two that are not separable
+# sampleplot <- itl2.cvs %>%
+#   filter(
+#     ITL_region_name == 'South Yorkshire',
+#     SIC07_description %in% c('Human health and social work activities','Education')
+#   )
+# 
+# #default level is 0.95
+# ggplot(sampleplot, aes(x=year,y=value,colour=SIC07_description )) +
+#   geom_line(size=2) +
+#   # scale_y_log10() +
+#   geom_smooth(method='lm') 
 
 
 #Pick a different data range
@@ -4360,6 +4370,11 @@ itl2.gvaperjob <- itl2.cvs %>%
     by = c('year' = 'DATE','ITL_region_name' = 'GEOGRAPHY_NAME','SIC07_code' = 'SIC_SECTION_CODE')
   ) %>% 
   mutate(gvaperjob = (gva/jobcount) * 1000000)
+
+#We have a sector non-match, which one?
+unique(itl2.jobs$SIC_SECTION_NAME)[!unique(itl2.jobs$SIC_SECTION_NAME) %in% unique(itl2.gvaperjob$SIC07_description)]
+unique(itl2.cvs$SIC07_description)[!unique(itl2.cvs$SIC07_description) %in% unique(itl2.gvaperjob$SIC07_description)]#It's activities of households - those aren't jobs, so won't appear. OK then.
+unique(itl2.gvaperjob$SIC07_description)[!unique(itl2.gvaperjob$SIC07_description) %in% unique(itl2.jobs$SIC_SECTION_NAME)]
 
 
 perjobslopes.log <- get_slope_and_se_safely(data = itl2.gvaperjob, ITL_region_name,SIC07_description, y = log(gvaperjob), x = year)
@@ -4441,10 +4456,61 @@ for(growing in c(T,F)){
 perjobslopes.log <- get_slope_and_se_safely(data = itl2.gvaperjob, ITL_region_name,SIC07_description, y = log(gvaperjob), x = year)
 perjobslopes.log <- get_slope_and_se_safely(data = itl2.gvaperjob %>% filter(year %in% 2017:2021), ITL_region_name,SIC07_description, y = log(gvaperjob), x = year)
 perjobslopes.log <- get_slope_and_se_safely(data = itl2.gvaperjob %>% filter(year %in% 2015:2019), ITL_region_name,SIC07_description, y = log(gvaperjob), x = year)
+perjobslopes.log <- get_slope_and_se_safely(data = itl2.gvaperjob %>% filter(year %in% 2015:2021), ITL_region_name,SIC07_description, y = log(gvaperjob), x = year)
 
 #Functioning up
 # debugonce(slopeDiffGrid)
 slopeDiffGrid(slope_df = perjobslopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'South Yorkshire')
+
+
+# daterange = c(2013:2019)
+daterange = c(2015:2021)
+perjobslopes.log <- get_slope_and_se_safely(data = itl2.gvaperjob %>% filter(year %in% daterange), ITL_region_name, SIC07_description, y = log(gvaperjob), x = year)
+
+
+for(sector in unique(perjobslopes.log$SIC07_description)){
+  
+  p <- slopeDiffGrid(slope_df = perjobslopes.log, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = sector)
+  
+  ggsave(plot = p, filename = paste0('local/localimages/GVAPERJOB_sectorgrids/',sector,'_',min(daterange),'_',max(daterange),'.png'), width = 13, height = 13)
+  
+}
+
+
+#Maaaaap
+sector = perjobslopes.log$SIC07_description[grepl(pattern = 'elec', x = perjobslopes.log$SIC07_description, ignore.case = T)] %>% unique
+
+# View(slopes.log %>% filter(SIC07_description == sector))
+
+daterange = c(2015:2021)
+perjobslopes.log <- get_slope_and_se_safely(data = itl2.gvaperjob %>% filter(year %in% daterange), ITL_region_name, SIC07_description, y = log(gvaperjob), x = year) %>%
+  mutate(
+    min99 = slope - (se * getZScore(99)),
+    max99 = slope + (se * getZScore(99)),
+    min95 = slope - (se * getZScore(95)),
+    max95 = slope + (se * getZScore(95)),
+    min90 = slope - (se * getZScore(90)),
+    max90 = slope + (se * getZScore(90)),
+    crosseszero99 = min99 * max99 < 0,#mark if crosses zero
+    crosseszero95 = min95 * max95 < 0,#mark if crosses zero
+    crosseszero90 = min90 * max90 < 0,#mark if crosses zero
+    slopepolarity = ifelse(slope > 0, 'increasing', 'decreasing')
+  )
+
+
+map <- itl2.geo %>% 
+  right_join(
+    perjobslopes.log %>% filter(SIC07_description == sector),
+    by = c('ITL221NM'='ITL_region_name')
+  ) %>% mutate(slope100 = slope * 100)
+
+tm_shape(map) +
+  tm_polygons('slope100', n = 7, title="") +
+  tm_layout(title = sector, legend.bg.color = 'white', legend.bg.alpha = 0.5) +
+  tm_shape(
+    map %>% filter(!crosseszero95)
+  ) +
+  tm_borders(col='blue', lwd = 3)
 
 
 

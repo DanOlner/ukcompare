@@ -34,6 +34,9 @@ itl2.gvaperjob <- itl2.cvs %>%
   mutate(gvaperjob = (gva/jobcount) * 1000000)
 
 
+slopes.log1521 <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2015:2021), ITL_region_name,SIC07_description, y = log(value), x = year)
+slopes.log1319 <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2013:2019), ITL_region_name,SIC07_description, y = log(value), x = year)
+
 ```
 
 
@@ -42,11 +45,14 @@ itl2.gvaperjob <- itl2.cvs %>%
 Separate out trend lines for jobs, GVA and GVA per job for South Yorkshire, for 20 SIC 'sections' including manufacturing
 
 
+
+----
+
 ## Example of separating trend lines
 
-This plot shows construction and manufacturing chained volume (inflation-adjusted) GVA for South Yorkshire, with 95% confidence intervals. The two trends are clearly statistically separable.
+This plot shows construction and manufacturing chained volume (inflation-adjusted) GVA for South Yorkshire, with 95% confidence intervals shown in grey. The two trends are clearly statistically separable - the range of the trend slopes within the grey bounds differs; additionally, manufacturing has a positive slope and mining/quarrying is negative.
 
-The grid plot for South Yorkshire on the following slide does the same by comparing a matrix of every SIC section and indicating where trendlines are likely statistically separable from one another.
+The grid plot for South Yorkshire on the following slide does the same by comparing a matrix of every SIC section and indicating where trendlines are likely statistically separable from one another, providing a way to see which sectors are most likely clearly growing/shrinking more than others.
 
 ```{r}
 #Sample plot comparing two slopes to show sig diff
@@ -65,21 +71,307 @@ ggplot(sampleplot, aes(x=year,y=value,colour=SIC07_description )) +
   geom_smooth(method='lm') 
 ```
 
+----
+
 ## South Yorkshire trend matrix for 20 SIC sections' trendlines 2015 to 2021
 
-Key to the plot:
+This matrix takes every pair of trendlines in South Yorkshire and compares them. How to read:
 
-> 
+-- Green and red squares show the DIFFERENCE between slope lines (so green may not mean one slope is positive, just that the difference is positive) 
+
+-- If a pair's square has a black outline, the difference is statistically separable (CI 95%)
+
+-- Colours of the axis names indicate whether that sector's slope was positive (green or red) and whether significant (95% CI, in bolder green or red).
+
+-- Matrix is mirrored along the diagonal axis so e.g. ICT's green horizontal line is mirrored as red vertically (showing the same thing - ICT higher slopes than other sectors, other sectors lower than ICT).
+
+Information & communication is the clear standout, with manufacturing and the power and water sectors separable from others the most. But note, there's a COVID effect here... see next slide of the same plot for 2013-2019. (Treat real estate activities cautiously - it includes imputed rental.)
+
 
 ```{r}
-# slopes.log <- get_slope_and_se_safely(data = itl2.cvs, ITL_region_name,SIC07_description, y = log(value), x = year)
-slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2015:2021), ITL_region_name,SIC07_description, y = log(value), x = year)
-
-p <- slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'South Yorkshire')
+p <- slopeDiffGrid(slope_df = slopes.log1521, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'South Yorkshire')
 
 p + coord_fixed()
 
 ```
+
+## South Yorkshire trend matrix for 20 SIC sections' trendlines 2013 to 2019
+
+Looking at the 7 years prior to COVID, most of the separable sectors disappear - Information/communication remain, however.
+
+This is showing how some sectors were more resilient through COVID than others, i.e. in the previous plot, manufacturing slopes are more separable because it did better compared to others through COVID. Slides below look at this in more detail.
+
+
+```{r}
+# slopes.log <- get_slope_and_se_safely(data = itl2.cvs, ITL_region_name,SIC07_description, y = log(value), x = year)
+slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2013:2019), ITL_region_name,SIC07_description, y = log(value), x = year)
+
+p <- slopeDiffGrid(slope_df = slopes.log1319, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'South Yorkshire')
+
+p + coord_fixed()
+
+```
+
+
+
+----
+
+## Information & Communication time series: 10 HIGHEST growth places 2015-21
+
+Looking just at Information/communication, this plot shows the top 10 growth places (with South Yorkshire overlaid) using slopes between 2015-21 - though displaying the whole data range to show ICT has been constantly growing (as the next lowest-growth slide also shows).
+
+But even given that ICT growth has been ubiquitous, South Yorkshire's output stands out. It jumped from 2018 and was less affected by COVID than other places. This has put its ICT growth statistically ahead of most (all?) other places.
+
+Note: the raw GVA amounts for each place have NOT been adjusted e.g. on a per capita or worker basis, so direct scale comparisons cannot be made - compare change over time only.
+
+```{r, fig.width = 10, fig.height = 8}
+growing = T
+place = 'South Yorkshire'
+sector = 'Information and communication'
+
+timeplot <- itl2.cvs %>% 
+      filter(SIC07_description == sector) 
+    
+#Use zoo's rollapply function to get a moving average
+timeplot <- timeplot %>% 
+  group_by(ITL_region_name) %>% 
+  arrange(year) %>% 
+  mutate(
+    movingav = rollapply(value,3,mean,align='right',fill=NA)
+  )
+
+#Use largest positive log slopes to filter
+if(growing){
+  place_selection <- slopes.log1521 %>% filter(SIC07_description == sector) %>%
+    arrange(-slope)
+  sy_position <<- which(place_selection$ITL_region_name == 'South Yorkshire')
+} else {
+  place_selection <- slopes.log1521 %>% filter(SIC07_description == sector) %>%
+    arrange(slope)
+    sy_position <<- length(place_selection$ITL_region_name) + 1 -which(place_selection$ITL_region_name == 'South Yorkshire')
+  }
+
+#Keep only the top ten places and order them
+timeplot <- timeplot %>% 
+  mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = place_selection$ITL_region_name)) %>%
+  filter(ITL_region_name %in% c(place_selection$ITL_region_name[1:10],place))#Make sure chosen place added
+
+#Mark the ITL of interest so it can be clearer in the plot
+timeplot <- timeplot %>%
+  mutate(
+    ITL2ofinterest = ifelse(ITL_region_name == place, 'ITL of interest','other'),
+  )
+
+ggplot(timeplot %>% 
+         rename(`ITL region` = ITL_region_name) %>% 
+         filter(!is.na(movingav)),#remove NAs from dates so the x axis doesn't show them
+       aes(x = year, y = value, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+       # aes(x = year, y = movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+  geom_point() +
+  geom_line() +
+  scale_y_log10() +
+  scale_size_manual(values = c(2.5,1)) +
+  scale_color_brewer(palette = 'Paired', direction = 1) +
+  ylab('Regional GVA chained volume (log, millions)') +
+  guides(size = "none", linetype = "none") +
+  ggtitle(
+    paste0(ifelse(growing,'10 HIGHEST GROWTH PLACES','10 LOWEST GROWTH PLACES'),'\n',sector,'\n', place, ' highlighted (',scales::ordinal(sy_position),' most positive slope)')
+  ) +
+  theme(plot.title = element_text(face = 'bold'))
+```
+
+----
+
+## Information & Communication time series: 10 LOWEST growth places
+
+These 10 places had the lowest growth slopes for ICT in the UK - and are still all growing. This is the national context for this sector.
+
+Though note, the effect of COVID is clearly visible from 2019 onwards for many of these places.
+
+```{r, fig.width = 10, fig.height = 8}
+growing = F
+place = 'South Yorkshire'
+sector = 'Information and communication'
+
+timeplot <- itl2.cvs %>% 
+      filter(SIC07_description == sector) 
+    
+#Use zoo's rollapply function to get a moving average
+timeplot <- timeplot %>% 
+  group_by(ITL_region_name) %>% 
+  arrange(year) %>% 
+  mutate(
+    movingav = rollapply(value,3,mean,align='right',fill=NA)
+  )
+
+#Use largest positive log slopes to filter
+if(growing){
+  place_selection <- slopes.log1521 %>% filter(SIC07_description == sector) %>%
+    arrange(-slope)
+  sy_position <<- which(place_selection$ITL_region_name == 'South Yorkshire')
+} else {
+  place_selection <- slopes.log1521 %>% filter(SIC07_description == sector) %>%
+    arrange(slope)
+    sy_position <<- length(place_selection$ITL_region_name) + 1 -which(place_selection$ITL_region_name == 'South Yorkshire')
+  }
+
+#Keep only the top ten places and order them
+timeplot <- timeplot %>% 
+  mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = place_selection$ITL_region_name)) %>%
+  filter(ITL_region_name %in% c(place_selection$ITL_region_name[1:10],place))#Make sure chosen place added
+
+#Mark the ITL of interest so it can be clearer in the plot
+timeplot <- timeplot %>%
+  mutate(
+    ITL2ofinterest = ifelse(ITL_region_name == place, 'ITL of interest','other'),
+  )
+
+ggplot(timeplot %>% 
+         rename(`ITL region` = ITL_region_name) %>% 
+         filter(!is.na(movingav)),#remove NAs from dates so the x axis doesn't show them
+       aes(x = year, y = value, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+       # aes(x = year, y = movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+  geom_point() +
+  geom_line() +
+  scale_y_log10() +
+  scale_size_manual(values = c(2.5,1)) +
+  scale_color_brewer(palette = 'Paired', direction = 1) +
+  ylab('Regional GVA chained volume (log, millions)') +
+  guides(size = "none", linetype = "none") +
+  ggtitle(
+    paste0(ifelse(growing,'10 HIGHEST GROWTH PLACES','10 LOWEST GROWTH PLACES'),'\n',sector,'\n', place, ' highlighted (',scales::ordinal(sy_position),' most positive slope)')
+  ) +
+  theme(plot.title = element_text(face = 'bold'))
+```
+
+
+----
+
+## Information and communication slope pair matrix 2015 to 2021
+
+Slope pairs can be looked at for a single SIC section, comparing all pairs for every place in the UK. South Yorkshire is 8th from the top (and right) - for 2015-21, it has the clearest statistical separation (95% CIs again) from all other places. 
+
+The strong green colours of the names on the axes (for all but Outer London) show ICT growing everywhere - but for this latest 7 year period, South Yorkshire has likely had significantly stronger growth.
+
+The next slide shows the same plot for 2013-2019, where the same is not true.
+
+```{r}
+p <- slopeDiffGrid(slope_df = slopes.log1521, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Information and communication')
+
+p + coord_fixed()
+
+```
+
+----
+
+## Information and communication slope pair matrix 2013 to 2019
+
+For the 7 years prior to COVID, everywhere saw ICT growth (strong green axis names) and there was a mix of places with separable growth (all growing, but some with growth slopes significantly shallower than other places). 
+
+In this time period, South Yorkshire DOES NOT stand out (though ICT growth in SY is still strong, see 1st pair matrix plot). It's at least partly its continued strength through COVID in the following two years that change the story (though that 2018+ growth jump is clearly a factor).
+
+```{r}
+p <- slopeDiffGrid(slope_df = slopes.log1319, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Information and communication')
+
+p + coord_fixed()
+
+```
+
+----
+
+## Manufacturing time series: 10 HIGHEST growth places
+
+Although South Yorkshire's manufacturing GVA growth pattern is similar to other places with strong growth, it does not really stand out statistically, as the next slides show. 
+
+```{r, fig.width = 10, fig.height = 8}
+growing = T
+place = 'South Yorkshire'
+sector = 'Manufacturing'
+
+timeplot <- itl2.cvs %>% 
+      filter(SIC07_description == sector) 
+    
+#Use zoo's rollapply function to get a moving average
+timeplot <- timeplot %>% 
+  group_by(ITL_region_name) %>% 
+  arrange(year) %>% 
+  mutate(
+    movingav = rollapply(value,3,mean,align='right',fill=NA)
+  )
+
+#Use largest positive log slopes to filter
+if(growing){
+  place_selection <- slopes.log1521 %>% filter(SIC07_description == sector) %>%
+    arrange(-slope)
+  sy_position <<- which(place_selection$ITL_region_name == 'South Yorkshire')
+} else {
+  place_selection <- slopes.log1521 %>% filter(SIC07_description == sector) %>%
+    arrange(slope)
+    sy_position <<- length(place_selection$ITL_region_name) + 1 -which(place_selection$ITL_region_name == 'South Yorkshire')
+  }
+
+#Keep only the top ten places and order them
+timeplot <- timeplot %>% 
+  mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = place_selection$ITL_region_name)) %>%
+  filter(ITL_region_name %in% c(place_selection$ITL_region_name[1:10],place))#Make sure chosen place added
+
+#Mark the ITL of interest so it can be clearer in the plot
+timeplot <- timeplot %>%
+  mutate(
+    ITL2ofinterest = ifelse(ITL_region_name == place, 'ITL of interest','other'),
+  )
+
+ggplot(timeplot %>% 
+         rename(`ITL region` = ITL_region_name) %>% 
+         filter(!is.na(movingav)),#remove NAs from dates so the x axis doesn't show them
+       aes(x = year, y = value, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+       # aes(x = year, y = movingav, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+  geom_point() +
+  geom_line() +
+  scale_y_log10() +
+  scale_size_manual(values = c(2.5,1)) +
+  scale_color_brewer(palette = 'Paired', direction = 1) +
+  ylab('Regional GVA chained volume (log, millions)') +
+  guides(size = "none", linetype = "none") +
+  ggtitle(
+    paste0(ifelse(growing,'10 HIGHEST GROWTH PLACES','10 LOWEST GROWTH PLACES'),'\n',sector,'\n', place, ' highlighted (',scales::ordinal(sy_position),' most positive slope)')
+  ) +
+  theme(plot.title = element_text(face = 'bold'))
+```
+
+
+----
+
+## Manufacturing slope pair matrix 2013 to 2019
+
+While manufacturing in South Yorkshire has a significantly positive slope itself, it doesn't really stand out nationally. For the pre-COVID time period, compared to some places its growth slope is significantly lower, some others it's higher. 
+
+```{r}
+p <- slopeDiffGrid(slope_df = slopes.log1319, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Manufacturing')
+
+p + coord_fixed()
+
+```
+
+----
+
+## Manufacturing slope pair matrix 2015 to 2021
+
+It's a similar story for manufacturing from 2015 to 2021, covering COVID. South Yorkshire has relatively grown compared to some of the worst-performing places, but that's true of a number of ITL2 regions - as can be seen by the fact that South Yorkshire shares its significant green squares with many other places in the vertical stripes.
+
+```{r}
+p <- slopeDiffGrid(slope_df = slopes.log1521, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Manufacturing')
+
+p + coord_fixed()
+
+```
+
+----
+
+
+
+
+
 
 
 

@@ -3032,7 +3032,12 @@ for(sector in unique(jobslopes.log$SIC_SECTION_NAME)){
 }
 
 
-
+#Remind me of total job numbers for SY...?
+#Note those fluctuations - that'll be due to the BRES rounding, it's not real.
+itl2.jobs %>% 
+  filter(GEOGRAPHY_NAME == 'South Yorkshire') %>% 
+  group_by(DATE) %>% 
+  summarise(totjobs = sum(COUNT))
 
 
 

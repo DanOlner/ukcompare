@@ -460,6 +460,145 @@ return_compasspoints <- function(df, regionvar, category_var, valuevar, timevar,
 
 
 
+
+#Do generic 2D change over time plot
+#With arbitrary x and y axis values that are passed directly in
+# Start time, end time.
+# X_var, will be values from that column e.g. GVA
+# Y_var, values e.g. job count
+# Category_Var = either e.g. places or sectors
+#Label var, from the two time points, to display
+twod_generictimeplot <- function(df, category_var, x_var, y_var, timevar, label_var, start_time, end_time, compasspoints_to_display = c('NE','NW','SE','SW')){
+  
+  category_var <- enquo(category_var)  
+  x_var <- enquo(x_var)
+  y_var <- enquo(y_var)
+  timevar <- enquo(timevar)
+  label_var <- enquo(label_var)
+  
+  #Reduce to the two start and end timepoints we want to display
+  twoy <- df %>%
+    filter(
+    !!timevar %in% c(start_time, end_time)
+    ) %>% 
+    arrange(!!timevar)
+  
+  twoy_lags <- twoy %>%
+    arrange(!!category_var,!!timevar) %>%
+    mutate(
+      lag_x_var = !!x_var - lag(!!x_var),
+      lag_y_var = !!y_var - lag(!!y_var)
+    ) %>%
+    filter(!!timevar == end_time) %>% #using final year to mark when going in particular compass direction
+    mutate(
+      compass = case_when(
+        lag_x_var < 0 & lag_y_var < 0 ~ 'SW', 
+        lag_x_var < 0 & lag_y_var > 0 ~ 'NW',
+        lag_x_var > 0 & lag_y_var > 0 ~ 'NE', 
+        lag_x_var > 0 & lag_y_var < 0 ~ 'SE'
+      ) 
+    )
+  
+  twoy <- twoy %>%  
+    left_join( 
+      twoy_lags %>%
+        select(!!category_var,compass),
+      by = quo_name(category_var)
+    )
+  
+  
+  twoy.wide <- twoy %>% filter(compass %in% compasspoints_to_display) %>%
+    mutate(!!timevar := ifelse(!!timevar == min(!!timevar), 'start', 'end')) %>%
+    select(!!category_var,!!timevar,!!x_var,!!y_var,!!label_var) %>%
+    pivot_wider(names_from = !!timevar, values_from = c(!!x_var,!!y_var,!!label_var))
+  
+  #Rename wide two year for change vector back to generic names
+  names(twoy.wide) <- c(names(twoy.wide)[1],'x_start','x_end','y_start','y_end','label_start','label_end')
+  
+  p <- ggplot() +
+    geom_segment(data = twoy.wide, aes(x = x_start, y = y_start ,
+                                       xend = x_end, yend = y_end),
+                 arrow = arrow(length = unit(0.5, "cm")),
+                 size = 1
+    )
+  
+  p <- p +
+    geom_point(data = twoy %>% filter(compass%in%compasspoints_to_display), size = 5, alpha = 0.75,
+               aes(x = !!x_var, y = !!y_var,colour = factor(!!timevar), group = !!category_var)) +
+    geom_line(data = twoy %>% filter(compass %in% compasspoints_to_display), size = 1, aes(x = !!x_var, y = !!y_var, group = !!category_var), colour = 'red') +
+    # geom_abline(slope = 1, size = 1, colour='blue', alpha = 0.5) +
+    # coord_cartesian(xlim = c(0.1,11), ylim = c(0.1,11)) + # good for log scale
+    # scale_y_log10() +
+    # scale_x_log10() +
+    guides(colour=guide_legend(title=" ")) +
+    xlab(quo_name(x_var)) +
+    ylab(quo_name(y_var)) 
+  
+  #Reduce to latest year and merge in values for labels
+  label_df <- twoy %>% filter(!!timevar==max(!!timevar), compass %in% compasspoints_to_display) %>%
+    left_join(
+      twoy.wide %>% select(!!category_var,label_start,label_end)
+    )
+  
+  p <- p + geom_text_repel(
+    data = label_df,
+    # data = twoy %>% filter(!!timevar==max(!!timevar), compass %in% compasspoints_to_display),
+    aes(x = !!x_var, y = !!y_var,
+        label = paste0(!!category_var, "\n(",quo_name(label_var),": ",round(label_start,2)," >> ",round(label_end,2),")"),
+        # label = paste0(!!category_var, "\n(",quo_name(x_var),": ",round(!!x_var,2),", ",quo_name(y_var),": ",round(!!y_var,2),")"),
+        # label = paste0(!!category_var, "\n(",quo_name(x_var),": ",round(!!x_var,2),", ",quo_name(y_var),": ",round(!!y_var,2),")"),
+        # label = paste0(!!category_var, "\n(x:",round(x_var,2),"%,y:",round(y_var,2),"%)"),
+        colour = compass),
+    alpha=1,
+    nudge_x = .05,
+    box.padding = 1,
+    nudge_y = 0.05,
+    segment.curvature = -0.1,
+    segment.ncp = 0.3,
+    segment.angle = 20,
+    max.overlaps = 20
+  ) +
+    scale_color_manual(values = setNames(c("red", "black",'#7fc97f','#beaed4','#fdc086','#1f78b4'),
+                                         c(start_time, end_time,'NE','SE','NW','SW')))
+  # 
+  
+  # p <- p + geom_text_repel(
+  #   data = twoy.wide,
+  #   aes(x = x_end, y = y_end,
+  #       label = paste0(!!category_var, "\n(",quo_name(label_var),": ",round(label_start,2)," >> ",round(label_end,2),")"),
+  #       # label = paste0(!!category_var, "\n(",quo_name(x_var),": ",round(!!x_var,2),", ",quo_name(y_var),": ",round(!!y_var,2),")"), 
+  #       # label = paste0(!!category_var, "\n(x:",round(x_var,2),"%,y:",round(y_var,2),"%)"),
+  #       colour = compass),
+  #   alpha=1,
+  #   nudge_x = .05,
+  #   box.padding = 1,
+  #   nudge_y = 0.05,
+  #   segment.curvature = -0.1,
+  #   segment.ncp = 0.3,
+  #   segment.angle = 20,
+  #   max.overlaps = 20
+  # ) +
+  #   scale_color_manual(values = setNames(c("red", "black",'#7fc97f','#beaed4','#fdc086','#1f78b4'),
+  #                                        c(start_time, end_time,'NE','SE','NW','SW')))
+  
+  p
+  
+  
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #Pass in a desired confidence interval in percent
 #Returns the correct +/- z score for applying to a standard error
 getZScore <- function(confidence_percent) {

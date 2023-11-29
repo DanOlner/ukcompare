@@ -4362,8 +4362,16 @@ for(sector in unique(slopes.log$SIC07_description)){
 
 itl2.jobs <- readRDS('data/itl2_BRES_jobs_SIC_sections.rds')
 
+#Couple of places names to fix before a merge
+unique(itl2.jobs$GEOGRAPHY_NAME)[!unique(itl2.jobs$GEOGRAPHY_NAME) %in% unique(itl2.cvs$ITL_region_name)]
+
+itl2.cvs.tweakednames <- itl2.cvs
+
+itl2.cvs.tweakednames$ITL_region_name[grepl("Northum",x = itl2.cvs.tweakednames$ITL_region_name, ignore.case = T)] <- "Northumberland and Tyne and Wear"
+itl2.cvs.tweakednames$ITL_region_name[grepl("West Wales and The Valleys",x = itl2.cvs.tweakednames$ITL_region_name, ignore.case = T)] <- "West Wales"
+
 #Right join to match the fewer available years in the BRES data
-itl2.gvaperjob <- itl2.cvs %>% 
+itl2.gvaperjob <- itl2.cvs.tweakednames %>% 
   rename(gva = value) %>% 
   right_join(
     itl2.jobs %>% select(-SIC_SECTION_NAME) %>% rename(jobcount = COUNT),
@@ -4375,6 +4383,10 @@ itl2.gvaperjob <- itl2.cvs %>%
 unique(itl2.jobs$SIC_SECTION_NAME)[!unique(itl2.jobs$SIC_SECTION_NAME) %in% unique(itl2.gvaperjob$SIC07_description)]
 unique(itl2.cvs$SIC07_description)[!unique(itl2.cvs$SIC07_description) %in% unique(itl2.gvaperjob$SIC07_description)]#It's activities of households - those aren't jobs, so won't appear. OK then.
 unique(itl2.gvaperjob$SIC07_description)[!unique(itl2.gvaperjob$SIC07_description) %in% unique(itl2.jobs$SIC_SECTION_NAME)]
+
+
+
+
 
 
 perjobslopes.log <- get_slope_and_se_safely(data = itl2.gvaperjob, ITL_region_name,SIC07_description, y = log(gvaperjob), x = year)
@@ -4461,6 +4473,8 @@ perjobslopes.log <- get_slope_and_se_safely(data = itl2.gvaperjob %>% filter(yea
 #Functioning up
 # debugonce(slopeDiffGrid)
 slopeDiffGrid(slope_df = perjobslopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'South Yorkshire')
+slopeDiffGrid(slope_df = perjobslopes.log, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Manufacturing')
+slopeDiffGrid(slope_df = perjobslopes.log, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Information and communication')
 
 
 # daterange = c(2013:2019)
@@ -4514,18 +4528,125 @@ tm_shape(map) +
 
 
 
+#TABLE OF JOB COUNT / GVA / GVA PER WORKER CHANGE FROM START TO END OF DATA
+#Noting this doesn't include and error rates, but helps give a sense of the different scales of sectors
+
+#Actually, let's just do 2021
+job_gva_scale <- itl2.gvaperjob %>% 
+  filter(year == 2021, ITL_region_name=='South Yorkshire',SIC07_description!='Real estate activities') %>% 
+  arrange(-gva)
+
+
+job_gva_scale_long <- itl2.gvaperjob %>% 
+  filter(year == 2021, ITL_region_name=='South Yorkshire',SIC07_description!='Real estate activities') %>% 
+  select(SIC07_description,gva,jobcount,gvaperjob) %>% 
+  pivot_longer(cols = gva:gvaperjob, names_to = 'type', values_to = 'value')
+
+job_gva_scale$SIC07_description <- factor(job_gva_scale$SIC07_description, levels = job_gva_scale[order(-job_gva_scale$gva), "SIC07_description"] %>% pull)
+
+ggplot(job_gva_scale, aes(x = SIC07_description, y = y, fill = value)) +
+  geom_tile() +
+  geom_text(aes(label = value), color = "black") +
+  scale_fill_gradient(low = "blue", high = "red") +
+  # theme_minimal() +
+  labs(fill = "Value")
 
 
 
 
 
+#TESTING 2D GENERIC TIMEPLOT FOR GVA VS JOB COUNT
+# debugonce(twod_generictimeplot)
+p <- twod_generictimeplot(
+  # df = itl2.gvaperjob %>% filter(ITL_region_name == 'Greater Manchester', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
+  df = itl2.gvaperjob %>% filter(ITL_region_name == 'Northumberland and Tyne and Wear', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
+  # df = itl2.gvaperjob %>% filter(ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
+  category_var = SIC07_description,
+  x_var = gva,
+  y_var = jobcount,
+  timevar = year,
+  label_var = `gva/job`,
+  start_time = 2015,
+  end_time = 2021
+)
+
+p + theme(aspect.ratio=1)
+p + theme(aspect.ratio=1) + scale_y_log10() + scale_x_log10() + coord_cartesian(xlim = c(1000,10000), ylim = c(20000,60000))
 
 
 
+p <- twod_generictimeplot(
+  # df = itl2.gvaperjob %>% filter(SIC07_description=='Information and communication') %>% mutate(`gva/job` = gvaperjob/1000), 
+  df = itl2.gvaperjob %>% filter(SIC07_description=='Manufacturing') %>% mutate(`gva/job` = gvaperjob/1000),
+  # df = itl2.gvaperjob %>% filter(ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
+  category_var = ITL_region_name,
+  x_var = gva,
+  y_var = jobcount,
+  timevar = year,
+  label_var = `gva/job`,
+  start_time = 2015,
+  end_time = 2021
+)
+
+p + theme(aspect.ratio=1)
+
+p + theme(aspect.ratio=1) + scale_y_log10() + scale_x_log10() 
 
 
+#OK, wanna see all of everything please, they're fascinating
+
+#PLACES
+for(loggit in c(T,F)){
+  
+  for(place in unique(itl2.gvaperjob$ITL_region_name)){
+    
+    cat(place,'\n')
+    
+    p <- twod_generictimeplot(
+      df = itl2.gvaperjob %>% filter(ITL_region_name == place, SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
+      category_var = SIC07_description,
+      x_var = gva,
+      y_var = jobcount,
+      timevar = year,
+      label_var = `gva/job`,
+      start_time = 2015,
+      end_time = 2021
+    )
+    
+    if(loggit) p <- p + theme(aspect.ratio=1) + scale_y_log10() + scale_x_log10() else p <- p + theme(aspect.ratio=1)
+    
+    ggsave(plot = p, filename = paste0('local/localimages/2D_GVAPERWORKER_PLACES/',gsub("[^A-Za-z]", "", place),'_',ifelse(loggit, 'LOG',''),'.png'), width = 10, height = 10)
+    
+  }
+  
+}
 
 
+#SECTORS
+for(loggit in c(T,F)){
+  
+  for(sector in unique(itl2.gvaperjob$SIC07_description)){
+    
+    cat(sector,'\n')
+    
+    p <- twod_generictimeplot(
+      df = itl2.gvaperjob %>% filter(SIC07_description==sector) %>% mutate(`gva/job` = gvaperjob/1000),
+      category_var = ITL_region_name,
+      x_var = gva,
+      y_var = jobcount,
+      timevar = year,
+      label_var = `gva/job`,
+      start_time = 2015,
+      end_time = 2021
+    )
+    
+    if(loggit) p <- p + theme(aspect.ratio=1) + scale_y_log10() + scale_x_log10() else p <- p + theme(aspect.ratio=1)
+    
+    ggsave(plot = p, filename = paste0('local/localimages/2D_GVA_PERWORKER_SECTORS//',gsub("[^A-Za-z]", "", sector),'_',ifelse(loggit, 'LOG',''),'.png'), width = 10, height = 10)
+    
+  }
+  
+}
 
 
 

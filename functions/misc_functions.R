@@ -633,6 +633,7 @@ twod_generictimeplot_normalisetozero <- function(df, category_var, x_var, y_var,
     )
   
   #Vectors all centred on zero, percent change for all shown
+  #Annotate with a triangle indicating the half of the plot where GVA per worker will have dropped between time points
   p <- ggplot() +
     annotate(geom = "polygon", x = c(-1000, 1000, -1000), y = c(1000, 1000, -1000), fill = "white", alpha = 0.5)
     

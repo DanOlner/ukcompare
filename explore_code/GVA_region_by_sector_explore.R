@@ -4578,6 +4578,7 @@ p + theme(aspect.ratio=1) + scale_y_log10() + scale_x_log10() + coord_cartesian(
 p <- twod_generictimeplot(
   # df = itl2.gvaperjob %>% filter(SIC07_description=='Information and communication') %>% mutate(`gva/job` = gvaperjob/1000), 
   df = itl2.gvaperjob %>% filter(SIC07_description=='Manufacturing') %>% mutate(`gva/job` = gvaperjob/1000),
+  # df = itl2.gvaperjob %>% filter(grepl('Health',SIC07_description,ignore.case=T)) %>% mutate(`gva/job` = gvaperjob/1000),
   # df = itl2.gvaperjob %>% filter(ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
   category_var = ITL_region_name,
   x_var = gva,
@@ -4645,6 +4646,111 @@ for(loggit in c(T,F)){
     ggsave(plot = p, filename = paste0('local/localimages/2D_GVA_PERWORKER_SECTORS//',gsub("[^A-Za-z]", "", sector),'_',ifelse(loggit, 'LOG',''),'.png'), width = 10, height = 10)
     
   }
+  
+}
+
+
+
+#TEST VERSION OF 2D PLOT THAT NORMALISES ALL VECTORS TO ZERO AND SCALES BY % CHANGE BETWEEN TIMEPOINTS
+#Getting a list this time, including produced data, so we can expand the range of the plot for the labels
+debugonce(twod_generictimeplot_normalisetozero)
+p <- twod_generictimeplot_normalisetozero(
+  # df = itl2.gvaperjob %>% filter(SIC07_description=='Information and communication') %>% mutate(`gva/job` = gvaperjob/1000),
+  df = itl2.gvaperjob %>% filter(SIC07_description=='Manufacturing') %>% mutate(`gva/job` = gvaperjob/1000),
+  # df = itl2.gvaperjob %>% filter(grepl('Health',SIC07_description,ignore.case=T)) %>% mutate(`gva/job` = gvaperjob/1000),
+  # df = itl2.gvaperjob %>% filter(ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
+  category_var = ITL_region_name,
+  x_var = gva,
+  y_var = jobcount,
+  timevar = year,
+  label_var = `gva/job`,
+  category_var_value_to_highlight = 'South Yorkshire',
+  start_time = 2015,
+  end_time = 2021
+)
+
+
+xrange_adjust = diff(range(p[[2]]$x_pct_change)) * 0.1
+yrange_adjust = diff(range(p[[2]]$y_pct_change)) * 0.1
+
+p[[1]] + coord_fixed(
+  xlim = c(
+    min(p[[2]]$x_pct_change) - xrange_adjust,
+    ifelse(max(p[[2]]$x_pct_change) > 0,max(p[[2]]$x_pct_change) + xrange_adjust,0)#hack for health, need to make generic
+  ),
+  ylim = c(
+    min(p[[2]]$y_pct_change) - yrange_adjust,max(p[[2]]$y_pct_change) + yrange_adjust 
+  )
+) 
+
+
+#All plz!
+for(sector in unique(itl2.gvaperjob$SIC07_description)){
+  
+  p <- twod_generictimeplot_normalisetozero(
+    df = itl2.gvaperjob %>% filter(SIC07_description==sector) %>% mutate(`gva/job` = gvaperjob/1000),
+    category_var = ITL_region_name,
+    x_var = gva,
+    y_var = jobcount,
+    timevar = year,
+    label_var = `gva/job`,
+    category_var_value_to_highlight = 'South Yorkshire',
+    start_time = 2015,
+    end_time = 2021
+  )
+  
+  # p <- p[[1]] + coord_fixed()
+  
+  xrange_adjust = diff(range(p[[2]]$x_pct_change)) * 0.1
+  yrange_adjust = diff(range(p[[2]]$y_pct_change)) * 0.1
+
+  p <- p[[1]] + coord_fixed(
+    xlim = c(
+      min(p[[2]]$x_pct_change) - xrange_adjust,
+      ifelse(max(p[[2]]$x_pct_change) > 0,max(p[[2]]$x_pct_change) + xrange_adjust,0)#hack for health, need to make generic
+    ),
+    ylim = c(
+      min(p[[2]]$y_pct_change) - yrange_adjust,max(p[[2]]$y_pct_change) + yrange_adjust 
+    )
+  ) 
+  
+  ggsave(plot = p, filename = paste0('local/localimages/2D_COMPASSPLOTS_SECTORS/',gsub("[^A-Za-z]", "", sector),'.png'), width = 12, height = 12)
+  
+}
+
+
+
+
+#PLACES
+for(place in unique(itl2.gvaperjob$ITL_region_name)){
+  
+  p <- twod_generictimeplot_normalisetozero(
+    df = itl2.gvaperjob %>% filter(ITL_region_name==place) %>% mutate(`gva/job` = gvaperjob/1000),
+    category_var = SIC07_description,
+    x_var = gva,
+    y_var = jobcount,
+    timevar = year,
+    label_var = `gva/job`,
+    start_time = 2015,
+    end_time = 2021
+  )
+  
+  # p <- p[[1]] + coord_fixed()
+  
+  xrange_adjust = diff(range(p[[2]]$x_pct_change)) * 0.1
+  yrange_adjust = diff(range(p[[2]]$y_pct_change)) * 0.1
+
+  p <- p[[1]] + coord_fixed(
+    xlim = c(
+      min(p[[2]]$x_pct_change) - xrange_adjust,
+      ifelse(max(p[[2]]$x_pct_change) > 0,max(p[[2]]$x_pct_change) + xrange_adjust,0)#hack for health, need to make generic
+    ),
+    ylim = c(
+      min(p[[2]]$y_pct_change) - yrange_adjust,max(p[[2]]$y_pct_change) + yrange_adjust 
+    )
+  ) 
+  
+  ggsave(plot = p, filename = paste0('local/localimages/2D_COMPASSPLOTS_PLACES/',gsub("[^A-Za-z]", "", place),'.png'), width = 12, height = 12)
   
 }
 

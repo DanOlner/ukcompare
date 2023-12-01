@@ -86,16 +86,27 @@ cellsub <- cell %>% filter(grepl('T10', label.en, ignore.case = T))
 #Up to row 90
 codes <- cellsub$id[1:90]
 
+#NOPE, THAT'S THE OLD SIC CODES!
+#SIC 2007 starts at 404357377 (and then presumably has 90 entries for the full lot)
+#That's index 271
+#So should end index 360?
+codes <- cellsub$id[271:360]
+
+#Except actual SIC07 doesn't seem to have any values/obs.
+
 #If we're after all people
 #Numbers too low for that one, let's try...
 z <- nomis_get_data(id = "NM_17_1", time = "latest", geography = "TYPE438", cell = "403308801")
 
-z <- nomis_get_data(id = "NM_17_1", time = "latest", geography = "TYPE438", cell = codes) %>% 
+z_download <- nomis_get_data(id = "NM_17_1", time = "latest", geography = "TYPE438", cell = codes) %>% 
   select(DATE_NAME,GEOGRAPHY_NAME,GEOGRAPHY_CODE,CELL_NAME,MEASURES_NAME,OBS_VALUE,OBS_STATUS,OBS_STATUS_NAME)
 
+#Avoid repeat downloads!
+z <- z_download
 
 #Repeat name place checks... 40, correct number
 unique(z$GEOGRAPHY_NAME)
+
 
 #Some column processing. 
 #1. remove gumph
@@ -111,15 +122,31 @@ z <- z %>%
   mutate(
     CELL_NAME = gsub(x = CELL_NAME, pattern = ".*- ","", replacement = ''),
     CELL_NAME = gsub(x = CELL_NAME, pattern = " \\(SOC2020\\)| \\(SOC 2020\\)", replacement = ''),
-    CELL_NAME = gsub(x = CELL_NAME, pattern = " )", replacement = '')
+    CELL_NAME = gsub(x = CELL_NAME, pattern = " )", replacement = ''),
+    CELL_NAME = gsub(x = CELL_NAME, pattern = " \\(SIC 2007\\)", replacement = '')
   )
 
 #2. Split SOC and SIC into their own columns
 z <- z %>% separate_wider_delim(CELL_NAME, delim = " : ", names = c("SOC2020", "SIC2007"))
 
+#How many unique sectors? 
+#Exactly the same as SIC2003 - data is identical I think
+unique(z$SIC2007)
 
-#Local laptop save for now
-saveRDS(z, 'local/data/sicsoc/NUTS2_2016_latestAPS_SIC2007_SOC2020.rds')
+saveRDS(z, 'data/NUTS2_2016_latestAPS_SIC2007_SOC2020.rds')
+
+
+
+#Might have been downloading the wrong thing. Looking back at the nomis_search...
+#Nope, doesn't have the right geographies
+print(nomis_get_metadata(id = "NM_218_1", concept = "geography", type = "type"), n = 60)
+
+cell <- nomis_get_metadata(id = "NM_218_1")
+
+
+z <- read_csv("https://www.nomisweb.co.uk/api/v01/dataset/NM_17_1.data.csv?geography=1837105153...1837105192&date=latest&cell=403308801...403308810,403309057...403309066,403309313...403309322,403309569...403309578,403309825...403309834,403310081...403310090,403310337...403310346,403310593...403310602,403310849...403310858,403311105...403311114,403311361...403311370,403311617...403311626,403311873...403311882,403312129...403312138,403312385...403312394,403312641...403312650,403312897...403312906,403313153...403313162,403313409...403313418,403313665...403313674,403313921...403313930,403314177...403314186,403314433...403314442,403314689...403314698,403314945...403314954,403315201...403315210,403315457...403315466&measures=20100,20701")
+
+
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -191,7 +218,7 @@ table(is.na(in_employment$ALL_IN_EMPLOYMENT_16PLUS))
 
 #Actually, just want to (a) drop econ active CI value and (b) add just to place
 #Cos the CI in the main data can be made into a proportion with the same number, which is what we want
-z <- readRDS('local/sicsoc/NUTS2_2016_latestAPS_SIC2007_SOC2020.rds')
+z <- readRDS('data/NUTS2_2016_latestAPS_SIC2007_SOC2020.rds')
 
 z <- z %>% 
   left_join(

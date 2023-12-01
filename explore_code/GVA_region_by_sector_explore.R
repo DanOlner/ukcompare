@@ -4362,6 +4362,9 @@ for(sector in unique(slopes.log$SIC07_description)){
 
 itl2.jobs <- readRDS('data/itl2_BRES_jobs_SIC_sections.rds')
 
+itl2.cvs <- readRDS('data/UKchainedvolume_itl2_SIC_sections.rds')
+
+
 #Couple of places names to fix before a merge
 unique(itl2.jobs$GEOGRAPHY_NAME)[!unique(itl2.jobs$GEOGRAPHY_NAME) %in% unique(itl2.cvs$ITL_region_name)]
 
@@ -4695,8 +4698,9 @@ for(sector in unique(itl2.gvaperjob$SIC07_description)){
     timevar = year,
     label_var = `gva/job`,
     category_var_value_to_highlight = 'South Yorkshire',
-    start_time = 2015,
+    start_time = 2019,
     end_time = 2021
+    # end_time = 2019
   )
   
   # p <- p[[1]] + coord_fixed()
@@ -4714,7 +4718,9 @@ for(sector in unique(itl2.gvaperjob$SIC07_description)){
     )
   ) 
   
-  ggsave(plot = p, filename = paste0('local/localimages/2D_COMPASSPLOTS_SECTORS/',gsub("[^A-Za-z]", "", sector),'.png'), width = 12, height = 12)
+  # ggsave(plot = p, filename = paste0('local/localimages/2D_COMPASSPLOTS_SECTORS/',gsub("[^A-Za-z]", "", sector),'.png'), width = 12, height = 12)
+  # ggsave(plot = p, filename = paste0('local/localimages/2D_COMPASSPLOTS_SECTORS_to2019/',gsub("[^A-Za-z]", "", sector),'.png'), width = 12, height = 12)
+  ggsave(plot = p, filename = paste0('local/localimages/2D_COMPASSPLOTS_SECTORS_2019to2021/',gsub("[^A-Za-z]", "", sector),'.png'), width = 12, height = 12)
   
 }
 

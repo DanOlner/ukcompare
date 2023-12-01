@@ -206,7 +206,7 @@ addplacename_to_LQplot <- function(df, plot_to_addto, placename, shapenumber=16,
       shape = shapenumber,
       colour = 'green',
       alpha = setalpha
-    ) +
+    ) + 
     geom_point(
       data = df %>% filter(!!region_name == placename, !!change_over_time < 0), 
       aes(y = !!sector_name, x = !!LQ_column, size = !!change_over_time * -1),
@@ -223,7 +223,7 @@ addplacename_to_LQplot <- function(df, plot_to_addto, placename, shapenumber=16,
     plot_to_addto <- plot_to_addto +  
       geom_text(
         data = df %>% filter(!!region_name == placename), 
-        aes(y = !!sector_name, x = 20, label = paste0('£',value,'M, ',round(!!sector_regional_proportion * 100, 2),'%')),
+        aes(y = !!sector_name, x = 20, label = paste0('£',!!value_column,'M, ',round(!!sector_regional_proportion * 100, 2),'%')),
         nudge_x = 0.3, hjust = 1, alpha = 0.7, size = 3
       )
     

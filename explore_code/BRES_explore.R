@@ -3040,12 +3040,118 @@ itl2.jobs %>%
   summarise(totjobs = sum(COUNT))
 
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#LQ PLOT FOR 20-SIC LEVEL----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+itl2.jobslq <- itl2.jobs %>% 
+  split(.$DATE) %>% 
+  map(add_location_quotient_and_proportions, 
+      regionvar = GEOGRAPHY_NAME,
+      lq_var = SIC_SECTION_NAME,
+      valuevar = COUNT) %>% 
+  bind_rows()
+
+itl2.jobslq %>% filter(
+  GEOGRAPHY_NAME == 'South Yorkshire',
+  DATE == 2021
+) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(SIC_SECTION_NAME,regional_percent, LQ) %>% 
+  arrange(-LQ) %>% 
+  slice(1:10)
+
+LQ_slopes <- get_slope_and_se_safely(
+  data = itl2.jobslq, 
+  GEOGRAPHY_NAME, SIC_SECTION_NAME,#slopes will be found within whatever grouping vars are added here
+  y = LQ_log, x = DATE)
+
+#Filter down to a single year
+yeartoplot <- itl2.jobslq %>% filter(DATE == 2021)
+
+#Add slopes into data to get LQ plots
+yeartoplot <- yeartoplot %>% 
+  left_join(
+    LQ_slopes,
+    by = c('GEOGRAPHY_NAME','SIC_SECTION_NAME')
+  )
+
+#Get min/max values for LQ over time as well, for each sector and place, to add as bars so range of sector is easy to see
+minmaxes <- itl2.jobslq %>% 
+  group_by(GEOGRAPHY_NAME,SIC_SECTION_NAME) %>% 
+  summarise(
+    min_LQ_all_time = min(LQ),
+    max_LQ_all_time = max(LQ)
+  )
+
+#Join min and max
+yeartoplot <- yeartoplot %>% 
+  left_join(
+    minmaxes,
+    by = c('GEOGRAPHY_NAME','SIC_SECTION_NAME')
+  )
+
+place = 'South Yorkshire'
+
+#Get a vector with sectors ordered by the place's LQs, descending order
+#Use this next to factor-order the SIC sectors
+sectorLQorder <- itl2.jobslq %>% filter(
+  GEOGRAPHY_NAME == place,
+  DATE == 2021
+) %>% 
+  arrange(-LQ) %>% 
+  select(SIC_SECTION_NAME) %>% 
+  pull()
+
+#Turn the sector column into a factor and order by LCR's LQs
+yeartoplot$SIC_SECTION_NAME <- factor(yeartoplot$SIC_SECTION_NAME, levels = sectorLQorder, ordered = T)
+
+p <- LQ_baseplot(df = yeartoplot, alpha = 0, sector_name = SIC_SECTION_NAME, 
+                 LQ_column = LQ, change_over_time = slope)
+
+# debugonce(addplacename_to_LQplot)
+p <- addplacename_to_LQplot(df = yeartoplot, placename = 'Greater Manchester',
+                            plot_to_addto = p, shapenumber = 24,
+                            sector_regional_proportion = sector_regional_proportion,
+                            region_name = GEOGRAPHY_NAME,#The next four, the function needs them all 
+                            sector_name = SIC_SECTION_NAME,
+                            change_over_time = slope, 
+                            LQ_column = LQ 
+)
+
+# p <- addplacename_to_LQplot(df = yeartoplot, placename = 'Merseyside',
+#                             plot_to_addto = p, shapenumber = 23,
+#                             min_LQ_all_time = min_LQ_all_time, max_LQ_all_time = max_LQ_all_time,
+#                             region_name = GEOGRAPHY_NAME,#The next four, the function needs them all 
+#                             sector_name = SIC_SECTION_NAME,
+#                             change_over_time = slope, 
+#                             LQ_column = LQ 
+# )
+# 
+# p <- addplacename_to_LQplot(df = yeartoplot, placename = 'West Yorkshire',
+#                             plot_to_addto = p, shapenumber = 22,
+#                             sector_regional_proportion = sector_regional_proportion,
+#                             region_name = GEOGRAPHY_NAME,#The next four, the function needs them all 
+#                             sector_name = SIC_SECTION_NAME,
+#                             change_over_time = slope, 
+#                             LQ_column = LQ 
+# )
+
+p <- addplacename_to_LQplot(df = yeartoplot, placename = place,
+                            plot_to_addto = p, shapenumber = 16,
+                            min_LQ_all_time = min_LQ_all_time, max_LQ_all_time = max_LQ_all_time,
+                            value_column = COUNT, sector_regional_proportion = sector_regional_proportion,
+                            region_name = GEOGRAPHY_NAME,#The next four, the function needs them all 
+                            sector_name = SIC_SECTION_NAME,
+                            change_over_time = slope, 
+                            LQ_column = LQ 
+)
 
 
+p
 
 
-
-
+#Comparing to other places
 
 
 

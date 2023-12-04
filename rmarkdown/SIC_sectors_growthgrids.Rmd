@@ -60,7 +60,7 @@ slopes.log1319 <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2
 
 -- Manufacturing is strong, but it's less statistically distinct from other places in the UK.
 
--- No other broad SIC section is strongly statistically separable from others.
+-- No other broad SIC section of any size is strongly statistically separable from others (utilities like water and elec/gas are, but they're very small).
 
 
 ----
@@ -140,7 +140,7 @@ The next slides look at trends in GVA (using linear regression lines) and try to
 
 ## Example of separating trend lines
 
-This plot shows construction and manufacturing chained volume (inflation-adjusted) GVA for South Yorkshire, with 95% confidence intervals shown in grey. The two trends are clearly statistically separable - the range of the trend slopes within the grey bounds differs; additionally, manufacturing has a positive slope and mining/quarrying is negative.
+This plot shows construction and manufacturing chained volume (inflation-adjusted) GVA for South Yorkshire, with 95% confidence intervals shown in grey. The two trends are clearly statistically separable - the range of the trend slopes within the grey bounds differs; additionally, manufacturing has a positive slope and construction is negative.
 
 In the grid plot for South Yorkshire on the following slide, each square is a pair of slopes like this. As the slide explains, it indicates where pairs of slopes are statistically separarable, to help see which sectors and places are most likely clearly growing/shrinking more than others.
 
@@ -173,9 +173,27 @@ This matrix takes every pair of trendlines in South Yorkshire and compares them.
 
 -- Colours of the axis names indicate whether that sector's slope was positive (green vs red) and whether significant (95% CI, in bolder green or red).
 
+-- The y axis also shows the predicted slope and its confidence intervals; this is a best linear estimate of how that slope will continue, all else being equal; the grid can be used to check which slopes are statistically separable from each other
+
 -- The matrix is mirrored along the diagonal axis so e.g. ICT's green horizontal line is mirrored as red vertically (showing the same thing - ICT higher slopes than other sectors, other sectors lower than ICT).
 
-Information & communication is the clear standout, with manufacturing and the power and water sectors separable from others the most. But note, there's a COVID effect here... see next slide of the same plot for 2013-2019. (Treat real estate activities cautiously - it includes imputed rental.)
+
+```{r}
+p <- slopeDiffGrid(slope_df = slopes.log1521, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'SOUTH YORKSHIRE <<<')
+
+p + coord_fixed()
+
+```
+
+----
+
+## South Yorkshire trend matrix for 20 SIC sections' trendlines 2015 to 2021
+
+Information & communication is the clear standout. For 2015-21, its GVA increased by 18+% per year (CI 15-22% per year), which is statistically far ahead of any other sector, as the black squares indicate.
+
+Manufacturing and the electricity/gas and water sectors show growth trends, but when compared to each other, their growth is not statistically separable. Manufacturing is by far the larger of these sectors, though, so its growth affects a much larger GVA chunk.
+
+Note, there's a COVID effect here... see next slide of the same plot for 2013-2019. (Treat real estate activities cautiously - it includes imputed rental.)
 
 
 ```{r}
@@ -373,11 +391,13 @@ p + coord_fixed()
 
 ## ICT: percentage change 2015 to 2021 for all places, centred
 
-Looking at percent change in jobs vs GVA for all places, centred, South Yorkshire's standout position is clear. 
+This plot type looks at the start and end value for GVA (x axis) vs job count (y axis) for all places, for a particular sector - here, it's the Information and communication sector. It shows the PERCENT change for GVA and jobs between the two time points, with the start time centred at zero, so all percent changes are comparable. A quick guide to other features:
+
+-- South Yorkshire is the blue arrow (it's clearly ahead GVA percent-change-wise here).
 
 -- The four quadrants cut by red lines separate which of GVA or jobs count has grown vs shrunk.
 
--- In The lighter diagonal area top right, any vectors there will have seen GVA per worker drop (with these numbers, cf. lack of error bars). So e.g. it's possible for both GVA and job numbers to drop, but if the proportional GVA drop is smaller, GVA per worker still rises.
+-- In The lighter diagonal area top right, any vectors there will have seen GVA per worker DROP (those note lack of error bars here so treat with a little caution). So e.g. it's possible for both GVA and job numbers to drop, but if the proportional GVA drop is smaller, GVA per worker still rises.
 
 The next slide repeats the same plot, but for 2015 to 2019...
 
@@ -419,7 +439,7 @@ p[[1]]
 
 ## ICT pre-COVID: percentage change 2015 to 2019 for all places, centred
 
-Pre-COVID, South Yorkshire was still strong, but had a number of peers with the same magnitude (and note, none of this includes error bars).
+Pre-COVID, South Yorkshire was still strong, but not quite as clearly separable from others. 
 
 ```{r}
 p <- twod_generictimeplot_normalisetozero(
@@ -528,7 +548,11 @@ ggplot(timeplot %>%
 
 ## Manufacturing: percentage change 2015 to 2021 for all places, centred
 
-Looking at the normalised percent plot for manufacturing puts South Yorkshire in the context of other places in a different way.
+Looking at the normalised percent plot for manufacturing puts South Yorkshire in the context of other places in a different way. This plot shows:
+
+-- All but one place saw GVA per worker grow (all arrows are in the darker diagonal corner), though most saw job counts drop (arrows below the horizontal pink line).
+
+-- South Yorkshire is in the growth group, but not a stand out. 
 
 ```{r}
 p <- twod_generictimeplot_normalisetozero(
@@ -652,7 +676,9 @@ perjobslopes.log <- get_slope_and_se_safely(data = itl2.gvaperjob %>% filter(yea
 
 #Functioning up
 # debugonce(slopeDiffGrid)
-slopeDiffGrid(slope_df = perjobslopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'SOUTH YORKSHIRE <<<')
+p <- slopeDiffGrid(slope_df = perjobslopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'SOUTH YORKSHIRE <<<')
+
+p + coord_fixed()
 ```
 
 ----
@@ -663,7 +689,9 @@ Manufacturing GVA per job slope differences for 2017-21 show how South Yorkshire
 
 ```{r}
 
-slopeDiffGrid(slope_df = perjobslopes.log, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Manufacturing')
+p <- slopeDiffGrid(slope_df = perjobslopes.log, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Manufacturing')
+
+p + coord_fixed()
 
 ```
 
@@ -675,23 +703,18 @@ ICT, in comparison - both South Yorkshire and Greater Manchester stand out as ha
 
 ```{r}
 
-slopeDiffGrid(slope_df = perjobslopes.log, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Information and communication')
+p <- slopeDiffGrid(slope_df = perjobslopes.log, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Information and communication')
+
+p + coord_fixed()
 
 ```
 
 
 
 
+```{r cuttinz, eval=F}
 
-
-
-
-
-```{r CUTTINZ, eval = F}
-# The raw numbers for South Yorkshire 2021 (ordered by GVA)
-
-# These are the raw numbers, with highest GVA at the top, just 
-
+# Stuff and things
 
 job_gva_scale <- itl2.gvaperjob %>% 
   filter(year == 2021, ITL_region_name=='SOUTH YORKSHIRE <<<',SIC07_description!='Real estate activities') %>% 
@@ -710,5 +733,8 @@ ft
 # job_gva_scale
 
 ```
+
+
+
 
 

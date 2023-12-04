@@ -4332,6 +4332,22 @@ slopeDiffGrid(slope_df = slopes.log, confidence_interval = 99, column_to_grid = 
 slopeDiffGrid(slope_df = slopes.log, confidence_interval = 99, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Accommodation and food service activities')
 
 
+#random check: 2015 to 2021 ICT, is the slope 18.7% per year for SY?
+chk <- itl2.cvs %>% 
+  filter(
+    SIC07_description == 'Information and communication',
+    ITL_region_name == 'South Yorkshire',
+    year %in% 2015:2021
+  )
+
+#Yup, is about right
+((chk$value - lag(chk$value))/lag(chk$value))*100
+mean(((chk$value - lag(chk$value))/lag(chk$value))*100, na.rm=T)
+
+ggplot(chk, aes(x = year, y = value)) +
+  geom_point() +
+  geom_smooth(method = lm)
+
 #OK, let's output all the sectors and see see
 daterange = c(2013:2019)
 daterange = c(2015:2021)
@@ -4562,8 +4578,8 @@ ggplot(job_gva_scale, aes(x = SIC07_description, y = y, fill = value)) +
 # debugonce(twod_generictimeplot)
 p <- twod_generictimeplot(
   # df = itl2.gvaperjob %>% filter(ITL_region_name == 'Greater Manchester', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
-  df = itl2.gvaperjob %>% filter(ITL_region_name == 'Northumberland and Tyne and Wear', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
-  # df = itl2.gvaperjob %>% filter(ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
+  # df = itl2.gvaperjob %>% filter(ITL_region_name == 'Northumberland and Tyne and Wear', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
+  df = itl2.gvaperjob %>% filter(ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000),
   category_var = SIC07_description,
   x_var = gva,
   y_var = jobcount,
@@ -4698,9 +4714,9 @@ for(sector in unique(itl2.gvaperjob$SIC07_description)){
     timevar = year,
     label_var = `gva/job`,
     category_var_value_to_highlight = 'South Yorkshire',
-    start_time = 2019,
-    end_time = 2021
-    # end_time = 2019
+    start_time = 2015,
+    # end_time = 2021
+    end_time = 2019
   )
   
   # p <- p[[1]] + coord_fixed()
@@ -4719,8 +4735,8 @@ for(sector in unique(itl2.gvaperjob$SIC07_description)){
   ) 
   
   # ggsave(plot = p, filename = paste0('local/localimages/2D_COMPASSPLOTS_SECTORS/',gsub("[^A-Za-z]", "", sector),'.png'), width = 12, height = 12)
-  # ggsave(plot = p, filename = paste0('local/localimages/2D_COMPASSPLOTS_SECTORS_to2019/',gsub("[^A-Za-z]", "", sector),'.png'), width = 12, height = 12)
-  ggsave(plot = p, filename = paste0('local/localimages/2D_COMPASSPLOTS_SECTORS_2019to2021/',gsub("[^A-Za-z]", "", sector),'.png'), width = 12, height = 12)
+  ggsave(plot = p, filename = paste0('local/localimages/2D_COMPASSPLOTS_SECTORS_to2019/',gsub("[^A-Za-z]", "", sector),'.png'), width = 12, height = 12)
+  # ggsave(plot = p, filename = paste0('local/localimages/2D_COMPASSPLOTS_SECTORS_2019to2021/',gsub("[^A-Za-z]", "", sector),'.png'), width = 12, height = 12)
   
 }
 

@@ -789,7 +789,7 @@ slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_
   # 
   # #Apply CI overlap test to all pairs
   # #https://stackoverflow.com/a/3269471
-  # #If (StartA <= EndB) and (EndA >= StartB) 
+  # #If (StartA <= EndB) and (EndA >= StartB)
   combos <- combos %>% 
     mutate(CIs_overlap = ifelse(
       (.[,'min.cione'] <= .[,'max.citwo'] & .[,'max.cione'] <= .[,'min.citwo']) |
@@ -844,10 +844,21 @@ slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_
     pull
   
   
+  #Add in yearly % change of slope and CIs from log on the left axis
+  combos <- combos %>% 
+    mutate(
+      slopetwo_percent = round((exp(slopetwo) -1) * 100,1),
+      min.citwo_percent = round((exp(min.citwo) -1) * 100,1),
+      max.citwo_percent = round((exp(max.citwo) -1) * 100,1),
+    )
   
   #Using colour for grid outline for sig values doesn't quite work, it draws messily
   #Add as extra layer over the top instead
-  p <- ggplot(combos, aes(x = substr(gridcol1,0,30), y = substr(gridcol2,0,30), fill= slopediff, colour = CIs_overlap)) + 
+  p <- ggplot(combos, aes(
+    x = substr(gridcol1,0,30), 
+    y = paste0(substr(gridcol2,0,24),' (',slopetwo_percent,'% CI: ',min.citwo_percent,'%,',max.citwo_percent,'%)'), 
+    fill= slopediff, colour = CIs_overlap)
+    ) + 
     geom_tile(width = 0.8, height = 0.8, size = 1) +
     scale_fill_gradientn(
       colours = c("red", "white", "darkgreen"),

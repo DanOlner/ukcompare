@@ -4777,6 +4777,306 @@ for(place in unique(itl2.gvaperjob$ITL_region_name)){
 }
 
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#MAKE 2D PLOT WITH MULTIPLE TIME POINTS: GVA PER WORKER TEST----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Make a version that can show multiple defined time points
+#Most greyed out
+debugonce(twod_generictimeplot_multipletimepoints)
+p <- twod_generictimeplot_multipletimepoints(
+  # df = itl2.gvaperjob %>% filter(ITL_region_name == 'Greater Manchester', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000),
+  df = itl2.gvaperjob %>% filter(ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000),
+  category_var = SIC07_description,
+  x_var = gva,
+  y_var = jobcount,
+  timevar = year,
+  label_var = `gva/job`,
+  times = c(2017,2019,2021)
+  # times = c(2017:2021)
+  # times = c(2015,2019)
+  # times = c(2015,2017,2019)
+  # times = c(2015:2019)
+)
+
+p + theme(aspect.ratio=1)
+p + theme(aspect.ratio=1) + scale_y_log10() + scale_x_log10()
+
+
+#Smoothed version
+smoothband = 3
+itl2.gvaperjob.smoothed <- itl2.gvaperjob %>% 
+  group_by(ITL_region_name,SIC07_description) %>% 
+  arrange(year) %>% 
+mutate(
+  jobcount_movingav = rollapply(jobcount,smoothband,mean,align='right',fill=NA),
+  gva_movingav = rollapply(gva,smoothband,mean,align='right',fill=NA),
+  `gva/job_movingav` = rollapply(gvaperjob/1000,smoothband,mean,align='right',fill=NA)
+)
+
+p <- twod_generictimeplot_multipletimepoints(
+  df = itl2.gvaperjob.smoothed %>% filter(ITL_region_name == 'West Yorkshire', SIC07_description!='Real estate activities'),
+  # df = itl2.gvaperjob.smoothed %>% filter(ITL_region_name == 'Greater Manchester', SIC07_description!='Real estate activities'),
+  # df = itl2.gvaperjob.smoothed %>% filter(!is.na(gva_movingav),ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities'),
+  category_var = SIC07_description,
+  x_var = gva_movingav,
+  y_var = jobcount_movingav,
+  timevar = year,
+  label_var = `gva/job_movingav`,
+  times = c(2017:2021)
+)
+
+p + theme(aspect.ratio=1)
+
+
+
+
+
+
+
+
+
+#Repeating same for percentaging centrepoint plot
+#NOPE, WAAAAY TOO MESSY
+#Also trying with smoothed...
+debugonce(twod_generictimeplot_normalisetozero__multipletimepoints)
+p <- twod_generictimeplot_normalisetozero__multipletimepoints(
+  # df = itl2.gvaperjob %>% filter(SIC07_description=='Information and communication') %>% mutate(`gva/job` = gvaperjob/1000),
+  df = itl2.gvaperjob %>% filter(SIC07_description=='Manufacturing') %>% mutate(`gva/job` = gvaperjob/1000),
+  # df = itl2.gvaperjob %>% filter(grepl('Health',SIC07_description,ignore.case=T)) %>% mutate(`gva/job` = gvaperjob/1000),
+  # df = itl2.gvaperjob %>% filter(ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
+  category_var = ITL_region_name,
+  x_var = gva,
+  y_var = jobcount,
+  timevar = year,
+  label_var = `gva/job`,
+  category_var_value_to_highlight = 'South Yorkshire',
+  times = c(2015,2017,2019)
+)
+
+
+xrange_adjust = diff(range(p[[2]]$x_pct_change)) * 0.1
+yrange_adjust = diff(range(p[[2]]$y_pct_change)) * 0.1
+
+#min and max may be anywhere in vector
+# xrange_adjust = diff(  c(min(p[[2]]$x_pct_change,max(p[[2]]$x_pct_change)  )) * 0.1
+# xrange_adjust = diff(  c(min(p[[2]]$y_pct_change,max(p[[2]]$y_pct_change)  )) * 0.1
+
+p[[1]] + coord_fixed(
+  xlim = c(
+    min(p[[2]]$x_pct_change) - xrange_adjust,
+    ifelse(max(p[[2]]$x_pct_change) > 0,max(p[[2]]$x_pct_change) + xrange_adjust,0)#hack for health, need to make generic
+  ),
+  ylim = c(
+    min(p[[2]]$y_pct_change) - yrange_adjust,max(p[[2]]$y_pct_change) + yrange_adjust 
+  )
+) 
+
+p[[1]] + coord_fixed(xlim = c(-50,50),ylim = c(-50,50))
+
+
+
+
+#Also trying with smoothed... ALSO YUCK!
+debugonce(twod_generictimeplot_normalisetozero__multipletimepoints)
+p <- twod_generictimeplot_normalisetozero__multipletimepoints(
+  # df = itl2.gvaperjob %>% filter(SIC07_description=='Information and communication') %>% mutate(`gva/job` = gvaperjob/1000),
+  df = itl2.gvaperjob.smoothed %>% filter(SIC07_description=='Manufacturing') %>% ungroup(),
+  # df = itl2.gvaperjob %>% filter(grepl('Health',SIC07_description,ignore.case=T)) %>% mutate(`gva/job` = gvaperjob/1000),
+  # df = itl2.gvaperjob %>% filter(ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
+  category_var = ITL_region_name,
+  x_var = gva_movingav,
+  y_var = jobcount_movingav,
+  timevar = year,
+  label_var = `gva/job_movingav`,
+  category_var_value_to_highlight = 'South Yorkshire',
+  times = c(2017:2019)
+)
+
+p[[1]] + coord_fixed(xlim = c(-20,20),ylim = c(-20,20))
+
+
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#REPEAT CHAINED VOLUME SLOPE ANALYSIS FOR 2 DIGIT SICS----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+itl2.cv2digit <- read_csv('data/sectors/Table 2b ITL2 UK chained volume measures in 2019 money value pounds million.csv')
+
+#no spaces plz!
+names(itl2.cv2digit) <- gsub(x = names(itl2.cv2digit), pattern = ' ', replacement = '_')
+
+#Keep SICs to check removal was correct
+sicchk <- itl2.cv2digit %>% 
+  select(SIC07_code,SIC07_description) %>% 
+  distinct
+
+#Previously selected SIC sectors to remove
+SICremoves = c(
+  'Total',
+  'A-E',
+  'A (1-3)',
+  'C (10-33)',
+  'CA (10-12)',
+  'CB (13-15)',
+  'CC (16-18)',
+  'CG (22-23)',
+  'CH (24-25)',
+  'CL (29-30)',
+  'CM (31-33)',
+  'F (41-43)',
+  'G-T',
+  'G (45-47)',
+  'H (49-53)',
+  'I (55-56)',
+  'J (58-63)',
+  'K (64-66)',
+  'L (68)',#real estate activities - leaves in "Real estate activities, excluding imputed rental" & "Owner-occupiers' imputed rental" as separate categories
+  'M (69-75)',
+  'N (77-82)',
+  'Q (86-88)',
+  'R (90-93)',
+  'S (94-96)'
+)
+
+itl2.cv2digit <- itl2.cv2digit %>% 
+  filter(!SIC07_code %in% SICremoves) %>% 
+  pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'value') %>% 
+  mutate(year = as.numeric(year))
+
+#Check we got the right ones.. tick
+sicchk <- sicchk %>% 
+  left_join(
+    itl2.cv2digit %>% select(SIC07codefiltered = SIC07_code,SIC07desc_filtered = SIC07_description) %>% distinct,
+    by = c('SIC07_code' = 'SIC07codefiltered')
+  )
+
+#Save that for elsewhere
+saveRDS(itl2.cv2digit, 'data/UKchainedvolume_itl2_SIC_2digit.rds')
+
+
+
+#Any neg vals? Yup. Obv, shouldn't be
+table(itl2.cv2digit$value < 0)
+
+#Three land transport values in 2020. Is this some odd COVID adjustment?
+View(itl2.cv2digit %>% filter(value < 0))
+
+slopes.log <- get_slope_and_se_safely(data = itl2.cv2digit %>% filter(year %in% 2013:2019), ITL_region_name,SIC07_description, y = log(value), x = year)
+slopes.log <- get_slope_and_se_safely(data = itl2.cv2digit %>% filter(year %in% 2015:2021), ITL_region_name,SIC07_description, y = log(value), x = year)
+
+# debugonce(slopeDiffGrid)
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'South Yorkshire')
+
+sector = unique(itl2.cv2digit$SIC07_description)[grepl('pension',unique(itl2.cv2digit$SIC07_description),ignore.case = T)]
+sector = unique(itl2.cv2digit$SIC07_description)[grepl('fabric',unique(itl2.cv2digit$SIC07_description),ignore.case = T)]
+
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 99, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = sector)
+
+
+#random check: 2015 to 2021 ICT, is the slope 18.7% per year for SY?
+chk <- itl2.cvs %>% 
+  filter(
+    SIC07_description == 'Information and communication',
+    ITL_region_name == 'South Yorkshire',
+    year %in% 2015:2021
+  )
+
+#Yup, is about right
+((chk$value - lag(chk$value))/lag(chk$value))*100
+mean(((chk$value - lag(chk$value))/lag(chk$value))*100, na.rm=T)
+
+ggplot(chk, aes(x = year, y = value)) +
+  geom_point() +
+  geom_smooth(method = lm)
+
+#OK, let's output all the sectors and see see
+daterange = c(2013:2019)
+daterange = c(2015:2021)
+slopes.log <- get_slope_and_se_safely(data = itl2.cv2digit %>% filter(year %in% daterange), ITL_region_name,SIC07_description, y = log(value), x = year)
+
+for(sector in unique(slopes.log$SIC07_description)){
+  
+  p <- slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = sector)
+  
+  ggsave(plot = p, filename = paste0('local/localimages/sector_2digit_slope_grids/',sector,'_',min(daterange),'_',max(daterange),'.png'), width = 13, height = 13)
+  
+}
+
+
+
+
+#MAPPP
+itl2.geo <- st_read('data/geographies/International_Territorial_Level_2_January_2021_UK_BFE_V2_2022_-4735199360818908762/ITL2_JAN_2021_UK_BFE_V2.shp', quiet = T) %>% st_simplify(preserveTopology = T, dTolerance = 100)
+
+#Names match without alteration in this case, jolly good
+table(unique(slopes.log$ITL_region_name) %in% itl2.geo$ITL221NM)
+
+
+
+# slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 1998:2021), ITL_region_name,SIC07_description, y = log(value), x = year) %>% 
+slopes.log <- get_slope_and_se_safely(data = itl2.cv2digit %>% filter(year %in% 2013:2019), ITL_region_name,SIC07_description, y = log(value), x = year) %>%
+# slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2015:2021), ITL_region_name,SIC07_description, y = log(value), x = year) %>%
+  #Avoid covid
+  # slopes.log <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2013:2019), ITL_region_name,SIC07_description, y = log(value), x = year) %>% 
+  mutate(
+    min99 = slope - (se * getZScore(99)),
+    max99 = slope + (se * getZScore(99)),
+    min95 = slope - (se * getZScore(95)),
+    max95 = slope + (se * getZScore(95)),
+    min90 = slope - (se * getZScore(90)),
+    max90 = slope + (se * getZScore(90)),
+    crosseszero99 = min99 * max99 < 0,#mark if crosses zero
+    crosseszero95 = min95 * max95 < 0,#mark if crosses zero
+    crosseszero90 = min90 * max90 < 0,#mark if crosses zero
+    slopepolarity = ifelse(slope > 0, 'increasing', 'decreasing')
+  )
+
+
+
+#Pick sector
+# sector = slopes.log$SIC07_description[grepl(pattern = 'manuf', x = slopes.log$SIC07_description, ignore.case = T)] %>% unique
+sector = slopes.log$SIC07_description[grepl(pattern = 'scientific res', x = slopes.log$SIC07_description, ignore.case = T)] %>% unique
+# sector = slopes.log$SIC07_description[grepl(pattern = 'financ', x = slopes.log$SIC07_description, ignore.case = T)] %>% unique
+
+# View(slopes.log %>% filter(SIC07_description == sector))
+
+map <- itl2.geo %>% 
+  right_join(
+    slopes.log %>% filter(SIC07_description == sector),
+    by = c('ITL221NM'='ITL_region_name')
+  ) %>% mutate(slope100 = slope * 100)
+
+tm_shape(map) +
+  tm_polygons('slope100', n = 7, title="") +
+  tm_layout(title = sector, legend.bg.color = 'white', legend.bg.alpha = 0.5) +
+  tm_shape(
+    map %>% filter(!crosseszero95)
+  ) +
+  tm_borders(col='blue', lwd = 3)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

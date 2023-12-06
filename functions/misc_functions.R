@@ -703,6 +703,365 @@ twod_generictimeplot_normalisetozero <- function(df, category_var, x_var, y_var,
 
 
 
+twod_generictimeplot_multipletimepoints <- function(df, category_var, x_var, y_var, timevar, label_var, times, compasspoints_to_display = c('NE','NW','SE','SW')){
+  
+  category_var <- enquo(category_var)   
+  x_var <- enquo(x_var)
+  y_var <- enquo(y_var)
+  timevar <- enquo(timevar)
+  label_var <- enquo(label_var)
+  
+  #Though plotting multiple
+  #Still use start and end point to get overall compass direction
+  twoy <- df %>%
+    filter(
+      !!timevar %in% c(min(times), max(times))
+    ) %>% 
+    arrange(!!timevar)
+  
+  twoy_lags <- twoy %>%
+    arrange(!!category_var,!!timevar) %>%
+    mutate(
+      lag_x_var = !!x_var - lag(!!x_var),
+      lag_y_var = !!y_var - lag(!!y_var)
+    ) %>%
+    filter(!!timevar == max(times)) %>% #using final year to mark when going in particular compass direction
+    mutate(
+      compass = case_when(
+        lag_x_var < 0 & lag_y_var < 0 ~ 'SW', 
+        lag_x_var < 0 & lag_y_var > 0 ~ 'NW',
+        lag_x_var > 0 & lag_y_var > 0 ~ 'NE', 
+        lag_x_var > 0 & lag_y_var < 0 ~ 'SE'
+      ) 
+    )
+  
+  twoy <- twoy %>%  
+    left_join( 
+      twoy_lags %>%
+        select(!!category_var,compass),
+      by = quo_name(category_var)
+    )
+  
+  
+  #Loop over all timepoint  pairs to plot as vectors
+  current_years <- times[-length(times)]
+  next_years <- times[-1]
+  
+  # Use mapply to create the pairs
+  year_pairs <- mapply(c, current_years, next_years, SIMPLIFY = FALSE)
+  
+  # The list of year pairs
+  # year_pairs
+
+  p <- ggplot()
+  
+  #Check if last entry
+  last = year_pairs[[length(year_pairs)]]
+  
+  for(i in year_pairs){
+    
+    cat('year pair: ', i, '\n')
+  
+    #Get those two years
+    segment <- df %>%
+      filter(
+        !!timevar %in% i
+      ) %>% 
+      arrange(!!timevar)
+  
+    segment <- segment %>%  
+      left_join(
+        twoy_lags %>%
+          select(!!category_var,compass),
+        by = quo_name(category_var)
+      )
+    
+    twoy.wide <- segment %>% filter(compass %in% compasspoints_to_display) %>%
+      mutate(!!timevar := ifelse(!!timevar == min(!!timevar), 'start', 'end')) %>%
+      select(!!category_var,!!timevar,!!x_var,!!y_var,!!label_var) %>%
+      pivot_wider(names_from = !!timevar, values_from = c(!!x_var,!!y_var,!!label_var))
+    
+    
+    #Rename wide two year for change vector back to generic names
+    names(twoy.wide) <- c(names(twoy.wide)[1],'x_start','x_end','y_start','y_end','label_start','label_end')
+    
+    #Change arrow for last
+    #Easiest with list just to test if both years correct
+    if(mean(i == last)==1){
+    
+    p <- p + geom_segment(data = twoy.wide, aes(x = x_start, y = y_start , xend = x_end, yend = y_end),
+                   arrow = arrow(length = unit(0.5, "cm")),
+                   size = 1)
+                   
+    } else {
+      
+    p <- p + geom_segment(data = twoy.wide, aes(x = x_start, y = y_start , xend = x_end, yend = y_end),
+                   # arrow = arrow(length = unit(0.5, "cm")),
+                   size = 1)
+      
+    }
+                   
+  
+  }#end for
+  
+  p <- p +
+    geom_point(data = twoy %>% filter(compass%in%compasspoints_to_display), size = 5, alpha = 0.75,
+               aes(x = !!x_var, y = !!y_var,colour = factor(!!timevar), group = !!category_var)) +
+    # geom_line(data = twoy %>% filter(compass %in% compasspoints_to_display), size = 1, aes(x = !!x_var, y = !!y_var, group = !!category_var), colour = 'red') +
+    # geom_abline(slope = 1, size = 1, colour='blue', alpha = 0.5) +
+    # coord_cartesian(xlim = c(0.1,11), ylim = c(0.1,11)) + # good for log scale
+    # scale_y_log10() +
+    # scale_x_log10() +
+    guides(colour=guide_legend(title=" ")) +
+    xlab(quo_name(x_var)) +
+    ylab(quo_name(y_var))
+  # 
+  # #Reduce to latest year and merge in values for labels
+  label_df <- twoy %>% filter(!!timevar==max(!!timevar), compass %in% compasspoints_to_display) %>%
+    left_join(
+      twoy.wide %>% select(!!category_var,label_start,label_end)
+    )
+  
+  p <- p + geom_text_repel(
+    data = label_df,
+    # data = twoy %>% filter(!!timevar==max(!!timevar), compass %in% compasspoints_to_display),
+    aes(x = !!x_var, y = !!y_var,
+        label = paste0(!!category_var, "\n(",quo_name(label_var),": ",round(label_start,2),ifelse(label_start < label_end," >> "," << "),round(label_end,2),")"),
+        # label = paste0(!!category_var, "\n(",quo_name(x_var),": ",round(!!x_var,2),", ",quo_name(y_var),": ",round(!!y_var,2),")"),
+        # label = paste0(!!category_var, "\n(",quo_name(x_var),": ",round(!!x_var,2),", ",quo_name(y_var),": ",round(!!y_var,2),")"),
+        # label = paste0(!!category_var, "\n(x:",round(x_var,2),"%,y:",round(y_var,2),"%)"),
+        colour = compass),
+    alpha=1,
+    nudge_x = .05,
+    box.padding = 1,
+    nudge_y = 0.05,
+    segment.curvature = -0.1,
+    segment.ncp = 0.3,
+    segment.angle = 20,
+    max.overlaps = 20
+  ) +
+    scale_color_manual(values = setNames(c("red", "black",'#7fc97f','#beaed4','#fdc086','#1f78b4'),
+                                         c(min(times), max(times),'NE','SE','NW','SW')))
+  
+  p
+  
+  
+}
+
+
+
+
+
+
+
+twod_generictimeplot_normalisetozero__multipletimepoints <- function(df, category_var, x_var, y_var, timevar, label_var, times, compasspoints_to_display = c('NE','NW','SE','SW'), category_var_value_to_highlight="NULL"){
+  
+  category_var <- enquo(category_var)    
+  x_var <- enquo(x_var)
+  y_var <- enquo(y_var)
+  timevar <- enquo(timevar)
+  label_var <- enquo(label_var)
+  
+  #Though plotting multiple
+  #Still use start and end point to get overall compass direction
+  twoy <- df %>%
+    filter(
+      !!timevar %in% c(min(times), max(times))
+    ) %>% 
+    arrange(!!timevar)
+  
+  twoy_lags <- twoy %>%
+    arrange(!!category_var,!!timevar) %>%
+    mutate(
+      lag_x_var = !!x_var - lag(!!x_var),
+      lag_y_var = !!y_var - lag(!!y_var)
+    ) %>%
+    filter(!!timevar == max(times)) %>% #using final year to mark when going in particular compass direction
+    mutate(
+      compass = case_when(
+        lag_x_var < 0 & lag_y_var < 0 ~ 'SW', 
+        lag_x_var < 0 & lag_y_var > 0 ~ 'NW',
+        lag_x_var > 0 & lag_y_var > 0 ~ 'NE', 
+        lag_x_var > 0 & lag_y_var < 0 ~ 'SE'
+      ) 
+    )
+  
+  twoy <- twoy %>%  
+    left_join( 
+      twoy_lags %>%
+        select(!!category_var,compass),
+      by = quo_name(category_var)
+    )
+  
+  #Loop over all timepoint  pairs to plot as vectors
+  current_years <- times[-length(times)]
+  next_years <- times[-1]
+  
+  # Use mapply to create the pairs
+  year_pairs <- mapply(c, current_years, next_years, SIMPLIFY = FALSE)
+  
+  # The list of year pairs
+  # year_pairs
+  
+  #Vectors all centred on zero, percent change for all shown
+  #Annotate with a triangle indicating the half of the plot where GVA per worker will have dropped between time points
+  p <- ggplot() +
+    annotate(geom = "polygon", x = c(-1000, 1000, -1000), y = c(1000, 1000, -1000), fill = "white", alpha = 0.5)
+  
+  #Check if last entry
+  last = year_pairs[[length(year_pairs)]]
+  
+  #store previous x and y, start at zero
+  lastx <- 0
+  lasty <- 0
+  
+  for(i in year_pairs){
+    
+    cat('year pair: ', i, '\n')
+    
+    #Get those two years
+    segment <- df %>%
+      filter(
+        !!timevar %in% i
+      ) %>% 
+      arrange(!!timevar)
+    
+    segment <- segment %>%  
+      left_join(
+        twoy_lags %>%
+          select(!!category_var,compass),
+        by = quo_name(category_var)
+      )
+    
+    twoy.wide <- segment %>% filter(compass %in% compasspoints_to_display) %>%
+      mutate(!!timevar := ifelse(!!timevar == min(!!timevar), 'start', 'end')) %>%
+      select(!!category_var,!!timevar,!!x_var,!!y_var,!!label_var) %>%
+      pivot_wider(names_from = !!timevar, values_from = c(!!x_var,!!y_var,!!label_var))
+    
+    
+    #Rename wide two year for change vector back to generic names
+    names(twoy.wide) <- c(names(twoy.wide)[1],'x_start','x_end','y_start','y_end','label_start','label_end')
+    
+    
+    #Make percent change values for the vector x and y values
+    twoy.wide <- twoy.wide %>% 
+      mutate(
+        x_pct_change = percent_change(lastx + x_start, lastx + x_end),
+        y_pct_change = percent_change(lasty + y_start, lasty + y_end),
+        category_var_val_to_highlight = ifelse(!!category_var == category_var_value_to_highlight, T,F),
+        lastx = lastx,#single zero should repeat
+        lasty = lasty#single zero should repeat
+      )
+    
+    
+    #Change arrow for last
+    #Easiest with list just to test if both years correct
+    if(mean(i == last)==1){
+      
+      p <- p + geom_segment(data = twoy.wide, aes(x = lastx, y = lasty ,
+                                                  xend = x_pct_change, yend = y_pct_change),
+                            arrow = arrow(length = unit(0.5, "cm")),
+                            size = 1)
+      
+      #REPEAT LOOP FOR SELECTED FEATURE
+      #Highlight one place
+      #Colour aes clashes with one below for labels, which I want to keep
+      #Do hacky overlay instead
+      p <- p + geom_segment(data = twoy.wide %>% filter(category_var_val_to_highlight), 
+                            aes(x = lastx, y = lasty ,
+                                xend = x_pct_change, yend = y_pct_change), 
+                            arrow = arrow(length = unit(0.5, "cm")),
+                            size = 2, colour = '#3333ff'
+      )
+      
+      
+    } else {
+      
+      p <- p + geom_segment(data = twoy.wide, aes(x = lastx, y = lasty ,
+                                                  xend = x_pct_change, yend = y_pct_change),
+                            # arrow = arrow(length = unit(0.5, "cm")),
+                            size = 1)
+      
+      #REPEAT LOOP FOR SELECTED FEATURE
+      #Highlight one place
+      #Colour aes clashes with one below for labels, which I want to keep
+      #Do hacky overlay instead
+      p <- p + geom_segment(data = twoy.wide %>% filter(category_var_val_to_highlight), 
+                            aes(x = lastx, y = lasty ,
+                                xend = x_pct_change, yend = y_pct_change), 
+                            # arrow = arrow(length = unit(0.5, "cm")),
+                            size = 2, colour = '#3333ff'
+      )
+      
+    }
+    
+    
+    lastx <- twoy.wide$x_pct_change
+    lasty <- twoy.wide$y_pct_change
+    
+    print(lastx)
+    print(lasty)
+    
+  }#end for
+  
+  
+  
+  p <- p +
+    # geom_segment(data = twoy.wide, aes(x = 0, y = 0 ,xend = x_pct_change, yend = y_pct_change), 
+    #              # colour = category_var_val_to_highlight),
+    #              arrow = arrow(length = unit(0.5, "cm")),
+    #              size = 1, alpha = 0.5
+    # ) +
+    guides(colour=guide_legend(title=" ")) +
+    xlab( paste0(quo_name(x_var),' percent change ',min(times),' to ',max(times)) ) +
+    ylab( paste0(quo_name(y_var),' percent change ',min(times),' to ',max(times)) ) +
+    geom_vline(xintercept = 0, alpha = 0.1, size =2, colour = 'red') +
+    geom_hline(yintercept = 0, alpha = 0.1, size =2, colour = 'red') 
+  
+  
+  
+  # #Reduce to latest year and merge in values for labels
+  label_df <- twoy %>% filter(!!timevar==max(!!timevar), compass %in% compasspoints_to_display) %>%
+    left_join(
+      twoy.wide %>% select(!!category_var,label_start,label_end,x_pct_change,y_pct_change,category_var_val_to_highlight)
+    ) %>% 
+    mutate(category_var_val_to_highlight = ifelse(category_var_val_to_highlight, 'bold','plain'))
+  
+  p <- p + geom_text_repel(
+    data = label_df,
+    # data = twoy %>% filter(!!timevar==max(!!timevar), compass %in% compasspoints_to_display),
+    aes(x = x_pct_change, y = y_pct_change,fontface = category_var_val_to_highlight,
+        label = paste0(!!category_var, "\n(",quo_name(label_var),": ",round(label_start,2),ifelse(label_start < label_end," >> "," << "),round(label_end,2),")"),
+        # label = paste0(!!category_var, "\n(",quo_name(x_var),": ",round(!!x_var,2),", ",quo_name(y_var),": ",round(!!y_var,2),")"),
+        # label = paste0(!!category_var, "\n(",quo_name(x_var),": ",round(!!x_var,2),", ",quo_name(y_var),": ",round(!!y_var,2),")"),
+        # label = paste0(!!category_var, "\n(x:",round(x_var,2),"%,y:",round(y_var,2),"%)"),
+        colour = compass),
+    alpha=1,
+    nudge_x = .05,
+    box.padding = 1,
+    nudge_y = 0.05,
+    segment.curvature = -0.1,
+    segment.ncp = 0.3,
+    segment.angle = 20,
+    max.overlaps = 20
+  ) +
+    scale_color_manual(values = setNames(c("red", "black",'#7fc97f','#beaed4','#fdc086','#1f78b4'),
+                                         c(min(times), max(times),'NE','SE','NW','SW')))
+  
+  return(list(plot = p, twoyeardata = twoy.wide))
+  
+  
+}
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -429,7 +429,8 @@ allz <- purrr::map(
 # allz <- purrr::map(.f = get_all_places_sicsocs, .x = unique(z$GEOGRAPHY_NAME[z$GEOGRAPHY_NAME!='South Yorkshire'])) %>% bind_rows
 
 allz <- allz %>% 
-  unite(sicsoc, c('SOC2020','SIC2007'), sep = ' || ', remove = F) %>% 
+  # unite(sicsoc, c('SOC2020','SIC2007'), sep = ' || ', remove = F) %>% 
+  unite(sicsoc, c('SIC2007','SOC2020'), sep = ' || ', remove = F) %>% 
   mutate(
     valdiff = ifelse(!CIs_overlap, valdiff, NA)
   ) 
@@ -527,6 +528,60 @@ ggplot(allz %>% filter(SIC2007!='Total Services'), aes(x = substr(GEOGRAPHY_NAME
     axis.text.y = element_text(colour = b)
     ) 
    
+
+
+
+
+
+
+
+#VERSION THAT SHOWS ALL BUT OUTLINES SIG IN BLACK... NOPE, DOESN'T REALLY WORK, TOO HARD TO READ
+#And also, a lot of NA data anyway
+# allz <- purrr::map(
+#   .f = get_all_places_sicsocs, 
+#   .x = unique(z$GEOGRAPHY_NAME[z$GEOGRAPHY_NAME!=comparator]),
+#   comparator_name = comparator
+# ) %>% bind_rows
+# 
+# 
+# allz <- allz %>% 
+#   # unite(sicsoc, c('SOC2020','SIC2007'), sep = ' || ', remove = F) %>% 
+#   unite(sicsoc, c('SIC2007','SOC2020'), sep = ' || ', remove = F) 
+# 
+# valz <- c(range(allz$valdiff[allz$SIC2007!='Total Services'], na.rm = T), 0)
+# scale_values <- function(x){(x-min(x))/(max(x)-min(x))}
+# scaled <- scale_values(valz)
+# zerocutoff <- scaled[3]
+# 
+# b <- c(
+#   rep('#FF5733',9),
+#   rep('#CDDC39',9),
+#   rep('#00BCD4',9),
+#   rep('#9C27B0',9),
+#   rep('#3F51B5',9),
+#   rep('#E91E63',9),
+#   rep('#009688',9),
+#   rep('#FFEB3B',9),
+#   rep('#607D8B',9)
+# )
+# 
+# ggplot(allz %>% filter(SIC2007!='Total Services'), aes(x = substr(GEOGRAPHY_NAME,0,20), y = sicsoc, fill= valdiff, colour = CIs_overlap)) + 
+#   geom_tile(width = 0.8, height = 0.8, size = 0.2) +
+#   scale_fill_gradientn(
+#     colours = c("red", "white", "darkgreen"),
+#     values = c(0, zerocutoff, 1)#https://stackoverflow.com/a/58725778/5023561
+#   ) +
+#   theme(axis.text.x = element_text(angle = 270, vjust = 0.5, hjust=0)) +
+#   ggtitle(comparator) +
+#   theme(
+#     plot.title = element_text(face = 'bold'),
+#     axis.text.y = element_text(colour = b)
+#   ) +
+#   scale_color_manual(values = setNames(c('black','white'),c(F,T)), guide = 'none')
+
+
+
+
 
 
 

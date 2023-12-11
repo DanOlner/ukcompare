@@ -1091,12 +1091,18 @@ getZScore <- function(confidence_percent) {
 #Produce a ggplot visualisation of differences between OLS slopes (for time series here)
 #Between pairs of slopes e.g. all sectors in SY (or another particular place) compared to each other
 #Or all places paired for a particular sector
-slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_to_filter, filterval){
+#filterval2 for comparing a different pair of slopes for two grid-columns e.g. two different places
+#Will need naming if using two separate ones
+slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_to_filter, filterval, filterval2 = NULL){
   
   column_to_grid <- enquo(column_to_grid) 
   column_to_filter <- enquo(column_to_filter) 
   
   #Filter down to single thing (sector, place etc)
+  #If looking at two filtervals on different axes...
+  #Do first before overwriting slope_df
+  if(!is.null(filterval2)) slope_df2 <- slope_df %>% filter(!!column_to_filter == filterval2)
+  
   slope_df <- slope_df %>% 
     filter(!!column_to_filter == filterval)
   
@@ -1105,12 +1111,25 @@ slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_
   
   # cat('CI = ',confidence_interval,', z score = ', ci, '\n')
   
+  
+  if(!is.null(filterval2)){
+    
+    slope_df2 <- slope_df2 %>% 
+      mutate(
+        min.ci = slope - (se * ci),
+        max.ci = slope + (se * ci),
+        crosses.zero = min.ci * max.ci < 0
+      )
+    
+  }
+  
   slope_df <- slope_df %>% 
     mutate(
       min.ci = slope - (se * ci),
       max.ci = slope + (se * ci),
       crosses.zero = min.ci * max.ci < 0
     )
+  
   
   #Apply CI overlap test to all pairs
   #https://stackoverflow.com/a/3269471
@@ -1133,6 +1152,23 @@ slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_
     )
 
   #Merge in two repeated sets of the values and CIs to check for CI overlap for each pair
+  #If using a different place/sector etc for one of the matrix axes, do that here
+  if(!is.null(filterval2)){
+    
+    combos <- combos %>%
+      left_join(
+        slope_df2 %>% ungroup() %>% select(
+          !!column_to_grid,
+          slopetwo = slope,
+          min.citwo = min.ci,
+          max.citwo = max.ci,
+          crosses.zero.two = crosses.zero
+        ),
+        by = c('gridcol2' = quo_name(column_to_grid))
+      )
+    
+  } else {
+  
   combos <- combos %>%
     left_join(
       slope_df %>% ungroup() %>% select(
@@ -1144,6 +1180,8 @@ slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_
       ),
       by = c('gridcol2' = quo_name(column_to_grid))
     )
+  
+  }
 
   # 
   # #Apply CI overlap test to all pairs
@@ -1206,6 +1244,9 @@ slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_
   #Add in yearly % change of slope and CIs from log on the left axis
   combos <- combos %>% 
     mutate(
+      slopeone_percent = round((exp(slopeone) -1) * 100,1),
+      min.cione_percent = round((exp(min.cione) -1) * 100,1),
+      max.cione_percent = round((exp(max.cione) -1) * 100,1),
       slopetwo_percent = round((exp(slopetwo) -1) * 100,1),
       min.citwo_percent = round((exp(min.citwo) -1) * 100,1),
       max.citwo_percent = round((exp(max.citwo) -1) * 100,1),
@@ -1214,7 +1255,8 @@ slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_
   #Using colour for grid outline for sig values doesn't quite work, it draws messily
   #Add as extra layer over the top instead
   p <- ggplot(combos, aes(
-    x = substr(gridcol1,0,30), 
+    # x = substr(gridcol1,0,30),
+    x = paste0(substr(gridcol1,0,24),' (',slopeone_percent,'% CI: ',min.cione_percent,'%,',max.cione_percent,'%)'),
     y = paste0(substr(gridcol2,0,24),' (',slopetwo_percent,'% CI: ',min.citwo_percent,'%,',max.citwo_percent,'%)'), 
     fill= slopediff, colour = CIs_overlap)
     ) + 
@@ -1225,15 +1267,39 @@ slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_
     ) +
     theme(
       axis.text.x = element_text(angle = 270, vjust = 0.5, hjust=0, colour = slopecolours_x),
-      axis.text.y = element_text(colour = slopecolours_y),
-      axis.title.x=element_blank(),
-      axis.title.y=element_blank()
+      axis.text.y = element_text(colour = slopecolours_y)
+      # axis.title.x=element_blank(),
+      # axis.title.y=element_blank()
     ) +
     scale_color_manual(values = setNames(c('black','white'),c(F,T)), guide = 'none')
+  
+  #Add in axis labels if we're comparing two different things, else remove entirely
+  if(!is.null(filterval2)) p <- p + xlab(filterval) + ylab(filterval2) else p <- p + theme(axis.title.x=element_blank(),axis.title.y=element_blank())
   
   p
     
 }
+
+
+
+
+
+
+#Sticking several things together for timeplots for ease of reuse
+timeplot <- function(){
+  
+  
+  
+}
+
+
+
+
+
+
+
+
+
 
 
 

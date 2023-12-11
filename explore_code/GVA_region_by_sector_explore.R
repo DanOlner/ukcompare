@@ -4332,6 +4332,15 @@ slopeDiffGrid(slope_df = slopes.log, confidence_interval = 99, column_to_grid = 
 slopeDiffGrid(slope_df = slopes.log, confidence_interval = 99, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Accommodation and food service activities')
 
 
+#Two places against each other
+#debugonce(slopeDiffGrid)
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'South Yorkshire', filterval2 = 'Greater Manchester')
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval2 = 'South Yorkshire', filterval = 'Greater Manchester')
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval2 = 'South Yorkshire', filterval = 'West Yorkshire')
+
+
+
+
 #random check: 2015 to 2021 ICT, is the slope 18.7% per year for SY?
 chk <- itl2.cvs %>% 
   filter(
@@ -5061,12 +5070,337 @@ tm_shape(map) +
 
 
 
+#DIFF TIME PLOTS FOR GROWTH
+itl2.cv2digit <- itl2.cv2digit %>%
+  group_by(ITL_region_name,SIC07_description) %>% 
+  arrange(year) %>% 
+  mutate(
+    lagvalue_log = log(value) - log(lag(value)),
+    lagvalue_log_movingav = zoo::rollapply(lagvalue_log,7,mean,align='center',fill=NA)
+  )
+
+
+#Plz check maths!
+# View(itl2.cv2digit %>% filter(ITL_region_name=='Sheffield', SIC07_description=='Manufacturing', !is.na(lagvalue_log)))
+for(sector in unique(itl2.cv2digit$SIC07_description)){
+  
+  timeplot <- itl2.cv2digit %>% 
+    filter(SIC07_description == sector) 
+  
+  #Or pick top size values
+  #Largest % in 2021
+  largest_percents <- timeplot %>% 
+    filter(year == 2021) %>% 
+    arrange(-value)
+  
+  #Let's get Sheffield and BDR in a set order so colours don't change
+  # places = c('South Yorkshire')
+  places = c('South Yorkshire','Greater Manchester')
+  levels1 <- largest_percents$ITL_region_name[!largest_percents$ITL_region_name %in% places]
+  levels <- c(levels1,places)
+  
+  #Keep only the top ten places and order them
+  timeplot <- timeplot %>% 
+    mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = levels)) %>% 
+    filter(ITL_region_name %in% c(largest_percents$ITL_region_name[1:10],places))
+  
+  
+  
+  #Mark the ITL of interest so it can be clearer in the plot
+  timeplot <- timeplot %>%
+    mutate(
+      ITL2ofinterest = ifelse(ITL_region_name %in% places, 'ITL of interest','other'),
+    )
+  
+  #turning log diff into percentage change in line using lagvalue
+  p <- ggplot(timeplot %>% rename(`ITL region` = ITL_region_name) %>% filter(year %in% c(1998:2021), !is.na(lagvalue_log_movingav)),
+              # ggplot(timeplot %>% rename(`ITL region` = ITL_region_name) %>% filter(year %in% c(2010:2021)),
+              # aes(x = year, y = value, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+              # aes(x = year, y = (exp(lagvalue_log) -1) * 100, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+              aes(x = year, y = (exp(lagvalue_log_movingav) -1) * 100, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+    geom_point() +
+    geom_line() +
+    scale_size_manual(values = c(4,1)) +
+    scale_color_brewer(palette = 'Paired', direction = 1) +
+    ylab('GVA (chained volume) percent change, 7 year moving av') +
+    # scale_y_log10() +
+    guides(size = "none", linetype = "none") +
+    ggtitle(
+      paste0(sector,'\n', paste0(places, collapse = ', '), ' highlighted in thicker lines')
+    ) +
+    theme(plot.title = element_text(face = 'bold')) +
+    geom_hline(yintercept = 0)
+  
+  ggsave(paste0('local/localimages/ITL2_sector_timeplots_diff/',sector,'.png'), p, width = 12, height = 8)
+  
+}
 
 
 
 
 
 
+
+
+
+
+
+
+
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#REPEAT CHAINED VOLUME SLOPE ANALYSIS FOR ITL3 AND 20 SIC SECTIONS----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#It may not have the same 20 sections, we'll need to look. Let's see.
+itl3.cv <- read_csv('data/sectors/Table 3b ITL3 UK chained volume measures in 2019 money value pounds million.csv')
+
+names(itl3.cv) <- gsub(x = names(itl3.cv), pattern = ' ', replacement = '_')
+
+cvSICkeeps <- itl3.cv$SIC07_code[substr(itl3.cv$SIC07_code,2,2) == ' '] %>% unique
+
+#Check if it's a different list from ITL2 chained volume...
+chk <- itl2.cv$SIC07_code[substr(itl2.cv$SIC07_code,2,2) == ' '] %>% unique
+
+#Yes, it's different. A few to add in manually where sections codes combined
+#Which ones in ITL3 codes are NOT in ITL2, to narrow down?
+#We don't want all of these, but some we will
+unique(itl3.cv$SIC07_code)[!unique(itl3.cv$SIC07_code) %in% itl2.cv$SIC07_code[substr(itl2.cv$SIC07_code,2,2) == ' '] %>% unique]
+
+#Just these two, I believe
+#"AB (1-9)"
+#"DE (35-39)"
+cvSICkeeps <- c(cvSICkeeps,"AB (1-9)","DE (35-39)")
+
+itl3.cvs <- itl3.cv %>% 
+  filter(SIC07_code %in% cvSICkeeps) %>% 
+  pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'value') %>% 
+  mutate(year = as.numeric(year))
+
+#Not lost much at all in the combining relative to this level at ITL2
+View(itl3.cvs %>% select(SIC07_code,SIC07_description) %>% distinct)
+
+#Save that for elsewhere
+saveRDS(itl3.cvs, 'data/UKchainedvolume_itl3_SIC_sections.rds')
+
+
+slopes.log <- get_slope_and_se_safely(data = itl3.cvs %>% filter(year %in% 2015:2021), ITL_region_name,SIC07_description, y = log(value), x = year)
+#Avoid covid
+slopes.log <- get_slope_and_se_safely(data = itl3.cvs %>% filter(year %in% 2010:2019), ITL_region_name,SIC07_description, y = log(value), x = year)
+
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'South Yorkshire')
+
+
+
+#Two places against each other
+#debugonce(slopeDiffGrid)
+place1 = itl3.cvs %>% select(ITL_region_name) %>% distinct %>% filter(grepl('Sheffield',ITL_region_name,ignore.case=T)) %>% pull 
+place2 = itl3.cvs %>% select(ITL_region_name) %>% distinct %>% filter(grepl('Barnsley',ITL_region_name,ignore.case=T)) %>% pull 
+
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = place2, filterval2 = place1)
+
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = place1, filterval2 = place2)
+
+
+
+
+
+
+
+
+
+#Time plots for all sectors, highlighting Sheffield + BDR
+#Education doesn't seem to separate in the same way it did with the proportions, what's the crack?
+sector <- itl3.cvs$SIC07_description[grepl('information', itl3.cvs$SIC07_description ,ignore.case = T)] %>% unique
+sector <- itl3.cvs$SIC07_description[grepl('educ', itl3.cvs$SIC07_description ,ignore.case = T)] %>% unique
+
+
+
+
+#Also, try a differenced version - change in growth between timepoints. What does that look like?
+#Places will then start from same zero point, good way to compare scales
+itl3.cvs <- itl3.cvs %>%
+  group_by(ITL_region_name,SIC07_description) %>% 
+  arrange(year) %>% 
+  mutate(
+    lagvalue_log = log(value) - log(lag(value)),
+    lagvalue_log_movingav = zoo::rollapply(lagvalue_log,7,mean,align='center',fill=NA)
+    )
+
+
+#Plz check maths!
+# View(itl3.cvs %>% filter(ITL_region_name=='Sheffield', SIC07_description=='Manufacturing', !is.na(lagvalue_log)))
+for(sector in unique(itl3.cvs$SIC07_description)){
+
+  timeplot <- itl3.cvs %>% 
+    filter(SIC07_description == sector) 
+  
+  #Or pick top size values
+  #Largest % in 2021
+  largest_percents <- timeplot %>% 
+    filter(year == 2021) %>% 
+    arrange(-value)
+  
+  #Let's get Sheffield and BDR in a set order so colours don't change
+  places = c('Sheffield','Barnsley, Doncaster and Rotherham')
+  levels1 <- largest_percents$ITL_region_name[!largest_percents$ITL_region_name %in% places]
+  levels <- c(levels1,places)
+  
+  #Keep only the top ten places and order them
+  timeplot <- timeplot %>% 
+    mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = levels)) %>% 
+    filter(ITL_region_name %in% c(largest_percents$ITL_region_name[1:10],'Sheffield','Barnsley, Doncaster and Rotherham'))
+  
+  
+  
+  #Mark the ITL of interest so it can be clearer in the plot
+  timeplot <- timeplot %>%
+    mutate(
+      ITL2ofinterest = ifelse(ITL_region_name %in% places, 'ITL of interest','other'),
+    )
+  
+  #turning log diff into percentage change in line using lagvalue
+  p <- ggplot(timeplot %>% rename(`ITL region` = ITL_region_name) %>% filter(year %in% c(1998:2021), !is.na(lagvalue_log_movingav)),
+  # ggplot(timeplot %>% rename(`ITL region` = ITL_region_name) %>% filter(year %in% c(2010:2021)),
+           # aes(x = year, y = value, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+           # aes(x = year, y = (exp(lagvalue_log) -1) * 100, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+           aes(x = year, y = (exp(lagvalue_log_movingav) -1) * 100, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+    geom_point() +
+    geom_line() +
+    scale_size_manual(values = c(4,1)) +
+    scale_color_brewer(palette = 'Paired', direction = 1) +
+    ylab('GVA (chained volume, millions)') +
+    # scale_y_log10() +
+    guides(size = "none", linetype = "none") +
+    ggtitle(
+      paste0(sector,'\n', paste0(places, collapse = ', '), ' highlighted in thicker lines')
+    ) +
+    theme(plot.title = element_text(face = 'bold')) +
+    geom_hline(yintercept = 0)
+  
+  ggsave(paste0('local/localimages/ITL3_sector_timeplots/',sector,'.png'), p, width = 12, height = 8)
+
+}
+
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#REPEAT CHAINED VOLUME SLOPE ANALYSIS FOR ITL3 AT 2 DIGIT SIC----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Again, probably a different list of available 2 digit SICs compared to ITL2
+itl3.cv2digit <- read_csv('data/sectors/Table 3b ITL3 UK chained volume measures in 2019 money value pounds million.csv')
+
+#no spaces plz!
+names(itl3.cv2digit) <- gsub(x = names(itl3.cv2digit), pattern = ' ', replacement = '_')
+
+#Keep SICs to check removal was correct
+sicchk <- itl3.cv2digit %>% 
+  select(SIC07_code,SIC07_description) %>% 
+  distinct
+
+#Previously selected SIC sectors to remove
+ITL3_SICremoves = c(
+  'Total',#leave this in the CSV by commenting out, to check the categories left over total correctly in lines 42-63 below (then can remove by uncommenting)
+  'A-E',
+  'C (10-33)',
+  'F (41-43)',
+  'G-T',
+  'G (45-47)',
+  'H (49-53)',
+  'I (55-56)',
+  'J (58-63)',
+  'K (64-66)',
+  'L (68)',#real estate activities - leaves in "Real estate activities, excluding imputed rental" & "Owner-occupiers' imputed rental" as separate categories
+  'M (69-75)',
+  'N (77-82)',
+  'Q (86-88)',
+  'R (90-93)',
+  'S (94-96)'
+)
+
+
+itl3.cv2digit <- itl3.cv2digit %>% 
+  filter(!SIC07_code %in% ITL3_SICremoves) %>% 
+  pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'value') %>% 
+  mutate(year = as.numeric(year))
+
+#Check we got the right ones.. tick
+sicchk <- sicchk %>% 
+  left_join(
+    itl3.cv2digit %>% select(SIC07codefiltered = SIC07_code,SIC07desc_filtered = SIC07_description) %>% distinct,
+    by = c('SIC07_code' = 'SIC07codefiltered')
+  )
+
+#Save that for elsewhere
+saveRDS(itl3.cv2digit, 'data/UKchainedvolume_itl3_SIC_2digit.rds')
+
+
+
+#SECTOR DIFF TIMEPLOTS
+itl3.cv2digit <- itl3.cv2digit %>%
+  group_by(ITL_region_name,SIC07_description) %>% 
+  arrange(year) %>% 
+  mutate(
+    lagvalue_log = log(value) - log(lag(value)),
+    lagvalue_log_movingav = zoo::rollapply(lagvalue_log,7,mean,align='center',fill=NA)
+  )
+
+
+for(sector in unique(itl3.cv2digit$SIC07_description)){
+  
+  timeplot <- itl3.cv2digit %>% 
+    filter(SIC07_description == sector) 
+  
+  #Or pick top size values
+  #Largest % in 2021
+  largest_percents <- timeplot %>% 
+    filter(year == 2021) %>% 
+    arrange(-value)
+  
+  #Let's get Sheffield and BDR in a set order so colours don't change
+  places = c('Sheffield','Barnsley, Doncaster and Rotherham')
+  levels1 <- largest_percents$ITL_region_name[!largest_percents$ITL_region_name %in% places]
+  levels <- c(levels1,places)
+  
+  #Keep only the top ten places and order them
+  timeplot <- timeplot %>% 
+    mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = levels)) %>% 
+    filter(ITL_region_name %in% c(largest_percents$ITL_region_name[1:10],'Sheffield','Barnsley, Doncaster and Rotherham'))
+  
+  
+  
+  #Mark the ITL of interest so it can be clearer in the plot
+  timeplot <- timeplot %>%
+    mutate(
+      ITL2ofinterest = ifelse(ITL_region_name %in% places, 'ITL of interest','other'),
+    )
+  
+  #turning log diff into percentage change in line using lagvalue
+  p <- ggplot(timeplot %>% rename(`ITL region` = ITL_region_name) %>% filter(year %in% c(1998:2021), !is.na(lagvalue_log_movingav)),
+              # ggplot(timeplot %>% rename(`ITL region` = ITL_region_name) %>% filter(year %in% c(2010:2021)),
+              # aes(x = year, y = value, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+              # aes(x = year, y = (exp(lagvalue_log) -1) * 100, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+              aes(x = year, y = (exp(lagvalue_log_movingav) -1) * 100, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+    geom_point() +
+    geom_line() +
+    scale_size_manual(values = c(4,1)) +
+    scale_color_brewer(palette = 'Paired', direction = 1) +
+    ylab('GVA (chained volume, millions)') +
+    # scale_y_log10() +
+    guides(size = "none", linetype = "none") +
+    ggtitle(
+      paste0(sector,'\n', paste0(places, collapse = ', '), ' highlighted in thicker lines')
+    ) +
+    theme(plot.title = element_text(face = 'bold')) +
+    geom_hline(yintercept = 0)
+  
+  ggsave(paste0('local/localimages/ITL3_2digitsector_timeplots_diff/',sector,'.png'), p, width = 12, height = 8)
+  
+}
 
 
 

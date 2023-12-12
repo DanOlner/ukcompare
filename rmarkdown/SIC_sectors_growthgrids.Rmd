@@ -24,8 +24,12 @@ itl2.cvs <- readRDS('../data/UKchainedvolume_itl2_SIC_sections.rds')
 
 itl2.jobs <- readRDS('../data/itl2_BRES_jobs_SIC_sections.rds')
 
+itl2.cv2digit <- readRDS('../data/UKchainedvolume_itl2_SIC_2digit.rds')
+
+
 #Mark South Yorkshire
 itl2.cvs$ITL_region_name[itl2.cvs$ITL_region_name == 'South Yorkshire'] <- 'SOUTH YORKSHIRE <<<'
+itl2.cv2digit$ITL_region_name[itl2.cv2digit$ITL_region_name == 'South Yorkshire'] <- 'SOUTH YORKSHIRE <<<'
 itl2.jobs$GEOGRAPHY_NAME[itl2.jobs$GEOGRAPHY_NAME == 'South Yorkshire'] <- 'SOUTH YORKSHIRE <<<'
 
 #Right join to match the fewer available years in the BRES data
@@ -123,6 +127,30 @@ p <- twod_generictimeplot(
   label_var = `gva/job`,
   start_time = 2015,
   end_time = 2021
+)
+
+p + theme(aspect.ratio=1)
+
+```
+
+
+----
+
+## Job counts vs GVA South Yorkshire - excluding post-COVID years
+
+Excluding post-COVID years shows manufacturing had a less dramatic jump in GVA; health - along with the rest of the UK - saw large drops throughout COVID before recovering in last year or so.
+
+```{r}
+p <- twod_generictimeplot(
+  df = itl2.gvaperjob %>% filter(ITL_region_name == 'SOUTH YORKSHIRE <<<', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000),
+  # df = itl2.gvaperjob %>% filter(ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
+  category_var = SIC07_description,
+  x_var = gva,
+  y_var = jobcount,
+  timevar = year,
+  label_var = `gva/job`,
+  start_time = 2015,
+  end_time = 2019
 )
 
 p + theme(aspect.ratio=1)
@@ -733,6 +761,102 @@ ft
 # job_gva_scale
 
 ```
+
+
+# Extras
+
+----
+
+## GVA slope grid for 2-digit SIC sectors, South Yorkshire 2013-2019
+
+Breaking South Yorkshire GVA slopes down into the smaller 2 digit SICS and comparing growth WITHIN South Yorkshire, ICT growth shows up most strongly in telecoms growth (31% year year in this period, CI 25-37%).
+
+Separating out manufacturing into 2-digit subsectors shows some actually growing strongly relative to other SY sectors. Insurance and pension funding also stands out internally.
+
+```{r}
+slopes.log <- get_slope_and_se_safely(data = itl2.cv2digit %>% filter(year %in% 2013:2019), ITL_region_name,SIC07_description, y = log(value), x = year)
+# slopes.log <- get_slope_and_se_safely(data = itl2.cv2digit %>% filter(year %in% 2015:2021), ITL_region_name,SIC07_description, y = log(value), x = year)
+
+# debugonce(slopeDiffGrid)
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'SOUTH YORKSHIRE <<<')
+
+```
+
+
+
+----
+
+## Sheffield vs BDR ICT growth comparison
+
+Growth year on year (difference in GVA value between years), 7 year moving average. Very similar growth patterns up until 2007.
+
+```{r}
+itl3.cv2digit <- readRDS('../data/UKchainedvolume_itl3_SIC_2digit.rds')
+
+sector = 'Telecommunications; information technology'
+
+#SECTOR DIFF TIMEPLOTS
+itl3.cv2digit <- itl3.cv2digit %>%
+  group_by(ITL_region_name,SIC07_description) %>% 
+  arrange(year) %>% 
+  mutate(
+    lagvalue_log = log(value) - log(lag(value)),
+    lagvalue_log_movingav = zoo::rollapply(lagvalue_log,7,mean,align='center',fill=NA)
+  )
+
+timeplot <- itl3.cv2digit %>% 
+  filter(SIC07_description == sector) 
+
+#Or pick top size values
+#Largest % in 2021
+largest_percents <- timeplot %>% 
+  filter(year == 2021) %>% 
+  arrange(-value)
+
+#Let's get Sheffield and BDR in a set order so colours don't change
+places = c('Sheffield','Barnsley, Doncaster and Rotherham')
+levels1 <- largest_percents$ITL_region_name[!largest_percents$ITL_region_name %in% places]
+levels <- c(levels1,places)
+
+#Keep only the top ten places and order them
+timeplot <- timeplot %>% 
+  mutate(ITL_region_name = factor(ITL_region_name, ordered = T, levels = levels)) %>% 
+  filter(ITL_region_name %in% c(largest_percents$ITL_region_name[1:10],'Sheffield','Barnsley, Doncaster and Rotherham'))
+
+
+
+#Mark the ITL of interest so it can be clearer in the plot
+timeplot <- timeplot %>%
+  mutate(
+    ITL2ofinterest = ifelse(ITL_region_name %in% places, 'ITL of interest','other'),
+  )
+
+#turning log diff into percentage change in line using lagvalue
+p <- ggplot(timeplot %>% rename(`ITL region` = ITL_region_name) %>% filter(year %in% c(1998:2021), !is.na(lagvalue_log_movingav)),
+            # ggplot(timeplot %>% rename(`ITL region` = ITL_region_name) %>% filter(year %in% c(2010:2021)),
+            # aes(x = year, y = value, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+            # aes(x = year, y = (exp(lagvalue_log) -1) * 100, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+            aes(x = year, y = (exp(lagvalue_log_movingav) -1) * 100, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+  geom_point() +
+  geom_line() +
+  scale_size_manual(values = c(4,1)) +
+  scale_color_brewer(palette = 'Paired', direction = 1) +
+  ylab('Percent change in GVA year on year, 7 year moving av (chained volume, millions)') +
+  # scale_y_log10() +
+  guides(size = "none", linetype = "none") +
+  ggtitle(
+    paste0(sector,'\n', paste0(places, collapse = ', '), ' highlighted in thicker lines')
+  ) +
+  theme(plot.title = element_text(face = 'bold')) +
+  geom_hline(yintercept = 0)
+  
+p
+  
+
+```
+
+
+
 
 
 

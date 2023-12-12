@@ -5389,7 +5389,7 @@ for(sector in unique(itl3.cv2digit$SIC07_description)){
     geom_line() +
     scale_size_manual(values = c(4,1)) +
     scale_color_brewer(palette = 'Paired', direction = 1) +
-    ylab('GVA (chained volume, millions)') +
+    ylab('Percent change in GVA year on year, 7 year moving av (chained volume, millions)') +
     # scale_y_log10() +
     guides(size = "none", linetype = "none") +
     ggtitle(

@@ -1093,7 +1093,7 @@ getZScore <- function(confidence_percent) {
 #Or all places paired for a particular sector
 #filterval2 for comparing a different pair of slopes for two grid-columns e.g. two different places
 #Will need naming if using two separate ones
-slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_to_filter, filterval, filterval2 = NULL){
+slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_to_filter, filterval, filterval2 = NULL, returndata = F){
   
   column_to_grid <- enquo(column_to_grid) 
   column_to_filter <- enquo(column_to_filter) 
@@ -1276,23 +1276,9 @@ slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_
   #Add in axis labels if we're comparing two different things, else remove entirely
   if(!is.null(filterval2)) p <- p + xlab(filterval) + ylab(filterval2) else p <- p + theme(axis.title.x=element_blank(),axis.title.y=element_blank())
   
-  p
+  if(returndata) combos else p
     
 }
-
-
-
-
-
-
-#Sticking several things together for timeplots for ease of reuse
-timeplot <- function(){
-  
-  
-  
-}
-
-
 
 
 

@@ -4909,7 +4909,7 @@ p[[1]] + coord_fixed(xlim = c(-20,20),ylim = c(-20,20))
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#REPEAT CHAINED VOLUME SLOPE ANALYSIS FOR 2 DIGIT SICS----
+#CHAINED VOLUME SLOPE ANALYSIS FOR ITL2 + 2 DIGIT SICS----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 itl2.cv2digit <- read_csv('data/sectors/Table 2b ITL2 UK chained volume measures in 2019 money value pounds million.csv')
@@ -5137,21 +5137,209 @@ for(sector in unique(itl2.cv2digit$SIC07_description)){
 
 
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#ITL2 + 2 DIGIT SICS LINKED TO JOBS----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+itl2.cv2digit <- readRDS('data/UKchainedvolume_itl2_SIC_2digit.rds')
+
+#Can we just adapt from previous link to BRES at 2-digit SIC for current prices?
+#In theory, the only column that's going to change is the value
+#Once all LQ etc calcs are dropped
+gva_w_jobcounts <- readRDS('data/UK_GVA_with_BRES_jobcounts_and_jobcounts_summedfrom5digitSIC.rds') %>% 
+  select(-c(`SIC07 code`:LQ_log),-GVA_perFTjob,-GVA_perFTjob_5digit,-GVA_per_EMPLOYMENT,-GVA_per_EMPLOYMENT_5digit,-GVA) %>% 
+  rename(ITL_region_name = GEOGRAPHY_NAME, SIC07_description = INDUSTRY_NAME, SIC07_code = INDUSTRY_CODE, year = DATE)
+
+#Check link with chained volume... 
+unique(itl2.cv2digit$SIC07_code)[order(unique(itl2.cv2digit$SIC07_code))]
+unique(gva_w_jobcounts$SIC07_code)[order(unique(gva_w_jobcounts$SIC07_code))]
+
+#I think keeping only text in brackets should make a perfect match
+#Pull out numbers in brackets, don't need the rest
+#https://stackoverflow.com/a/8613332
+repl <- regmatches(itl2.cv2digit$SIC07_code, gregexpr("(?<=\\().*?(?=\\))", itl2.cv2digit$SIC07_code, perl=T))
+repl[lengths(repl) == 0] <- NA
+repl <- unlist(repl)
+
+itl2.cv2digit$SIC07_code <- ifelse(is.na(repl), itl2.cv2digit$SIC07_code, repl)
+
+#A couple still not matching... those are both sectors with zero job counts, can be dropped
+unique(itl2.cv2digit$SIC07_code)[!unique(itl2.cv2digit$SIC07_code) %in% unique(gva_w_jobcounts$SIC07_code)]
+
+itl2.cv2digit.jobs <- itl2.cv2digit %>% 
+  select(-SIC07_description) %>% 
+  filter(!SIC07_code %in% c("68IMP","97-98"))
+
+#TICK
+table(unique(itl2.cv2digit.jobs$SIC07_code) %in% unique(gva_w_jobcounts$SIC07_code))
+
+
+#MERGE THE CHAINED VOLUME VALUES INTO THE JOB COUNTS
+#Right join to keep only 2015-2021 years that there's job data for
+itl2.cv2digit.jobs <- itl2.cv2digit.jobs %>% 
+  right_join(
+    gva_w_jobcounts,
+    by = c('SIC07_code','ITL_region_name','year')
+  )
+
+
+#Get gva per job value. Keep same name as others to make code more reusable, but note this is FULL TIME jobs
+itl2.cv2digit.jobs <- itl2.cv2digit.jobs %>% 
+  mutate(gvaperjob = (value * 1000000) / JOBCOUNT_FT_5DIGIT)
+
+
+sector = itl2.cv2digit.jobs$SIC07_description[grepl(pattern = 'telecom', x = itl2.cv2digit.jobs$SIC07_description, ignore.case = T)] %>% unique
+
+#Keep only sectors over a certain size to display
+#As some of the smaller ones are very volatile over time
+#Base on size in 2019
+place = 'South Yorkshire'
+place = 'Greater Manchester'
+
+sectororder <- itl2.cv2digit.jobs %>% 
+  filter(ITL_region_name == place, year == 2019) %>% 
+  arrange(-JOBCOUNT_FT_5DIGIT) %>% 
+  mutate(JOBCOUNT_FT_5DIGIT_PERCENT = (JOBCOUNT_FT_5DIGIT/sum(JOBCOUNT_FT_5DIGIT))*100)
+  
+#Actually, let's just look. For SY, tricky sectors including insurance and pension funding
+#But it's big enough that I don't think I want it removed.
+#What are the numbers doing?
+#Numbers are tiny, but then 1500 workers. A firm or two must have moved here. Not a huge % of jobs
+View(itl2.cv2digit.jobs %>% filter(ITL_region_name == place, SIC07_description == 'Insurance and pension funding'))
+View(itl2.cv2digit.jobs %>% filter(ITL_region_name == place, SIC07_description == 'Forestry and fishing'))
+
+sectorstodrop = c('Insurance and pension funding','Forestry and fishing')
+sectorstodrop = NULL
+
+#Or if keeping some e.g. here look just at those subsectors in the ICT section
+chk <- itl2.cv2digit.jobs$SIC07_description[grepl(pattern = 'telecom|publishing|motion|program|information', x = itl2.cv2digit.jobs$SIC07_description, ignore.case = T)] %>% unique
+sectorstodrop <- itl2.cv2digit.jobs$SIC07_description[!grepl(pattern = 'telecom|publishing|motion|program|information', x = itl2.cv2digit.jobs$SIC07_description, ignore.case = T)] %>% unique
+
+#Let's use smoothed values too. Another option is predicted values at each end from slope, but...
+itl2.cv2digit.jobs <- itl2.cv2digit.jobs %>%
+  group_by(ITL_region_name,SIC07_description) %>% 
+  arrange(year) %>% 
+  mutate(
+    gva_movingav = zoo::rollapply(value,3,mean,align='center',fill=NA),
+    jobs_movingav = zoo::rollapply(JOBCOUNT_FT_5DIGIT,3,mean,align='center',fill=NA),
+    gvaperjob_movingav = zoo::rollapply(gvaperjob,3,mean,align='center',fill=NA)
+  )
+
+#Remaining centred years with smoothed values
+unique(itl2.cv2digit.jobs$year[!is.na(itl2.cv2digit.jobs$gva_movingav)])   
+
+p <- twod_generictimeplot_normalisetozero(
+  # df = itl2.gvaperjob %>% filter(SIC07_description=='Information and communication') %>% mutate(`gva/job` = gvaperjob/1000),
+  # df = itl2.gvaperjob %>% filter(SIC07_description=='Manufacturing') %>% mutate(`gva/job` = gvaperjob/1000),
+  # df = itl2.gvaperjob %>% filter(grepl('Health',SIC07_description,ignore.case=T)) %>% mutate(`gva/job` = gvaperjob/1000),
+  df = itl2.cv2digit.jobs %>% filter(ITL_region_name == place, !SIC07_description %in% sectorstodrop) %>% mutate(`gva/job` = gvaperjob_movingav/1000),
+  # df = itl2.cv2digit.jobs %>% filter(ITL_region_name == 'West Yorkshire', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000),
+  category_var = SIC07_description,
+  x_var = gva_movingav,
+  y_var = jobs_movingav,
+  timevar = year,
+  label_var = `gva/job`,
+  # category_var_value_to_highlight = sector,
+  start_time = 2016,
+  end_time = 2020
+)
+
+xrange_adjust = diff(range(p[[2]]$x_pct_change)) * 0.1
+yrange_adjust = diff(range(p[[2]]$y_pct_change)) * 0.1
+
+p[[1]] + coord_fixed(
+  xlim = c(
+    min(p[[2]]$x_pct_change) - xrange_adjust,
+    ifelse(max(p[[2]]$x_pct_change) > 0,max(p[[2]]$x_pct_change) + xrange_adjust,0)#hack for health, need to make generic
+  ),
+  ylim = c(
+    min(p[[2]]$y_pct_change) - yrange_adjust,max(p[[2]]$y_pct_change) + yrange_adjust 
+  )
+) 
+
+
+
+
+#Looking at particular sector
+p <- twod_generictimeplot_normalisetozero(
+  df = itl2.cv2digit.jobs %>% filter(SIC07_description=='Telecommunications') %>% mutate(`gva/job` = gvaperjob_movingav/1000),
+  category_var = ITL_region_name,
+  x_var = gva_movingav,
+  y_var = jobs_movingav,
+  timevar = year,
+  label_var = `gva/job`,
+  category_var_value_to_highlight = place,
+  start_time = 2016,
+  end_time = 2020
+)
+
+xrange_adjust = diff(range(p[[2]]$x_pct_change)) * 0.1
+yrange_adjust = diff(range(p[[2]]$y_pct_change)) * 0.1
+
+p[[1]] + coord_fixed(
+  xlim = c(
+    min(p[[2]]$x_pct_change) - xrange_adjust,
+    ifelse(max(p[[2]]$x_pct_change) > 0,max(p[[2]]$x_pct_change) + xrange_adjust,0)#hack for health, need to make generic
+  ),
+  ylim = c(
+    min(p[[2]]$y_pct_change) - yrange_adjust,max(p[[2]]$y_pct_change) + yrange_adjust 
+  )
+) 
+
+#Haaaack
+p[[1]] + coord_fixed(
+  xlim = c(-50,250),
+  ylim = c(-60,60)
+)
 
 
 
 
 
 
-
-
+#All plz!
+for(sector in unique(itl2.gvaperjob$SIC07_description)){
+  
+  p <- twod_generictimeplot_normalisetozero(
+    df = itl2.gvaperjob %>% filter(SIC07_description==sector) %>% mutate(`gva/job` = gvaperjob/1000),
+    category_var = ITL_region_name,
+    x_var = gva,
+    y_var = jobcount,
+    timevar = year,
+    label_var = `gva/job`,
+    category_var_value_to_highlight = 'South Yorkshire',
+    start_time = 2015,
+    # end_time = 2021
+    end_time = 2019
+  )
+  
+  # p <- p[[1]] + coord_fixed()
+  
+  xrange_adjust = diff(range(p[[2]]$x_pct_change)) * 0.1
+  yrange_adjust = diff(range(p[[2]]$y_pct_change)) * 0.1
+  
+  p <- p[[1]] + coord_fixed(
+    xlim = c(
+      min(p[[2]]$x_pct_change) - xrange_adjust,
+      ifelse(max(p[[2]]$x_pct_change) > 0,max(p[[2]]$x_pct_change) + xrange_adjust,0)#hack for health, need to make generic
+    ),
+    ylim = c(
+      min(p[[2]]$y_pct_change) - yrange_adjust,max(p[[2]]$y_pct_change) + yrange_adjust 
+    )
+  ) 
+  
+  # ggsave(plot = p, filename = paste0('local/localimages/2D_COMPASSPLOTS_SECTORS/',gsub("[^A-Za-z]", "", sector),'.png'), width = 12, height = 12)
+  ggsave(plot = p, filename = paste0('local/localimages/2D_COMPASSPLOTS_SECTORS_to2019/',gsub("[^A-Za-z]", "", sector),'.png'), width = 12, height = 12)
+  # ggsave(plot = p, filename = paste0('local/localimages/2D_COMPASSPLOTS_SECTORS_2019to2021/',gsub("[^A-Za-z]", "", sector),'.png'), width = 12, height = 12)
+  
+}
 
 
 
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#REPEAT CHAINED VOLUME SLOPE ANALYSIS FOR ITL3 AND 20 SIC SECTIONS----
+#CHAINED VOLUME SLOPE ANALYSIS FOR ITL3 AND 20 SIC SECTIONS----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #It may not have the same 20 sections, we'll need to look. Let's see.
@@ -5186,19 +5374,84 @@ View(itl3.cvs %>% select(SIC07_code,SIC07_description) %>% distinct)
 saveRDS(itl3.cvs, 'data/UKchainedvolume_itl3_SIC_sections.rds')
 
 
+
+
 slopes.log <- get_slope_and_se_safely(data = itl3.cvs %>% filter(year %in% 2015:2021), ITL_region_name,SIC07_description, y = log(value), x = year)
 #Avoid covid
 slopes.log <- get_slope_and_se_safely(data = itl3.cvs %>% filter(year %in% 2010:2019), ITL_region_name,SIC07_description, y = log(value), x = year)
 
-slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'South Yorkshire')
-
-
 
 #Two places against each other
 #debugonce(slopeDiffGrid)
-place1 = itl3.cvs %>% select(ITL_region_name) %>% distinct %>% filter(grepl('Sheffield',ITL_region_name,ignore.case=T)) %>% pull 
-place2 = itl3.cvs %>% select(ITL_region_name) %>% distinct %>% filter(grepl('Barnsley',ITL_region_name,ignore.case=T)) %>% pull 
+place1 = itl3.cvs %>% select(ITL_region_name) %>% distinct %>% filter(grepl('Sheffield',ITL_region_name,ignore.case=T)) %>% pull %>% unique
+place2 = itl3.cvs %>% select(ITL_region_name) %>% distinct %>% filter(grepl('Barnsley',ITL_region_name,ignore.case=T)) %>% pull %>% unique
 
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = place1)
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = place2)
+
+
+#Repeat, filtering out agri (see below - sudden jump in recent years looks odd, and its a tiny sector anyway)
+slopeDiffGrid(slope_df = slopes.log %>% filter(SIC07_description!='Agriculture, forestry and fishing; mining and quarrying'), confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = place1)
+slopeDiffGrid(slope_df = slopes.log %>% filter(SIC07_description!='Agriculture, forestry and fishing; mining and quarrying'), confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = place2)
+
+
+#manuf looking stronger in BDR. Compare all places for manuf
+slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Manufacturing')
+
+#That's waaay too many places. Option to return data added, let's see about measuring how many pos/neg slopes
+griddata <- slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Manufacturing', returndata = T)
+
+#So, if we group by gridcol2 (which is the y axis)
+#And then count slopes that are false for CIs_overlap and then the pos or neg slopes
+#Can then group the prop poses and see where certain places lie 
+count_sigs <- griddata %>% 
+  group_by(gridcol2) %>% 
+  summarise(
+    prop_pos = mean(!CIs_overlap & slopediff > 0),
+    prop_neg = mean(!CIs_overlap & slopediff < 0)
+  )
+
+#https://stats.stackexchange.com/a/204354
+#Get percentile
+ecdf_fun <- function(x,perc) ecdf(x)(perc)
+ecdf_fun(count_sigs$prop_pos,count_sigs$prop_pos[count_sigs$gridcol2 == 'Barnsley, Doncaster and Rotherham'])
+ecdf_fun(count_sigs$prop_pos,count_sigs$prop_pos[count_sigs$gridcol2 == 'Sheffield'])
+ecdf_fun(count_sigs$prop_neg,count_sigs$prop_neg[count_sigs$gridcol2 == 'Barnsley, Doncaster and Rotherham'])
+ecdf_fun(count_sigs$prop_neg,count_sigs$prop_neg[count_sigs$gridcol2 == 'Sheffield'])
+
+
+#Which we could then repeat for all sectors, to see where both places sit, right?
+propz <- list()
+
+for(sector in unique(slopes.log$SIC07_description)){
+  
+  griddata <- slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = sector, returndata = T)
+  
+  count_sigs <- griddata %>% 
+    group_by(gridcol2) %>% 
+    summarise(
+      prop_pos = mean(!CIs_overlap & slopediff > 0, na.rm = T),
+      prop_neg = mean(!CIs_overlap & slopediff < 0, na.rm = T)
+    )
+  
+  #https://stats.stackexchange.com/a/204354
+  #Get percentile
+  bpos <- ecdf_fun(count_sigs$prop_pos,count_sigs$prop_pos[count_sigs$gridcol2 == 'Barnsley, Doncaster and Rotherham'])
+  spos <- ecdf_fun(count_sigs$prop_pos,count_sigs$prop_pos[count_sigs$gridcol2 == 'Sheffield'])
+  bneg <- ecdf_fun(count_sigs$prop_neg,count_sigs$prop_neg[count_sigs$gridcol2 == 'Barnsley, Doncaster and Rotherham'])
+  sneg <- ecdf_fun(count_sigs$prop_neg,count_sigs$prop_neg[count_sigs$gridcol2 == 'Sheffield'])
+  
+  propz[[length(propz)+1]] <- list(sector = sector, bpos = bpos, spos = spos, bneg = bneg, sneg = sneg)
+  
+}
+
+percentiles_df <- bind_rows(propz)
+
+
+
+
+
+#Compare one to the other on different axes
 slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = place2, filterval2 = place1)
 
 slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = place1, filterval2 = place2)
@@ -5206,6 +5459,18 @@ slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, column_to_grid = 
 
 
 
+
+
+
+#Look at order by sector size in 2021
+chk <- itl3.cvs %>% 
+  filter(ITL_region_name %in% c(place1,place2), year == 2021) %>% 
+  arrange(ITL_region_name,value)
+
+#Just looking at change in agri forestry etc
+chk <- itl3.cvs %>% 
+  filter(ITL_region_name %in% c(place1,place2), SIC07_description == 'Agriculture, forestry and fishing; mining and quarrying') %>% 
+  arrange(ITL_region_name,year)
 
 
 
@@ -5264,9 +5529,9 @@ for(sector in unique(itl3.cvs$SIC07_description)){
   #turning log diff into percentage change in line using lagvalue
   p <- ggplot(timeplot %>% rename(`ITL region` = ITL_region_name) %>% filter(year %in% c(1998:2021), !is.na(lagvalue_log_movingav)),
   # ggplot(timeplot %>% rename(`ITL region` = ITL_region_name) %>% filter(year %in% c(2010:2021)),
-           # aes(x = year, y = value, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+           aes(x = year, y = value, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
            # aes(x = year, y = (exp(lagvalue_log) -1) * 100, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
-           aes(x = year, y = (exp(lagvalue_log_movingav) -1) * 100, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
+           # aes(x = year, y = (exp(lagvalue_log_movingav) -1) * 100, colour = `ITL region`, size = ITL2ofinterest, linetype = ITL2ofinterest, group = `ITL region`)) +
     geom_point() +
     geom_line() +
     scale_size_manual(values = c(4,1)) +
@@ -5287,8 +5552,9 @@ for(sector in unique(itl3.cvs$SIC07_description)){
 
 
 
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#REPEAT CHAINED VOLUME SLOPE ANALYSIS FOR ITL3 AT 2 DIGIT SIC----
+#CHAINED VOLUME SLOPE ANALYSIS FOR ITL3 AT 2 DIGIT SIC----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #Again, probably a different list of available 2 digit SICs compared to ITL2

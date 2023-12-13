@@ -3154,6 +3154,37 @@ p
 #Comparing to other places
 
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#CHECKING ON SOME SPECIFIC 5 DIGIT SECTORS----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+breschk <- readRDS('local/data/bres_5digit_fulltime.rds')
+
+#Looking at just SY, and just telecoms subsectors
+sy.telecoms <- breschk %>% 
+  filter(
+    GEOGRAPHY_NAME == 'South Yorkshire',
+    grepl(x = SIC_2DIGIT_NAME, pattern = 'telecom', ignore.case = T)
+    )
+
+
+#Plot all of those, maybe smoothed...
+# ggplot(sy.telecoms, aes(x = DATE, y = sector_regional_proportion * 100, colour = INDUSTRY_NAME)) +
+ggplot(sy.telecoms, aes(x = DATE, y = COUNT, colour = INDUSTRY_NAME)) +
+  geom_point() +
+  geom_line() +
+  # scale_color_brewer(palette = 'Paired', direction = -1) +
+  ylab('job count') +
+  guides(size = "none", linetype = "none") +
+  ggtitle('') +
+  theme(plot.title = element_text(face = 'bold'))
+
+
+
+
+
+
+
 
 
 

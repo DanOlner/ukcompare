@@ -268,7 +268,7 @@ addplacename_to_LQplot <- function(df, plot_to_addto, placename, shapenumber=16,
 # Compass position to display
 twod_proportionplot <- function(df, regionvar, category_var, valuevar, timevar, start_time, end_time, x_regionnames, y_regionnames, compasspoints_to_display = c('NE','NW','SE','SW'), sectors_to_display = NULL){
   
-  regionvar <- enquo(regionvar)
+  regionvar <- enquo(regionvar) 
   category_var <- enquo(category_var)
   valuevar <- enquo(valuevar)
   timevar <- enquo(timevar)
@@ -760,7 +760,7 @@ twod_generictimeplot_multipletimepoints <- function(df, category_var, x_var, y_v
   
   for(i in year_pairs){
     
-    cat('year pair: ', i, '\n')
+    # cat('year pair: ', i, '\n')
   
     #Get those two years
     segment <- df %>%
@@ -772,7 +772,7 @@ twod_generictimeplot_multipletimepoints <- function(df, category_var, x_var, y_v
     segment <- segment %>%  
       left_join(
         twoy_lags %>%
-          select(!!category_var,compass),
+          select(!!category_var,compass), 
         by = quo_name(category_var)
       )
     

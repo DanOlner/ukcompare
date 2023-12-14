@@ -4818,13 +4818,17 @@ itl2.gvaperjob.smoothed <- itl2.gvaperjob %>%
   group_by(ITL_region_name,SIC07_description) %>% 
   arrange(year) %>% 
 mutate(
-  jobcount_movingav = rollapply(jobcount,smoothband,mean,align='right',fill=NA),
-  gva_movingav = rollapply(gva,smoothband,mean,align='right',fill=NA),
-  `gva/job_movingav` = rollapply(gvaperjob/1000,smoothband,mean,align='right',fill=NA)
+  jobcount_movingav = rollapply(jobcount,smoothband,mean,align='center',fill=NA),
+  gva_movingav = rollapply(gva,smoothband,mean,align='center',fill=NA),
+  `gva/job_movingav` = rollapply(gvaperjob/1000,smoothband,mean,align='center',fill=NA)
 )
 
+#Check available years
+itl2.gvaperjob$year[!is.na(itl2.gvaperjob$jobcount_movingav)] %>% unique
+
+
 p <- twod_generictimeplot_multipletimepoints(
-  df = itl2.gvaperjob.smoothed %>% filter(ITL_region_name == 'West Yorkshire', SIC07_description!='Real estate activities'),
+  df = itl2.gvaperjob.smoothed %>% filter(ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities'),
   # df = itl2.gvaperjob.smoothed %>% filter(ITL_region_name == 'Greater Manchester', SIC07_description!='Real estate activities'),
   # df = itl2.gvaperjob.smoothed %>% filter(!is.na(gva_movingav),ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities'),
   category_var = SIC07_description,
@@ -4832,7 +4836,7 @@ p <- twod_generictimeplot_multipletimepoints(
   y_var = jobcount_movingav,
   timevar = year,
   label_var = `gva/job_movingav`,
-  times = c(2017:2021)
+  times = c(2016:2020)
 )
 
 p + theme(aspect.ratio=1)
@@ -5188,6 +5192,10 @@ itl2.cv2digit.jobs <- itl2.cv2digit.jobs %>%
   mutate(gvaperjob = (value * 1000000) / JOBCOUNT_FT_5DIGIT)
 
 
+#aaaand save there
+saveRDS(itl2.cv2digit.jobs, 'data/ITL2_chainedvolumeGVA_2digitSICs_andjobs.rds')
+
+
 sector = itl2.cv2digit.jobs$SIC07_description[grepl(pattern = 'telecom', x = itl2.cv2digit.jobs$SIC07_description, ignore.case = T)] %>% unique
 
 #Keep only sectors over a certain size to display
@@ -5214,6 +5222,10 @@ sectorstodrop = NULL
 #Or if keeping some e.g. here look just at those subsectors in the ICT section
 chk <- itl2.cv2digit.jobs$SIC07_description[grepl(pattern = 'telecom|publishing|motion|program|information', x = itl2.cv2digit.jobs$SIC07_description, ignore.case = T)] %>% unique
 sectorstodrop <- itl2.cv2digit.jobs$SIC07_description[!grepl(pattern = 'telecom|publishing|motion|program|information', x = itl2.cv2digit.jobs$SIC07_description, ignore.case = T)] %>% unique
+
+#manufacturing
+chk <- itl2.cv2digit.jobs$SIC07_description[grepl(pattern = 'manufact', x = itl2.cv2digit.jobs$SIC07_description, ignore.case = T)] %>% unique
+sectorstodrop <- itl2.cv2digit.jobs$SIC07_description[!grepl(pattern = 'manufact', x = itl2.cv2digit.jobs$SIC07_description, ignore.case = T)] %>% unique
 
 #Let's use smoothed values too. Another option is predicted values at each end from slope, but...
 itl2.cv2digit.jobs <- itl2.cv2digit.jobs %>%
@@ -5253,7 +5265,8 @@ p[[1]] + coord_fixed(
     ifelse(max(p[[2]]$x_pct_change) > 0,max(p[[2]]$x_pct_change) + xrange_adjust,0)#hack for health, need to make generic
   ),
   ylim = c(
-    min(p[[2]]$y_pct_change) - yrange_adjust,max(p[[2]]$y_pct_change) + yrange_adjust 
+    min(p[[2]]$y_pct_change) - yrange_adjust,max(p[[2]]$y_pct_change) + yrange_adjust
+    # -20,80
   )
 ) 
 
@@ -5404,6 +5417,7 @@ griddata <- slopeDiffGrid(slope_df = slopes.log, confidence_interval = 95, colum
 #So, if we group by gridcol2 (which is the y axis)
 #And then count slopes that are false for CIs_overlap and then the pos or neg slopes
 #Can then group the prop poses and see where certain places lie 
+#
 count_sigs <- griddata %>% 
   group_by(gridcol2) %>% 
   summarise(
@@ -5441,11 +5455,33 @@ for(sector in unique(slopes.log$SIC07_description)){
   bneg <- ecdf_fun(count_sigs$prop_neg,count_sigs$prop_neg[count_sigs$gridcol2 == 'Barnsley, Doncaster and Rotherham'])
   sneg <- ecdf_fun(count_sigs$prop_neg,count_sigs$prop_neg[count_sigs$gridcol2 == 'Sheffield'])
   
-  propz[[length(propz)+1]] <- list(sector = sector, bpos = bpos, spos = spos, bneg = bneg, sneg = sneg)
+  val_bpos <- count_sigs$prop_pos[count_sigs$gridcol2 == 'Barnsley, Doncaster and Rotherham']
+  val_spos <- count_sigs$prop_pos[count_sigs$gridcol2 == 'Sheffield']
+  val_bneg <- count_sigs$prop_neg[count_sigs$gridcol2 == 'Barnsley, Doncaster and Rotherham']
+  val_sneg <- count_sigs$prop_neg[count_sigs$gridcol2 == 'Sheffield']
+  
+  minpos <- min(count_sigs$prop_pos,count_sigs$prop_pos)
+  maxpos <- max(count_sigs$prop_pos,count_sigs$prop_pos)
+  minneg <- min(count_sigs$prop_neg,count_sigs$prop_pos)
+  maxneg <- max(count_sigs$prop_neg,count_sigs$prop_pos)
+  
+  propz[[length(propz)+1]] <- list(
+    sector = sector, bpos = bpos, spos = spos, bneg = bneg, sneg = sneg, 
+    val_bpos=val_bpos,
+    val_spos=val_spos,
+    val_bneg=val_bneg,
+    val_sneg=val_sneg,
+    minpos=minpos,
+    maxpos=maxpos,
+    minneg=minneg,
+    maxneg=maxneg
+    )
   
 }
 
 percentiles_df <- bind_rows(propz)
+
+
 
 
 
@@ -5537,7 +5573,7 @@ for(sector in unique(itl3.cvs$SIC07_description)){
     scale_size_manual(values = c(4,1)) +
     scale_color_brewer(palette = 'Paired', direction = 1) +
     ylab('GVA (chained volume, millions)') +
-    # scale_y_log10() +
+    scale_y_log10() +
     guides(size = "none", linetype = "none") +
     ggtitle(
       paste0(sector,'\n', paste0(places, collapse = ', '), ' highlighted in thicker lines')

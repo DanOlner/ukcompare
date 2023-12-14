@@ -88,7 +88,7 @@ Sector breakdown in the next slide. Note, none of the values have error rates, b
 
 ```{r}
 p <- twod_generictimeplot(
-  df = itl2.gvaperjob %>% filter(ITL_region_name == 'SOUTH YORKSHIRE <<<', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
+  df = itl2.gvaperjob %>% filter(grepl(x = ITL_region_name, pattern = 'SOUTH YORKSHIRE',ignore.case=T), SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
   category_var = SIC07_description,
   x_var = gva,
   y_var = jobcount,
@@ -98,7 +98,8 @@ p <- twod_generictimeplot(
   end_time = 2021
 )
 
-p + theme(aspect.ratio=1)
+p + theme(aspect.ratio=1) + coord_cartesian(xlim = c(0,4200))
+
 
 ```
 
@@ -119,7 +120,7 @@ p + theme(aspect.ratio=1)
 
 ```{r}
 p <- twod_generictimeplot(
-  df = itl2.gvaperjob %>% filter(ITL_region_name == 'SOUTH YORKSHIRE <<<', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
+  df = itl2.gvaperjob %>% filter(grepl(x = ITL_region_name, pattern = 'SOUTH YORKSHIRE',ignore.case=T), SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
   category_var = SIC07_description,
   x_var = gva,
   y_var = jobcount,
@@ -129,7 +130,7 @@ p <- twod_generictimeplot(
   end_time = 2021
 )
 
-p + theme(aspect.ratio=1)
+p + theme(aspect.ratio=1) + coord_cartesian(xlim = c(0,4200))
 
 ```
 
@@ -142,8 +143,7 @@ Excluding post-COVID years shows manufacturing had a less dramatic jump in GVA; 
 
 ```{r}
 p <- twod_generictimeplot(
-  df = itl2.gvaperjob %>% filter(ITL_region_name == 'SOUTH YORKSHIRE <<<', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000),
-  # df = itl2.gvaperjob %>% filter(ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
+  df = itl2.gvaperjob %>% filter(grepl(x = ITL_region_name, pattern = 'SOUTH YORKSHIRE',ignore.case=T), SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
   category_var = SIC07_description,
   x_var = gva,
   y_var = jobcount,
@@ -153,7 +153,8 @@ p <- twod_generictimeplot(
   end_time = 2019
 )
 
-p + theme(aspect.ratio=1)
+p + theme(aspect.ratio=1) + coord_cartesian(xlim = c(0,4200))
+
 
 ```
 

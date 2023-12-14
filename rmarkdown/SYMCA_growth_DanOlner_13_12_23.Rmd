@@ -107,11 +107,18 @@ itl3.cp <- itl3.cp %>%
 
 # AIMS FOR THESE SLIDES
 
--- Apologies: data is only for South Yorkshire, or for Sheffield vs all of Barnsley, Doncaster & Rotherham combined (limitation of GVA data only available at ITL3 geography).
+-- Narrow remit for this work: look for ways to show which sectors in South Yorkshire are growing. Work ongoing to connect this to wider priorities.
 
--- I want to turn all this into something local authorities can access directly - would be great to hear what you think is missing or wrong. 
+-- I'll run through some selected results on GVA and jobs growth, with a bit of skills vs sector comparison if there's time
 
--- Narrow remit for this work; convserations ongoing about how this all ties to broader SYMCA goals and how to measure
+----
+
+# AIMS FOR THESE SLIDES
+
+-- Apologies: data is only for South Yorkshire, or for Sheffield compared to all of Barnsley, Doncaster & Rotherham combined (limitation of GVA data only available at ITL3 geography).
+
+-- I want to turn all this into something local authorities can access directly. Would be great to hear what you think is missing or wrong. 
+
 
 
 ----
@@ -123,7 +130,7 @@ itl3.cp <- itl3.cp %>%
 
 -- 3 year moving average to smooth out. Red dot is start year, black is end year.
 
--- Shows overall picture e.g. manufacturing (top right) is largest sector for total GVA; higher increase in jobs earlier, slight decrease later (but job count data is volatile...)
+-- Shows overall picture e.g. manufacturing (top right) is largest sector for total GVA; higher increase in jobs earlier, slight decrease later (note, job count data is volatile...)
 
 -- But Information + communication (ICT) change over time: comparable increase in total GVA to manufacturing over the same time period
 
@@ -166,7 +173,7 @@ p + theme(aspect.ratio=1) +
 
 Looking at the same 20 broad sectors in terms of their percent change in GVA and job count.
 
--- Anything point into bottom right darker half saw GVA per FT worker grow
+-- Anything pointing into bottom right darker half saw GVA per FT worker grow
 
 -- so e.g. construction saw jobs and gva growth, but % change means GVA per worker still dropped (noting again, no error bars!)
 
@@ -265,11 +272,11 @@ p[[1]] + coord_fixed(
 
 ----
 
-##
-
 ## Information & Communication time series: 10 HIGHEST growth places 2015-21
 
-Looking just at Information/communication, this plot shows the top 10 growth places (with South Yorkshire overlaid) using slopes between 2015-21 - though displaying the whole data range to show ICT has been constantly growing (as the next lowest-growth slide also shows).
+Looking just at Information/communication, this plot shows the top 10 places that grew the most between 2015-21 (with South Yorkshire overlaid)
+
+Whole data range from 2000 to show ICT has been constantly growing across the UK (more on that shortly).
 
 But even given that ICT growth has been ubiquitous, South Yorkshire's output stands out. It jumped from 2018 and was less affected by COVID than other places. This has put its ICT growth statistically ahead of most (all?) other places.
 
@@ -340,7 +347,7 @@ Looking at just the ICT sector for all ITL2 geographies, with South Yorkshire hi
 
 First point to make: ICT has been a huge growth sector right across the UK in all places - all lines point into the darker bottom right corner where GVA per FT worker grows.
 
-Note the different kinds of GVA per worker growth here: lines going 'south east' (purple labels) having growing GVA per worker with DROPPING full time worker numbers; only those going 'northeast' are growing both worker numbers AND GVA
+Note the different kinds of GVA per worker growth here: lines going 'south east' (purple labels) have growing GVA per worker with DROPPING full time worker numbers; only those going 'northeast' are growing both worker numbers AND GVA.
 
 Pre-COVID, South Yorkshire doesn't stand out from other places as strongly...
 
@@ -387,11 +394,11 @@ p[[1]] + coord_fixed(
 
 ----
 
-## ICT pre-COVID: percentage change 2017 to 2021 for all places
+## ICT across COVID: percentage change 2017 to 2021 for all places
 
 Including COVID years, South Yorkshire ICT's resilience stands out relative to other places.
 
-We'll come back to what ICT is actually composed of shortly (spoiler: mainly telecommunications sector.)
+We'll come back to what ICT is actually composed of shortly (spoiler: mainly telecommunications and programming sectors.)
 
 ```{r}
 starty=2017
@@ -428,7 +435,7 @@ p[[1]] + coord_fixed(
 
 ## Manufacturing time series: 10 HIGHEST growth places
 
-Although South Yorkshire's manufacturing GVA growth pattern is similar to other places with strong growth, it does not really stand out statistically, as the next slides show. 
+South Yorkshire's manufacturing GVA growth pattern is similar to other places with strong growth, very much following the national pattern. As the next slides show, it does not really stand out statistically.
 
 ```{r, fig.width = 10, fig.height = 8}
 growing = T
@@ -492,7 +499,7 @@ ggplot(timeplot %>%
 
 ## Manufacturing: percentage change 2015 to 2021 for all places, centred
 
-Looking at the normalised percent plot for manufacturing puts South Yorkshire in the context of other places in a different way. This plot shows:
+Looking at the percent plot for manufacturing puts South Yorkshire in the context of other places in a different way. This plot shows:
 
 -- All but one place saw GVA per worker grow (all arrows are in the darker diagonal corner), though most saw job counts drop (arrows below the horizontal pink line).
 
@@ -539,7 +546,9 @@ p[[1]]
 
 Linear trends can be used to compare all GVA growth slopes over time, to see which stand out statistically.
 
-In this extreme example, construction and manufacturing in South Yorkshire has linear slopes added and 95% confidence intervals shown in grey. The two trends are clearly statistically separable - the range of the trend slopes within the grey bounds differs; additionally, manufacturing has a positive slope and construction is negative.
+In this extreme example, construction and manufacturing in South Yorkshire have linear slopes added and 95% confidence intervals shown in grey. 
+
+The two trends are clearly statistically separable.
 
 ```{r}
 #Sample plot comparing two slopes to show sig diff
@@ -564,18 +573,33 @@ ggplot(sampleplot, aes(x=year,y=value,colour=SIC07_description )) +
 
 ## Information and communication slope pair matrix 2015 to 2021
 
-This plot does exactly the same thing, but for all slope pairs, for the ICT sector. Every place is compared to every other. 
+This plot does exactly the same thing, but for all slope pairs, for the ICT sector, and every place is compared to every other. 
 
 South Yorkshire is 8th from the top, standing out as a bold green line where its ICT growth slope is statistically distinct from most other places.
 
 Its growth was an average of 18.7% a year (95% confidence bounds of 15-22%).
 
+Everywhere else has seen growth too - but South Yorkshire's is statistically stronger, when including the last few years.
+
 Not including COVID years removes most of this stand out effect - South Yorkshire's ICT seems to have been especially COVID-resistant.
 
-While also true for manufacturing - as with the previous slides - that sector doesn't stand out as very different from many other growth places.
 
 ```{r}
 p <- slopeDiffGrid(slope_df = slopes.log1521, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Information and communication')
+
+p + coord_fixed()
+
+```
+
+----
+
+
+## Manufacturing slope pair matrix 2015 to 2021
+
+While manufacturing is strong within South Yorkshire, it doesn't stand out statistically as very different from many other growth places.
+
+```{r}
+p <- slopeDiffGrid(slope_df = slopes.log1521, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = 'Manufacturing')
 
 p + coord_fixed()
 
@@ -630,9 +654,11 @@ p[[1]] + coord_fixed(
 
 ```
 
+----
+
 ## Two COVID impact examples: (2) Arts, entertainment and recreation
 
-Arts and entertainment similarly saw GVA drops everywhere in COVID, though many places also saw very large job losses (so GVA per worker actually increased).
+Arts and entertainment similarly saw GVA drops everywhere in COVID, though many places also saw very large job losses (so GVA per worker actually increased for some of them, in the darker bottom right half of the plot).
 
 South Yorkshire had one of the largest GVA % drops, though far from the largest jobs impact, by these numbers.
 
@@ -677,14 +703,15 @@ p[[1]] + coord_fixed(
 
 ```
 
+----
 
-## Breaking ICT down into subsectors - what's growing? (Answer: Telecommunications, computer programming + consultancy)
+## Breaking ICT down into subsectors - what's growing? Answer: Telecommunications, computer programming + consultancy
 
-Looking at finer-grained sector data, ICT can be broken down into its subsectors (here, first and last timepoints for three year moving average, to smooth a little.)
+Looking at finer-grained (SIC 2 digit) sector data, ICT can be broken down into its subsectors (here, first and last timepoints are a three year average, to smooth a little.)
 
 From that, it's clear that TELECOMMUNICATIONS is where the most growth is coming from. (Note: this does NOT include call centres, that's its own subsector in office administration).
 
-Computer programming and consultancy actually has higher job growth numbers and is contributing to GVA growth through that, but (with these numbers) GVA per FT worker is lower than telecoms, and dropped.
+Computer programming and consultancy actually has higher job growth numbers and is contributing to GVA growth through that, but (according to this data) GVA per FT worker is lower than telecoms, and dropped over time.
 
 ```{r}
 # chk <- itl2.cv2digit.jobs$SIC07_description[grepl(pattern = 'telecom|publishing|motion|program|information', x = itl2.cv2digit.jobs$SIC07_description, ignore.case = T)] %>% unique
@@ -746,19 +773,18 @@ p + xlab("GVA (3 year moving average)") +
 
 ----
 
-## Sheffield vs Barnsley/Doncaster/Rotherham Telecommunications/ICT growth comparison
+## Sheffield + Barnsley/Doncaster/Rotherham Telecommunications/ICT growth comparison
 
 At ITL3 level, where we can compare Sheffield to Barnsley, Doncaster and Rotherham combined (again, apologies, this is the highest resolution the GVA data has) -
 
 Telecoms and IT are combined here.
 
-This plots GROWTH RATES BETWEEN YEARS (with a 7 year moving average) - the values are all positive because telecoms has grown every year.
+This plots % GROWTH RATES EACH YEAR (using  a 7 year moving average) - the values are all positive because telecoms+IT has grown every year.
 
 Growth was stronger in earlier years from 1998 to 2007, and all of South Yorkshire had the same growth rate.
 
 That then changes - while the pattern matches, Sheffield's growth rate pulls ahead.
 
-Growth year on year (difference in GVA value between years), 7 year moving average. Very similar growth patterns up until 2007.
 
 ```{r, fig.width = 10, fig.height = 10}
 itl3.cv2digit <- readRDS('../data/UKchainedvolume_itl3_SIC_2digit.rds')
@@ -833,7 +859,7 @@ p
 
 ## Breaking South Yorkshire manufacturing down into subsectors - what's growing?
 
-Taking a closer look now at manufacturing subsectors GVA and jobs change (3 year moving averages used again) and plotting actual GVA versus jobs.
+Taking a closer look now at manufacturing subsectors' GVA and jobs change (3 year averages used again)...
 
 While larger manufacturing sector groupings have seen GVA growth with job numbers dropping ('south east' purple labels)...
 
@@ -897,19 +923,17 @@ p + xlab("GVA (3 year moving average)") +
 ----
 
 
-## A closer look at Sheffield vs Barnsley, Doncaster and Rotheram. (1) Location quotients
+## A closer look at Sheffield + Barnsley, Doncaster and Rotherham. (1) Location quotients
 
-This plots LOCATION QUOTIENTS for Barnsley/Doncaster/Rotherham (circles, mostly green) versus Sheffield (diamonds).
+This plots LOCATION QUOTIENTS for Barnsley/Doncaster/Rotherham (circles, mostly green) comparing to Sheffield (diamonds).
 
-LOCATION QUOTIENT (LQ): how much the proportion of sector is higher than the same proportion nationally - so, it's a measure of what sectors are concentrated here.
+LOCATION QUOTIENT (LQ): how much the proportion of a sector is higher than the same proportion nationally - so, it's a measure of what sectors are concentrated here.
 
 Showing only those sectors where LQ > 1 ie. higher concentration in Barnsley/Doncaster/Rotherham than nationally.
 
 Size and colour of shape show change in LQ over time e.g. large green = strong LQ growth (becoming more concentrated).
 
-Black lines show full range of what LQ's been in the data.
-
-Numbers for the percent of Barnsley/Doncaster/Rotherham's economy each sector represents are given on right.
+Numbers for the percent of Barnsley/Doncaster/Rotherham's economy each sector represents are given on right (can be high LQ but a very small sector and vice versa).
 
 
 
@@ -1003,11 +1027,13 @@ p
 
 ----
 
-## A closer look at Sheffield vs Barnsley, Doncaster and Rotheram. (1) Location quotients
+## A closer look at Sheffield + Barnsley, Doncaster and Rotherham. (1) Location quotients
 
 Overall, Barnsley/Doncaster/Rotherham has more sectors with LQ > 1 than Sheffield (not shown here).
 
-And most sectors have a higher concentration than in Sheffield e.g. 'other manufacturing' for Barnsley/Doncaster/Rotherham is to the right of Sheffield's diamond (though looks like wasn't always the case in this data).
+And of those sectors more concentrated in Barnsley, Doncaster and Rotherham, they almost all have a higher concentration than in Sheffield e.g. 'other manufacturing' for Barnsley/Doncaster/Rotherham is to the right of Sheffield's diamond (though looks like wasn't always the case in this data).
+
+Counter-examples are mostly large public sectors in Sheffield: education, health, public administration (though for some of those, difference is very small).
 
 Several sectors where Barnsley/Doncaster/Rotherham has a relative concentration, where Sheffield has less than the UK as a whole.
 
@@ -1094,11 +1120,23 @@ p
 
 ----
 
-## (2a) 2017-21 GVA change comparing manufacturing in Sheffield vs Barnsley/Doncaster/Rotherham
 
-Notes
+## (2a) 2015-21 GVA change, comparing top 15 NON-manufacturing sectors in Sheffield + Barnsley/Doncaster/Rotherham  
 
-3 yr movin av showing 2015-17 av vs 2019-2021 av
+This plot uses 'current prices' GVA data (which can be summed) to compare Sheffield (on the x axis) to Barnsley/Doncaster/Rotherham (on the y axis)
+
+It shows how sectors have changed relatively for both between a 2015-17 average versus 2019-2021.
+
+-- Any sector to the LEFT of the diagonal line is more concentrated in Barnsley/Doncaster/Rotherham than Sheffield.
+
+-- 'North east' sectors (green labels) grew proprtionally in both; 'South west' sectors (blue labels) shrunk proportionally in both.
+
+-- 'North west' sectors (orange labels) grew in Barnsley, Doncaster & Rotherham but shrunk in Sheffield; 'South east' sectors (purple) vice versa.
+
+-- 2019-2021 average % for each sector for Barnsley/Doncaster/Rotherham compared to Sheffield are in brackets in the label
+
+-- A number of these larger non-manufacturing and public sectors are more concentrated in Sheffield
+
 
 ```{r, fig.width = 10, fig.height = 10}
 xplace = 'Sheffield'
@@ -1113,56 +1151,6 @@ group_by(ITL_region_name,INDUSTRY_NAME_REDUCED) %>%
 mutate(
   value_movingav = rollapply(value,smoothband,mean,align='center',fill=NA)
 )
-
-#What are non NA years?
-#unique(itl3.cp$year[!is.na(itl3.cp$value_movingav)])   
-
-#Check all
-#unique(itl3.cp$SIC07_description)
-sectors <- itl3.cp$INDUSTRY_NAME_REDUCED[grepl(pattern = 'manuf', x = itl3.cp$INDUSTRY_NAME_REDUCED, ignore.case = T)] %>% unique
-
-p <- twod_proportionplot(
-  df = itl3.cp %>% ungroup(),
-  regionvar = ITL_region_name,
-  category_var = INDUSTRY_NAME_REDUCED, 
-  valuevar = value_movingav, 
-  timevar = year, 
-  start_time = 2016,
-  end_time = 2020,
-  # start_time = 1998,
-  # end_time = 2007,
-  # compasspoints_to_display = c('SE','SW'),
-  # compasspoints_to_display = c('NE'),
-  # compasspoints_to_display = c('SE'),
-  # compasspoints_to_display = c('NW'),
-  # compasspoints_to_display = c('SW'),
-  x_regionnames = xplace,
-  y_regionnames = yplace,
-  sectors_to_display = sectors
-)
-
-#add these after
-p <- p + 
-  xlab(paste0(xplace,' GVA proportions')) +
-  ylab(paste0(yplace,' GVA proportions')) 
-  # scale_y_log10() +
-  # scale_x_log10() +
-  # coord_fixed(xlim = c(0.1,11), ylim = c(0.1,11))# good for log scale
-
-p
-
-
-```
-
-----
-
-## (2b) 2017-21 GVA change, comparing top 15 NON-manufacturing sectors in Sheffield vs Barnsley/Doncaster/Rotherham  
-
-Notes
-
-```{r, fig.width = 10, fig.height = 10}
-xplace = 'Sheffield'
-yplace = 'Barnsley, Doncaster and Rotherham'
 
 #Check all
 #unique(itl3.cp$SIC07_description)
@@ -1223,9 +1211,59 @@ p
 
 ----
 
-## (2c) 2017-21 GVA change, remaining 25 sectors in Sheffield vs Barnsley/Doncaster/Rotherham  
 
-Notes
+## (2b) 2015-21 GVA change comparing MANUFACTURING SECTORS in Sheffield + Barnsley/Doncaster/Rotherham
+
+-- Looking at just manufacturing sectors, all but one are more concentrated in Barnsley, Doncaster and Rotherham, with most growth there too.
+
+```{r, fig.width = 10, fig.height = 10}
+#What are non NA years?
+#unique(itl3.cp$year[!is.na(itl3.cp$value_movingav)])   
+
+#Check all
+#unique(itl3.cp$SIC07_description)
+sectors <- itl3.cp$INDUSTRY_NAME_REDUCED[grepl(pattern = 'manuf', x = itl3.cp$INDUSTRY_NAME_REDUCED, ignore.case = T)] %>% unique
+
+p <- twod_proportionplot(
+  df = itl3.cp %>% ungroup(),
+  regionvar = ITL_region_name,
+  category_var = INDUSTRY_NAME_REDUCED, 
+  valuevar = value_movingav, 
+  timevar = year, 
+  start_time = 2016,
+  end_time = 2020,
+  # start_time = 1998,
+  # end_time = 2007,
+  # compasspoints_to_display = c('SE','SW'),
+  # compasspoints_to_display = c('NE'),
+  # compasspoints_to_display = c('SE'),
+  # compasspoints_to_display = c('NW'),
+  # compasspoints_to_display = c('SW'),
+  x_regionnames = xplace,
+  y_regionnames = yplace,
+  sectors_to_display = sectors
+)
+
+#add these after
+p <- p + 
+  xlab(paste0(xplace,' GVA proportions')) +
+  ylab(paste0(yplace,' GVA proportions')) 
+  # scale_y_log10() +
+  # scale_x_log10() +
+  # coord_fixed(xlim = c(0.1,11), ylim = c(0.1,11))# good for log scale
+
+p
+
+
+```
+
+----
+
+
+
+## (2c) 2015-21 GVA change, remaining 25 sectors in Sheffield + Barnsley/Doncaster/Rotherham  
+
+For completion - remaining sectors, none above 3% of any of Barnsley/Doncaster/Rotherham or Sheffield's economies, GVA-wise.
 
 ```{r, fig.width = 10, fig.height = 10}
 xplace = 'Sheffield'
@@ -1297,12 +1335,14 @@ p
 
 ## Sector vs occupation: skills comparisons, South Yorkshire v Greater Manchester
 
-The SIC (industrial) vs SOC (occupational) data includes data for setting error bars - here, this is used for 95% confidence intervals to find likely genuinely different proportions in number of 16+ employed in difference skill vs sectors.
+The SIC (industrial) vs SOC (occupational) data includes data for setting error bars - here, this is used for 95% confidence intervals to find likely genuinely different proportions in number of 16+ employed in different skill levels vs sectors.
 
-Greener = higher proportion than comparator place
+Greener = higher proportion than comparator places (on x axis)
 Redder = lower proportion
 
-SY has higher proportions for many lower skilled SICSOCs / lower for many higher skilled.
+South Yorkshire has higher proportions for many lower skilled SICSOCs / lower for many higher skilled.
+
+This is a similar pattern to West Yorkshire (and to a lesser extent Liverpool).
 
 But it also has bands of higher numbers of skilled workers in construction/manufacturing.
 

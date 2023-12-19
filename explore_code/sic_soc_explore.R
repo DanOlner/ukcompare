@@ -90,7 +90,7 @@ codes <- cellsub$id[1:90]
 #SIC 2007 starts at 404357377 (and then presumably has 90 entries for the full lot)
 #That's index 271
 #So should end index 360?
-codes <- cellsub$id[271:360]
+# codes <- cellsub$id[271:360]
 
 #Except actual SIC07 doesn't seem to have any values/obs.
 
@@ -98,11 +98,11 @@ codes <- cellsub$id[271:360]
 #Numbers too low for that one, let's try...
 z <- nomis_get_data(id = "NM_17_1", time = "latest", geography = "TYPE438", cell = "403308801")
 
-z_download <- nomis_get_data(id = "NM_17_1", time = "latest", geography = "TYPE438", cell = codes) %>% 
+z <- nomis_get_data(id = "NM_17_1", time = "latest", geography = "TYPE438", cell = codes) %>%
   select(DATE_NAME,GEOGRAPHY_NAME,GEOGRAPHY_CODE,CELL_NAME,MEASURES_NAME,OBS_VALUE,OBS_STATUS,OBS_STATUS_NAME)
-
-#Avoid repeat downloads!
-z <- z_download
+# 
+# #Avoid repeat downloads!
+# z <- z_download
 
 #Repeat name place checks... 40, correct number
 unique(z$GEOGRAPHY_NAME)
@@ -134,6 +134,11 @@ z <- z %>% separate_wider_delim(CELL_NAME, delim = " : ", names = c("SOC2020", "
 unique(z$SIC2007)
 
 saveRDS(z, 'data/NUTS2_2016_latestAPS_SIC2007_SOC2020.rds')
+
+
+#Check if older version before NOMIS fixed had different data...
+#Ah, overwrote with wrong data. Hmmp.
+older <- readRDS('data/OLD__NUTS2_2016_latestAPS_SIC2007_SOC2020.rds')
 
 
 
@@ -233,6 +238,12 @@ z <- z %>%
   mutate(OBS_VALUE_REGIONALPERCENT = (OBS_VALUE/ALL_IN_EMPLOYMENT_16PLUS)*100)
 
 saveRDS(z, 'data/sicsoc.rds')
+
+#Check against older incorrect NOMIS data
+older <- readRDS('data/OLD__sicsoc.rds')
+
+
+#Ah ha, values are different. That changes things! Rerunning... 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # WHAT'S THE MISSING / ERROR BAR RATE LIKE? TEST WITH SY----
@@ -429,8 +440,8 @@ allz <- purrr::map(
 # allz <- purrr::map(.f = get_all_places_sicsocs, .x = unique(z$GEOGRAPHY_NAME[z$GEOGRAPHY_NAME!='South Yorkshire'])) %>% bind_rows
 
 allz <- allz %>% 
-  # unite(sicsoc, c('SOC2020','SIC2007'), sep = ' || ', remove = F) %>% 
-  unite(sicsoc, c('SIC2007','SOC2020'), sep = ' || ', remove = F) %>% 
+  unite(sicsoc, c('SOC2020','SIC2007'), sep = ' || ', remove = F) %>%
+  # unite(sicsoc, c('SIC2007','SOC2020'), sep = ' || ', remove = F) %>% 
   mutate(
     valdiff = ifelse(!CIs_overlap, valdiff, NA)
   ) 
@@ -503,19 +514,23 @@ zerocutoff <- scaled[3]
 #795548 - A brown
 #607D8B - A cool blue-gray
 
+repnumber = 10
+repnumber = 9
+
 b <- c(
-  rep('#FF5733',9),
-  rep('#CDDC39',9),
-  rep('#00BCD4',9),
-  rep('#9C27B0',9),
-  rep('#3F51B5',9),
-  rep('#E91E63',9),
-  rep('#009688',9),
-  rep('#FFEB3B',9),
-  rep('#607D8B',9)
+  rep('#FF5733',repnumber),
+  rep('#CDDC39',repnumber),
+  rep('#00BCD4',repnumber),
+  rep('#9C27B0',repnumber),
+  rep('#3F51B5',repnumber),
+  rep('#E91E63',repnumber),
+  rep('#009688',repnumber),
+  rep('#FFEB3B',repnumber),
+  rep('#607D8B',repnumber)
 )
 
-ggplot(allz %>% filter(SIC2007!='Total Services'), aes(x = substr(GEOGRAPHY_NAME,0,20), y = sicsoc, fill= valdiff)) + 
+
+ggplot(allz %>% filter(SIC2007!='G-Q Total Services'), aes(x = substr(GEOGRAPHY_NAME,0,20), y = sicsoc, fill= valdiff)) + 
   geom_tile() +
   scale_fill_gradientn(
     colours = c("red", "white", "darkgreen"),

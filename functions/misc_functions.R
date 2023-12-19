@@ -502,7 +502,7 @@ twod_generictimeplot <- function(df, category_var, x_var, y_var, timevar, label_
   twoy <- twoy %>%  
     left_join( 
       twoy_lags %>%
-        select(!!category_var,compass),
+        select(!!category_var,compass), 
       by = quo_name(category_var)
     )
   

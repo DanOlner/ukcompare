@@ -1422,16 +1422,18 @@ scale_values <- function(x){(x-min(x))/(max(x)-min(x))}
 scaled <- scale_values(valz)
 zerocutoff <- scaled[3]
 
+repnumber = 10
+
 b <- c(
-  rep('#FF5733',9),
-  rep('#CDDC39',9),
-  rep('#00BCD4',9),
-  rep('#9C27B0',9),
-  rep('#3F51B5',9),
-  rep('#E91E63',9),
-  rep('#009688',9),
-  rep('#FFEB3B',9),
-  rep('#607D8B',9)
+  rep('#FF5733',repnumber),
+  rep('#CDDC39',repnumber),
+  rep('#00BCD4',repnumber),
+  rep('#9C27B0',repnumber),
+  rep('#3F51B5',repnumber),
+  rep('#E91E63',repnumber),
+  rep('#009688',repnumber),
+  rep('#FFEB3B',repnumber),
+  rep('#607D8B',repnumber)
 )
 
 ggplot(allz %>% filter(SIC2007!='Total Services'), aes(x = substr(GEOGRAPHY_NAME,0,20), y = sicsoc, fill= valdiff)) + 

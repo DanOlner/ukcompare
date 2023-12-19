@@ -3865,6 +3865,9 @@ jobs <- gva_jobs5 %>%
 #       valuevar = JOBCOUNT_FT) %>% 
 #   bind_rows()
 
+
+
+
 #Check what that looks like for the same periods and comparisons for GVA as the existing story
 # debugonce(twod_proportionplot)
 p <- twod_proportionplot(
@@ -3931,6 +3934,100 @@ p <- p +
 p
 
 
+
+#Sectors...
+#First up, add regional proportions. Want to compare those to job counts on y axis
+
+jobs <- jobs %>% 
+  split(.$DATE) %>% 
+  map(
+    add_location_quotient_and_proportions,
+    regionvar = GEOGRAPHY_NAME, lq_var = INDUSTRY_NAME, valuevar = GVA    
+      ) %>% bind_rows()
+  
+
+#Test that worked OK
+jobs %>% filter(
+  GEOGRAPHY_NAME == 'South Yorkshire',
+  DATE == 2021
+) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(INDUSTRY_NAME,regional_percent, LQ) %>% 
+  arrange(-LQ) %>% 
+  slice(1:20)
+
+
+
+jobs <- jobs %>% 
+group_by(INDUSTRY_NAME,GEOGRAPHY_NAME) %>% 
+  arrange(DATE) %>% 
+  mutate(
+    gva_percent_movingav = zoo::rollapply(sector_regional_proportion *100,3,mean,align='center',fill=NA),
+    jobs_movingav = zoo::rollapply(JOBCOUNT_FT,3,mean,align='center',fill=NA),
+    gvaperjob_movingav = zoo::rollapply(GVA_perFTjob,3,mean,align='center',fill=NA)
+  ) %>% ungroup()
+
+
+jobs$DATE[!is.na(jobs$gvaperjob_movingav)] %>% unique
+
+# debugonce(twod_generictimeplot)
+twod_generictimeplot(
+  df = jobs %>% filter(INDUSTRY_NAME=='Telecommunications') %>% mutate(`gva/job` = gvaperjob_movingav/1000),
+  category_var = GEOGRAPHY_NAME,
+  x_var = gva_percent_movingav,
+  y_var = jobs_movingav,
+  timevar = DATE,
+  label_var = `gva/job`,
+  start_time = 2016,
+  end_time = 2020
+)
+
+
+
+twod_generictimeplot(
+  df = jobs %>% filter(grepl(x = INDUSTRY_NAME, pattern = 'computer program', ignore.case=T)) %>% mutate(`gva/job` = gvaperjob_movingav/1000),
+  category_var = GEOGRAPHY_NAME,
+  x_var = gva_percent_movingav,
+  y_var = jobs_movingav,
+  timevar = DATE,
+  label_var = `gva/job`,
+  start_time = 2016,
+  end_time = 2020
+)
+
+# p + 
+#   scale_y_log10() +
+#   scale_x_log10() 
+
+
+#We can make LQ maps for those as well...
+#Load ITL2 map data using the sf library
+itl2.geo <- st_read('data/geographies/International_Territorial_Level_2_January_2021_UK_BFE_V2_2022_-4735199360818908762/ITL2_JAN_2021_UK_BFE_V2.shp', quiet = T) %>% st_simplify(preserveTopology = T, dTolerance = 100)
+
+#unique(itl2.geo$ITL221NM)[order(unique(itl2.geo$ITL221NM))]
+
+itl2.geo$ITL221NM[grepl("Northum",x = itl2.geo$ITL221NM, ignore.case = T)] <- "Northumberland and Tyne and Wear"
+itl2.geo$ITL221NM[grepl("West Wales",x = itl2.geo$ITL221NM, ignore.case = T)] <- "West Wales"
+
+sector = jobs$INDUSTRY_NAME[grepl(x = jobs$INDUSTRY_NAME, pattern = 'computer program', ignore.case=T)] %>% unique
+sector = jobs$INDUSTRY_NAME[grepl(x = jobs$INDUSTRY_NAME, pattern = 'telecom', ignore.case=T)] %>% unique
+
+#Join map data to a subset of the GVA data
+sector_LQ_map <- itl2.geo %>% 
+  right_join(
+    jobs %>% filter(
+      DATE==2021,
+      INDUSTRY_NAME == sector
+    ),
+    by = c('ITL221NM'='GEOGRAPHY_NAME')
+  )
+
+
+#Plot map
+tm_shape(sector_LQ_map) +
+  tm_polygons('LQ_log', n = 9) +
+  tm_layout(title = paste0('LQ spread of\n',sector,'\nAcross ITL2 regions'), legend.outside = T)
+  
 
 
 
@@ -5308,6 +5405,23 @@ p[[1]] + coord_fixed(
 
 
 
+#Again, but not normalised so we can see where SY is
+p <- twod_generictimeplot(
+  df = itl2.cv2digit.jobs %>% filter(SIC07_description=='Telecommunications') %>% mutate(`gva/job` = gvaperjob_movingav/1000),
+  category_var = ITL_region_name,
+  x_var = gva_movingav,
+  y_var = jobs_movingav,
+  timevar = year,
+  label_var = `gva/job`,
+  start_time = 2016,
+  end_time = 2020
+)
+
+p + 
+  scale_y_log10() +
+  scale_x_log10() 
+
+
 
 
 #All plz!
@@ -5704,6 +5818,131 @@ for(sector in unique(itl3.cv2digit$SIC07_description)){
   
 }
 
+
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#BASIC PROPORTIONS FOR ITL3 AND 20 SIC SECTIONS----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Which I don't seem to have. Can compare props to LQs easily enough, let's just check plz!
+itl3.cp <- read_csv('data/sectors/Table 3c ITL3 UK current price estimates pounds million.csv')
+
+names(itl3.cp) <- gsub(x = names(itl3.cp), pattern = ' ', replacement = '_')
+
+cvSICkeeps <- itl3.cp$SIC07_code[substr(itl3.cp$SIC07_code,2,2) == ' '] %>% unique
+
+#Check if it's a different list from ITL2 chained volume...
+chk <- itl2.cv$SIC07_code[substr(itl2.cv$SIC07_code,2,2) == ' '] %>% unique
+
+#Yes, it's different. A few to add in manually where sections codes combined
+#Which ones in ITL3 codes are NOT in ITL2, to narrow down?
+#We don't want all of these, but some we will
+unique(itl3.cp$SIC07_code)[!unique(itl3.cp$SIC07_code) %in% itl2.cv$SIC07_code[substr(itl2.cv$SIC07_code,2,2) == ' '] %>% unique]
+
+#Just these two, I believe
+#"AB (1-9)"
+#"DE (35-39)"
+cvSICkeeps <- c(cvSICkeeps,"AB (1-9)","DE (35-39)")
+
+itl3.cps <- itl3.cp %>% 
+  filter(SIC07_code %in% cvSICkeeps) %>% 
+  pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'value') %>% 
+  mutate(year = as.numeric(year))
+
+#Not lost much at all in the combining relative to this level at ITL2
+View(itl3.cps %>% select(SIC07_code,SIC07_description) %>% distinct)
+
+#Save that for elsewhere
+saveRDS(itl3.cps, 'data/UKcurrentprices_itl3_SIC_sections.rds')
+
+
+
+#Props and LQs
+itl3.cps <- itl3.cps %>% 
+  split(.$year) %>% 
+  map(add_location_quotient_and_proportions, 
+      regionvar = ITL_region_name,
+      lq_var = SIC07_description,
+      valuevar = value) %>% 
+  bind_rows()
+
+
+itl3.cps %>% filter(
+  # ITL_region_name == 'Sheffield',
+  grepl(x = ITL_region_name, pattern = 'Rotherham'),
+  year == 2021
+) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(SIC07_description,regional_percent, LQ) %>% 
+  arrange(-regional_percent) %>% 
+  slice(1:length(unique(itl3.cps$SIC07_description)))
+
+itl3.cps.proporder <- itl3.cps %>% filter(
+  ITL_region_name == 'Sheffield',
+  # grepl(x = ITL_region_name, pattern = 'Rotherham'),
+  year == 2021
+) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(SIC07_description,regional_percent, LQ) %>% 
+  arrange(-regional_percent) %>% 
+  slice(1:length(unique(itl3.cps$SIC07_description)))
+
+%>% 
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#BASIC PROPORTIONS FOR ITL2 AND 20 SIC SECTIONS----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+itl2.cp <- read_csv('data/sectors/Table 2c ITL2 UK current price estimates pounds million.csv')
+
+names(itl2.cp) <- gsub(x = names(itl2.cp), pattern = ' ', replacement = '_')
+
+#This gets all the letters, nice
+cvSICkeeps <- itl2.cp$SIC07_code[substr(itl2.cp$SIC07_code,2,2) == ' '] %>% unique
+
+#Filter out duplicate value rows and make long by year
+#Also convert year to numeric
+itl2.cps <- itl2.cp %>% 
+  filter(SIC07_code %in% cvSICkeeps) %>% 
+  pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'value') %>% 
+  mutate(year = as.numeric(year))
+
+#Save that for elsewhere
+saveRDS(itl2.cps, 'data/UKcurrentprices_itl2_SIC_sections.rds')
+
+#Props and LQs
+itl2.cps <- itl2.cps %>% 
+  split(.$year) %>% 
+  map(add_location_quotient_and_proportions,
+      regionvar = ITL_region_name,
+      lq_var = SIC07_description,
+      valuevar = value) %>% 
+  bind_rows()
+
+
+itl2.cps %>% filter(
+  # grepl(x = ITL_region_name, pattern = 'Manc'),
+  grepl(x = ITL_region_name, pattern = 'South Y'),
+  year == 2021
+) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(SIC07_description,regional_percent, LQ) %>% 
+  arrange(-regional_percent) %>% 
+  slice(1:length(unique(itl2.cps$SIC07_description)))
+
+itl2.cps.proporder <- itl2.cps %>% filter(
+  grepl(x = ITL_region_name, pattern = 'Manc'),
+  # grepl(x = ITL_region_name, pattern = 'South Y'),
+  year == 2021
+) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(SIC07_description,regional_percent, LQ) %>% 
+  arrange(-regional_percent) %>% 
+  slice(1:length(unique(itl2.cps$SIC07_description)))
 
 
 

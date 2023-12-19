@@ -5870,8 +5870,8 @@ itl3.cps <- itl3.cps %>%
 
 
 itl3.cps %>% filter(
-  # ITL_region_name == 'Sheffield',
-  grepl(x = ITL_region_name, pattern = 'Rotherham'),
+  ITL_region_name == 'Sheffield',
+  # grepl(x = ITL_region_name, pattern = 'Rotherham'),
   year == 2021
 ) %>% 
   mutate(regional_percent = sector_regional_proportion *100) %>% 
@@ -5889,7 +5889,6 @@ itl3.cps.proporder <- itl3.cps %>% filter(
   arrange(-regional_percent) %>% 
   slice(1:length(unique(itl3.cps$SIC07_description)))
 
-%>% 
 
 
 

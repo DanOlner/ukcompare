@@ -45,11 +45,32 @@ itl3.geo <- st_read('data/geographies/International_Territorial_Level_3_January_
 #Map plz
 tmap_mode('view')
 
+names(msoa.sy)
+sector = names(msoa.sy)[grepl(x  = names(msoa.sy), pattern = 'health', ignore.case=T) & grepl(x  = names(msoa.sy), pattern = 'percent')]
+sector = names(msoa.sy)[grepl(x  = names(msoa.sy), pattern = 'education', ignore.case=T) & grepl(x  = names(msoa.sy), pattern = 'percent')]
+sector = names(msoa.sy)[grepl(x  = names(msoa.sy), pattern = 'construction', ignore.case=T) & grepl(x  = names(msoa.sy), pattern = 'percent')]
+sector = names(msoa.sy)[grepl(x  = names(msoa.sy), pattern = 'wholesale', ignore.case=T) & grepl(x  = names(msoa.sy), pattern = 'percent')]
+sector = names(msoa.sy)[grepl(x  = names(msoa.sy), pattern = '', ignore.case=T) & grepl(x  = names(msoa.sy), pattern = 'percent')]
+
 tm_shape(msoa.sy) +
-  tm_polygons(col = 'C Manufacturing_percent', style = 'fisher', alpha = 0.2, n = 10, palette = 'RdYlGn') +
-  # tm_polygons(col = 'J Information and communication_percent', style = 'fisher', alpha = 0.3, n = 10) +
+  tm_polygons(col = sector, style = 'fisher', alpha = 0.3, n = 10, palette = 'RdYlGn') +
   tm_shape(itl3.geo %>% filter(grepl(x = ITL321NM, pattern = 'sheffield|rotherham', ignore.case=T))) +
   tm_borders(lwd = 3, col = 'black') +
   # tm_polygons(col = c("A Agriculture, forestry and fishing_percent","U Activities of extraterritorial organisations and bodies_percent" )) +
   # tm_facets(as.layers = T) +
   tmap_options(check.and.fix = TRUE)
+
+
+
+#Just gimme crude correlation matrix of %s please
+#plot(msoa.sy %>% st_set_geometry(NULL) %>% select(contains('percent')))
+cormatrix <- cor(msoa.sy %>% st_set_geometry(NULL) %>% select(contains('percent')), method = 'pearson')
+
+cormatrix.long <- 
+  cormatrix %>% as_tibble() %>% 
+  pivot_longer(cols = contains('percent'),
+                        names_to = 'sector', values_to = 'percent'
+                        )
+
+
+ggplot(cormatrix, aes())

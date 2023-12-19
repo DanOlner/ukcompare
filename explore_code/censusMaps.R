@@ -26,19 +26,19 @@ msoa11 <- msoa11 %>%
 
 
 #intersection for SY geography
-itl2.geo <- st_read('data/geographies/International_Territorial_Level_2_January_2021_UK_BFE_V2_2022_-4735199360818908762/ITL2_JAN_2021_UK_BFE_V2.shp')
-
-
-intersects = st_intersects(msoa11, itl2.geo %>% filter(ITL221NM == 'South Yorkshire'), sparse = FALSE)
+# itl2.geo <- st_read('data/geographies/International_Territorial_Level_2_January_2021_UK_BFE_V2_2022_-4735199360818908762/ITL2_JAN_2021_UK_BFE_V2.shp')
+# intersects = st_intersects(msoa11, itl2.geo %>% filter(ITL221NM == 'South Yorkshire'), sparse = FALSE)
 
 # Filter small_zones based on the intersection
-msoa.sy = msoa11[rowSums(intersects) > 0, ]
+# msoa.sy = msoa11[rowSums(intersects) > 0, ]
+
+#Ah ha, we can just filter on name!
+msoa.sy <- msoa11 %>% filter(grepl(x = name, pattern = 'Sheffield|Doncaster|Rotherham|Barnsley', ignore.case = T))
 
 plot(st_geometry(msoa.sy))
 
 #Too big but will do for now... lookup would be better
 plot(itl2.geo %>% filter(ITL221NM == 'South Yorkshire'), border = 'blue', add=T)
-
 
 itl3.geo <- st_read('data/geographies/International_Territorial_Level_3_January_2021_UK_BUC_V3_2022_6920195468392554877/ITL3_JAN_2021_UK_BUC_V3.shp')
 
@@ -46,7 +46,7 @@ itl3.geo <- st_read('data/geographies/International_Territorial_Level_3_January_
 tmap_mode('view')
 
 tm_shape(msoa.sy) +
-  tm_polygons(col = 'C Manufacturing_percent', style = 'fisher', alpha = 0.3, n = 10, palette = 'RdYlGn') +
+  tm_polygons(col = 'C Manufacturing_percent', style = 'fisher', alpha = 0.2, n = 10, palette = 'RdYlGn') +
   # tm_polygons(col = 'J Information and communication_percent', style = 'fisher', alpha = 0.3, n = 10) +
   tm_shape(itl3.geo %>% filter(grepl(x = ITL321NM, pattern = 'sheffield|rotherham', ignore.case=T))) +
   tm_borders(lwd = 3, col = 'black') +

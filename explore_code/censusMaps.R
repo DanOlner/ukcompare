@@ -50,7 +50,9 @@ sector = names(msoa.sy)[grepl(x  = names(msoa.sy), pattern = 'health', ignore.ca
 sector = names(msoa.sy)[grepl(x  = names(msoa.sy), pattern = 'education', ignore.case=T) & grepl(x  = names(msoa.sy), pattern = 'percent')]
 sector = names(msoa.sy)[grepl(x  = names(msoa.sy), pattern = 'construction', ignore.case=T) & grepl(x  = names(msoa.sy), pattern = 'percent')]
 sector = names(msoa.sy)[grepl(x  = names(msoa.sy), pattern = 'wholesale', ignore.case=T) & grepl(x  = names(msoa.sy), pattern = 'percent')]
-sector = names(msoa.sy)[grepl(x  = names(msoa.sy), pattern = '', ignore.case=T) & grepl(x  = names(msoa.sy), pattern = 'percent')]
+sector = names(msoa.sy)[grepl(x  = names(msoa.sy), pattern = 'information', ignore.case=T) & grepl(x  = names(msoa.sy), pattern = 'percent')]
+sector = names(msoa.sy)[grepl(x  = names(msoa.sy), pattern = 'professional', ignore.case=T) & grepl(x  = names(msoa.sy), pattern = 'percent')]
+sector = names(msoa.sy)[grepl(x  = names(msoa.sy), pattern = 'arts', ignore.case=T) & grepl(x  = names(msoa.sy), pattern = 'percent')]
 
 tm_shape(msoa.sy) +
   tm_polygons(col = sector, style = 'fisher', alpha = 0.3, n = 10, palette = 'RdYlGn') +

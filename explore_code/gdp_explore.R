@@ -1,0 +1,292 @@
+#GDP/GVA explore
+library(tidyverse)
+library(zoo)
+library(sf)
+library(tmap)
+library(plotly)
+library(magick)
+library(nomisr)
+library(pryr)
+library(ggrepel)
+options(scipen = 99)
+
+#OVerall GDP/GVA figures, GVA per head/job/hour etc.
+#Looking to compare SY to other places
+
+#chained volume GDP at 2019 price levels, should be able to tell us actual growth rates if needed
+#A growth standout comparison matrix would be possible here, if we want that
+
+#Sticking purely to ITL2 for now
+gdp.itl2 <- read_csv('data/Table 10 Gross Domestic Product chained volume measures in 2019 money value pounds million.csv') %>% 
+  rename(ITLcode = `ITL code`, region = `Region name`) %>% 
+  filter(ITL == 'ITL2') %>% 
+  pivot_longer(cols = `1998`:`2021`, names_to = 'year', values_to = 'gdp') %>% 
+  mutate(year = as.numeric(year))
+
+
+#Which is great, but we have to divide same by same, so mostly need to use GVA
+#And need to use current price to compare different places
+#Best source I seem to have for whole-ITL2 GVA (also balanced) is the sector sheet, already processed. Again:
+itl2.topcp <- read_csv('data/sectors/Table 2c ITL2 UK current price estimates pounds million.csv')
+
+names(itl2.topcp) <- gsub(x = names(itl2.topcp), pattern = ' ', replacement = '_')
+
+itl2.topcp <- itl2.topcp %>% 
+  filter(SIC07_code == 'Total') %>% #Keep single top level GVA number for each ITL2
+  pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'value') %>% 
+  mutate(year = as.numeric(year))
+
+
+#Then we can also get GVA per filled job and hour worked via
+#https://www.ons.gov.uk/employmentandlabourmarket/peopleinwork/labourproductivity/datasets/subregionalproductivitylabourproductivitygvaperhourworkedandgvaperfilledjobindicesbyuknuts2andnuts3subregions
+#Would also like to see how hours worked per filled job average differs
+perfilledjob <- read_csv('data/Table B4 Current Price unsmoothed GVA B per filled job £ ITL2 and ITL3 subregions 2002 to 2021.csv') %>% 
+  rename(ITL = `ITL level`, ITLcode = `ITL code`, region = `Region name`) %>% 
+  filter(ITL == 'ITL2') %>% 
+  pivot_longer(cols = `2002`:`2021`, names_to = 'year', values_to = 'gva') %>% 
+  mutate(year = as.numeric(year))
+
+perhourworked <- read_csv('data/Table A4 Current Price unsmoothed GVA B per hour worked £ ITL2 and ITL3 subregions 2004 to 2021.csv') %>% 
+rename(ITL = `ITL level`, ITLcode = `ITL code`, region = `Region name`) %>% 
+  filter(ITL == 'ITL2') %>% 
+  pivot_longer(cols = `2004`:`2021`, names_to = 'year', values_to = 'gva') %>% 
+  mutate(year = as.numeric(year))
+
+
+#Let's start with hours as a more consistent comparator
+#dump the lot together...
+ggplot(perhourworked, aes(x = year, y = gva, group = region)) +
+  geom_line()
+
+#Yoinks
+ggplot() +
+  geom_line(data = perhourworked, aes(x = year, y = gva, group = region)) +
+  geom_line(data = perhourworked %>% filter(region == 'South Yorkshire'), aes(x = year, y = gva, group = region), colour = 'red', linewidth = 2)
+
+#log plus interactive
+p <- ggplot() +
+  geom_line(data = perhourworked, aes(x = year, y = gva, group = region)) +
+  geom_line(data = perhourworked %>% filter(region == 'South Yorkshire'), aes(x = year, y = gva, group = region), colour = 'red', linewidth = 2) +
+  scale_y_log10()
+
+ggplotly(p, tooltip = 'region')
+
+#Per filled job?
+ggplot() +
+  geom_line(data = perfilledjob, aes(x = year, y = gva, group = region)) +
+  geom_line(data = perfilledjob %>% filter(region == 'South Yorkshire'), aes(x = year, y = gva, group = region), colour = 'red', linewidth = 2)
+
+
+
+#Rank and see which changed position the most?
+perhourworked <- perhourworked %>% 
+  group_by(year) %>% 
+  mutate(rank = rank(gva))
+
+perfilledjob <- perfilledjob %>% 
+  group_by(year) %>% 
+  mutate(rank = rank(gva))
+
+ggplot() +
+  geom_line(data = perhourworked, aes(x = year, y = rank, group = region, colour = region)) +
+  geom_line(data = perhourworked %>% filter(region == 'South Yorkshire'), aes(x = year, y = rank, group = region), colour = 'red', linewidth = 2)
+
+ggplot() +
+  geom_line(data = perfilledjob, aes(x = year, y = rank, group = region, colour = region)) +
+  geom_line(data = perfilledjob %>% filter(region == 'South Yorkshire'), aes(x = year, y = rank, group = region), colour = 'red', linewidth = 2)
+
+
+
+
+#Repeat for ITL3
+perfilledjob.itl3 <- read_csv('data/Table B4 Current Price unsmoothed GVA B per filled job £ ITL2 and ITL3 subregions 2002 to 2021.csv') %>% 
+  rename(ITL = `ITL level`, ITLcode = `ITL code`, region = `Region name`) %>% 
+  filter(ITL == 'ITL3') %>% 
+  pivot_longer(cols = `2002`:`2021`, names_to = 'year', values_to = 'gva') %>% 
+  mutate(year = as.numeric(year))
+
+perhourworked.itl3 <- read_csv('data/Table A4 Current Price unsmoothed GVA B per hour worked £ ITL2 and ITL3 subregions 2004 to 2021.csv') %>% 
+  rename(ITL = `ITL level`, ITLcode = `ITL code`, region = `Region name`) %>% 
+  filter(ITL == 'ITL3') %>% 
+  pivot_longer(cols = `2004`:`2021`, names_to = 'year', values_to = 'gva') %>% 
+  mutate(year = as.numeric(year))
+
+ggplot() +
+  geom_line(data = perhourworked.itl3, aes(x = year, y = gva, group = region)) +
+  geom_line(data = perhourworked.itl3 %>% filter(region == 'Sheffield'), aes(x = year, y = gva, group = region), colour = 'red', linewidth = 2) +
+  geom_line(data = perhourworked.itl3 %>% filter(grepl(x = region, pattern = 'Barnsley', ignore.case = T)), aes(x = year, y = gva, group = region), colour = 'blue', linewidth = 2)
+
+#log plus interactive
+p <- ggplot() +
+  geom_line(data = perhourworked.itl3, aes(x = year, y = gva, group = region)) +
+  geom_line(data = perhourworked.itl3 %>% filter(region == 'Sheffield'), aes(x = year, y = gva, group = region), colour = 'red', linewidth = 2) +
+  geom_line(data = perhourworked.itl3 %>% filter(grepl(x = region, pattern = 'Barnsley', ignore.case = T)), aes(x = year, y = gva, group = region), colour = 'blue', linewidth = 2) +
+  scale_y_log10()
+
+ggplotly(p, tooltip = 'region')
+
+
+
+#GETTING BASIC IF THENS ON GROWTH
+#If SY was as large as England av, and England av minus London, how much bigger would it be? (And Northern av?
+#Which just involves comparing per job / hour proportions and their change
+
+#I want some smoothing though. For doing size comparisons, might be worth trying a few things
+#But let's start with 3 year smoothing and check differences
+perhourworked <- perhourworked %>% 
+  arrange(year) %>% 
+  group_by(region) %>%
+  mutate(movingav = rollapply(gva,3,mean,align='right',fill=NA))
+
+perfilledjob <- perfilledjob %>% 
+  arrange(year) %>% 
+  group_by(region) %>%
+  mutate(movingav = rollapply(gva,3,mean,align='right',fill=NA))
+
+
+#Picking out England and North etc...
+#Via https://github.com/DanOlner/regionalGVAbyindustry
+
+#Northern England
+north <- perhourworked$region[grepl('Greater Manc|Merseyside|West Y|Cumbria|Cheshire|Lancashire|East Y|North Y|Tees|Northumb|South Y', perhourworked$region, ignore.case = T)] %>% unique
+
+#South England
+south <- perhourworked$region[!grepl('Greater Manc|Merseyside|West Y|Cumbria|Cheshire|Lancashire|East Y|North Y|Tees|Northumb|South Y|Scot|Highl|Wales|Ireland', perhourworked$region, ignore.case = T)] %>% unique
+
+#South minus London
+south.minus.london <- south[!grepl('london',south,ignore.case = T)]
+
+#England!
+england <- c(north,south)
+
+#England minus London
+england.minus.london <- england[!grepl('london',england,ignore.case = T)]
+
+#UK minus London
+uk.minus.london <- perhourworked$region[!grepl('london',england,ignore.case = T)] %>% unique
+
+
+#Check is all correct with map
+itl2.geo <- st_read('data/geographies/International_Territorial_Level_2_January_2021_UK_BFE_V2_2022_-4735199360818908762/ITL2_JAN_2021_UK_BFE_V2.shp') %>% 
+  st_simplify(preserveTopology = T, dTolerance = 100)
+
+#Tick
+table(england %in% itl2.geo$ITL221NM)
+
+#Ticks all round
+plot(st_geometry(itl2.geo %>% filter(ITL221NM %in% england)), col = 'grey')
+plot(st_geometry(itl2.geo %>% filter(ITL221NM %in% north)), col = 'blue', add = T)
+plot(st_geometry(itl2.geo %>% filter(ITL221NM %in% south)), col = 'green', add = T)
+plot(st_geometry(itl2.geo %>% filter(ITL221NM %in% england.minus.london)), col = 'red', add = T)
+
+plot(st_geometry(itl2.geo %>% filter(ITL221NM %in% uk.minus.london)), col = 'grey')
+
+unique(perhourworked$year)
+unique(perhourworked$year[!is.na(perhourworked$movingav)])
+
+
+#Check whether pre covid gaps are very different or not too...
+#Let's do this with a couple of flag columns so we can plot boxplots etc too
+
+#Per hour worked
+perhourworked <- perhourworked %>% 
+  mutate(ns_england_restofUK = case_when(
+    region %in% north ~ 'North England',
+    region %in% south ~ 'South Eng (inc. London)',
+    .default = 'rest of UK'
+  ))
+
+table(perhourworked$ns_england_restofUK, useNA = 'always')
+
+perhourworked <- perhourworked %>% 
+  mutate(ns_england_restofUK_londonseparate = case_when(
+    region %in% north ~ 'North England',
+    region %in% south.minus.london ~ 'South Eng (exc. London)',
+    grepl('london',region,ignore.case = T) ~ 'London',
+    .default = 'rest of UK'
+  ))
+
+table(perhourworked$ns_england_restofUK_londonseparate, useNA = 'always')
+
+
+#Repeat for per filled job
+perfilledjob <- perfilledjob %>% 
+  mutate(ns_england_restofUK = case_when(
+    region %in% north ~ 'North England',
+    region %in% south ~ 'South Eng (inc. London)',
+    .default = 'rest of UK'
+  ))
+
+table(perfilledjob$ns_england_restofUK, useNA = 'always')
+
+perfilledjob <- perfilledjob %>% 
+  mutate(ns_england_restofUK_londonseparate = case_when(
+    region %in% north ~ 'North England',
+    region %in% south.minus.london ~ 'South Eng (exc. London)',
+    grepl('london',region,ignore.case = T) ~ 'London',
+    .default = 'rest of UK'
+  ))
+
+table(perfilledjob$ns_england_restofUK_londonseparate, useNA = 'always')
+
+
+
+#plot smoothed values, compare pre and post covid, add marker for SY
+perhourworked <- perhourworked %>% 
+  mutate(is_sy = region == 'South Yorkshire')
+
+perfilledjob <- perfilledjob %>% 
+  mutate(is_sy = region == 'South Yorkshire')
+
+
+ggplot(perhourworked %>% filter(year %in% c(2018,2021)), aes(x = ns_england_restofUK_londonseparate, y = movingav, colour = is_sy, size = is_sy)) +
+  geom_point(alpha = 0.75) +
+  scale_size_manual(values = c(5,10)) +
+  facet_wrap(~year)
+
+ggplot(perfilledjob %>% filter(year %in% c(2018,2021)), aes(x = ns_england_restofUK_londonseparate, y = movingav, colour = is_sy, size = is_sy)) +
+  geom_point(alpha = 0.75) +
+  scale_size_manual(values = c(5,10)) +
+  facet_wrap(~year)
+
+
+p <- ggplot(perhourworked %>% filter(year %in% c(2018,2021)), aes(x = ns_england_restofUK_londonseparate, y = movingav, colour = is_sy, size = is_sy, group = region)) +
+  geom_point(alpha = 0.75) +
+  scale_size_manual(values = c(3,6)) +
+  facet_wrap(~year)
+
+ggplotly(p, tooltip = 'region')
+
+
+
+#BASIC PERCENT DIFFERENCES IN PRODUCTIVITY, AVERAGES FOR ENGLAND, NORTH ETC
+#Note, sy and uk_av are both single value columns just added for comparison to the regional averages
+averages.perhourworked <- perhourworked %>% 
+  filter(year == 2021) %>% 
+  group_by(ns_england_restofUK_londonseparate) %>% 
+  summarise(
+    sy = perhourworked %>% filter(year == 2021, region == 'South Yorkshire') %>% select(movingav) %>% pull,
+    mean_gva_av3years = mean(movingav, na.rm=T),
+    uk_av_minuslondon = perhourworked %>% filter(!grepl('london',region,ignore.case = T), year == 2021) %>% select(movingav) %>% pull %>% mean(na.rm=T)
+    ) %>% ungroup()
+
+
+#Apart from London, all the other regional avs are not vastly different?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -4889,7 +4889,7 @@ for(place in unique(itl2.gvaperjob$ITL_region_name)){
 
 #Make a version that can show multiple defined time points
 #Most greyed out
-debugonce(twod_generictimeplot_multipletimepoints)
+# debugonce(twod_generictimeplot_multipletimepoints)
 p <- twod_generictimeplot_multipletimepoints(
   # df = itl2.gvaperjob %>% filter(ITL_region_name == 'Greater Manchester', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000),
   df = itl2.gvaperjob %>% filter(ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000),
@@ -4921,7 +4921,10 @@ mutate(
 )
 
 #Check available years
-itl2.gvaperjob$year[!is.na(itl2.gvaperjob$jobcount_movingav)] %>% unique
+itl2.gvaperjob.smoothed$year[!is.na(itl2.gvaperjob$jobcount_movingav)] %>% unique
+itl2.gvaperjob.smoothed$year[!is.na(itl2.gvaperjob$gva_movingav)] %>% unique
+
+
 
 
 p <- twod_generictimeplot_multipletimepoints(
@@ -4937,6 +4940,41 @@ p <- twod_generictimeplot_multipletimepoints(
 )
 
 p + theme(aspect.ratio=1)
+
+
+
+#There's a non-match on some of the places in this data - usual suspects, wales and Northumberland.
+#That's breaking some of the smoothing
+#Until then, let's just stick to SY for this one.
+sy <- itl2.gvaperjob.smoothed %>% filter(ITL_region_name == 'South Yorkshire')
+
+#For the smoothed itl2.gvaperjob data...
+#What was the raw vs percent change in each sector's GVA and jobs, first to last?
+#To compare to showing manuf and ICT changing similarly
+
+#Get first and last years
+yz <- sy %>% 
+  filter(
+    year %in% range(unique(sy$year[!is.na(sy$jobcount_movingav)]))
+    )
+
+#Better!
+yz$year[!is.na(yz$gva_movingav)] %>% unique
+
+
+diffz <- yz %>% 
+  arrange(year) %>% 
+  group_by(SIC07_description) %>% 
+  mutate(
+    gva_rawdiff = gva_movingav - lag(gva_movingav),
+    gva_percentdiff = ((gva_movingav - lag(gva_movingav))/lag(gva_movingav))*100,
+    jobs_rawdiff = jobcount_movingav - lag(jobcount_movingav),
+    jobs_percentdiff = ((jobcount_movingav - lag(jobcount_movingav))/lag(jobcount_movingav))*100,
+    gvaperjob_rawdiff = `gva/job_movingav` - lag(`gva/job_movingav`),
+    gvaperjob_percentdiff = ((`gva/job_movingav` - lag(`gva/job_movingav`))/lag(`gva/job_movingav`))*100
+  ) %>% 
+  filter(!is.na(gva_rawdiff))
+
 
 
 
@@ -5879,6 +5917,16 @@ itl3.cps %>% filter(
   arrange(-regional_percent) %>% 
   slice(1:length(unique(itl3.cps$SIC07_description)))
 
+itl3.cps %>% filter(
+  # ITL_region_name == 'Sheffield',
+  grepl(x = ITL_region_name, pattern = 'Rotherham'),
+  year == 2021
+) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(SIC07_description,regional_percent, LQ) %>% 
+  arrange(-regional_percent) %>% 
+  slice(1:length(unique(itl3.cps$SIC07_description)))
+
 itl3.cps.proporder <- itl3.cps %>% filter(
   ITL_region_name == 'Sheffield',
   # grepl(x = ITL_region_name, pattern = 'Rotherham'),
@@ -5888,6 +5936,37 @@ itl3.cps.proporder <- itl3.cps %>% filter(
   select(SIC07_description,regional_percent, LQ) %>% 
   arrange(-regional_percent) %>% 
   slice(1:length(unique(itl3.cps$SIC07_description)))
+
+
+
+
+#Pick out particular sector and view all LQs and props for different places
+itl3.cps %>% filter(
+  # ITL_region_name == 'Sheffield',
+  grepl(x = SIC07_description, pattern = 'information', ignore.case = T),
+  year == 2021
+) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(ITL_region_name,regional_percent, LQ) %>% 
+  arrange(-LQ) %>% 
+  slice(1:length(unique(itl3.cps$ITL_region_name))) %>% print(n=50)
+
+itl3.cps %>% filter(
+  # ITL_region_name == 'Sheffield',
+  grepl(x = SIC07_description, pattern = 'manuf', ignore.case = T),
+  year == 2021
+) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(ITL_region_name,regional_percent, LQ) %>% 
+  arrange(-LQ) %>% 
+  slice(1:length(unique(itl3.cps$ITL_region_name))) %>% print(n=50)
+
+
+#Maps of those also would be nice. Which I have already done somewhere...
+
+
+
+
 
 
 

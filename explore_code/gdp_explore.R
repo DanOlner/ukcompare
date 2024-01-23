@@ -282,6 +282,15 @@ p <- ggplot(perhourworked %>% filter(year %in% c(2006,2021)), aes(x = ns_england
 ggplotly(p, tooltip = 'region')
 
 
+#Want full scale from zero plz, better for showing how close productivity is across everywhere
+ggplot(perhourworked %>% filter(year %in% c(2006,2021)), aes(x = ns_england_restofUK_londonseparate, y = movingav, colour = is_sy, size = is_sy)) +
+  geom_point(alpha = 0.75) +
+  scale_size_manual(values = c(5,10)) +
+  coord_cartesian(ylim=c(0,60)) +
+  facet_wrap(~year, scales = 'free_y')
+
+
+
 
 #Attempt at showing year change in positions
 ggplot(perhourworked %>% filter(year %in% c(2006,2021)), aes(x = ns_england_restofUK_londonseparate, y = rank_movingav, colour = factor(year))) +
@@ -386,14 +395,132 @@ totalhoursperweek.itl2 <- read_csv('data/Productivity Hours Worked per Week ITL2
 
 
 #Add in all the region labels
+totalhoursperweek.itl2 <- totalhoursperweek.itl2 %>% 
+  mutate(ns_england_restofUK = case_when(
+    region %in% north ~ 'North England',
+    region %in% south ~ 'South Eng (inc. London)',
+    .default = 'rest of UK'
+  ))
+
+table(perhourworked$ns_england_restofUK, useNA = 'always')
+
+totalhoursperweek.itl2 <- totalhoursperweek.itl2 %>% 
+  mutate(ns_england_restofUK_londonseparate = case_when(
+    region %in% north ~ 'North England',
+    region %in% south.minus.london ~ 'South Eng (exc. London)',
+    grepl('london',region,ignore.case = T) ~ 'London',
+    .default = 'rest of UK'
+  ))
+
+table(perhourworked$ns_england_restofUK_londonseparate, useNA = 'always')
+
+totalhoursperweek.itl2 <- totalhoursperweek.itl2 %>% 
+  mutate(UK_minus_london = case_when(
+    grepl('london',region,ignore.case = T) ~ 'London',
+    .default = 'UK minus London'
+  ))
+
+table(totalhoursperweek.itl2$UK_minus_london, useNA = 'always')
+
+#Didn't need to do all the above, did I? Just about to merge, was already done in left join df
+#Oh, except the last one
+
+#Weighted averages for the various groupings
+#Check for 2021, do averages weighted by number of hours worker per week that year in that place
+
+#NOPE WRONG. WEIGHTS SHOULD BE THE ITL2S IN EACH OF THE SUBGROUPS
+# weightedaverages.perhourworked.wrong <- perhourworked %>% filter(year == 2021) %>%
+#   left_join(
+#     totalhoursperweek.itl2 %>% filter(year == 2021) %>% select(region,hours_per_week,UK_minus_london),
+#     by = 'region'
+#   ) %>%
+#   group_by(UK_minus_london) %>%
+#   mutate(
+#     totalhoursperweek = sum(hours_per_week)#get weights to use in average
+#   ) %>%
+#   group_by(UK_minus_london) %>%
+#   summarise(
+#     sy = perhourworked %>% filter(year == 2021, region == 'South Yorkshire') %>% select(movingav) %>% pull,
+#     mean_gva_av3years_weighted = weighted.mean(movingav, totalhoursperweek, na.rm=T)#get weighted average by each ITL2 grouping
+#   )
+
+  
+#Both go up, though London by more
+#Due presumably to cities having more hours per week / being more productive
+weightedaverages.perhourworked <- perhourworked %>% filter(year == 2021) %>% 
+  left_join(
+    totalhoursperweek.itl2 %>% filter(year == 2021) %>% select(region,hours_per_week,UK_minus_london),
+    by = 'region'
+  ) %>% 
+  group_by(UK_minus_london) %>% #group by "UK minus london" vs "london by itself"
+  summarise(
+    sy = perhourworked %>% filter(year == 2021, region == 'South Yorkshire') %>% select(movingav) %>% pull,
+    mean_gva_av3years_weighted = weighted.mean(movingav, hours_per_week, na.rm=T)#get weighted average by each ITL2 grouping
+  ) %>% 
+  mutate(
+    prop_diff = (mean_gva_av3years_weighted - sy)/sy
+  )
+
+#So SY would need to be ~17.7% more productive to match non London UK average
+
+#out of interest, comparison to rest of North?
+weightedaverages.perhourworked.north <- perhourworked %>% filter(year == 2021) %>% 
+  left_join(
+    totalhoursperweek.itl2 %>% filter(year == 2021) %>% select(region,hours_per_week,UK_minus_london),
+    by = 'region'
+  ) %>% 
+  group_by(ns_england_restofUK_londonseparate) %>% #group by "UK minus london" vs "london by itself"
+  summarise(
+    sy = perhourworked %>% filter(year == 2021, region == 'South Yorkshire') %>% select(movingav) %>% pull,
+    mean_gva_av3years_weighted = weighted.mean(movingav, hours_per_week, na.rm=T)#get weighted average by each ITL2 grouping
+  ) %>% 
+  mutate(
+    prop_diff = (mean_gva_av3years_weighted - sy)/sy
+  )
 
 
 
 
+#Sanity check the weighted average manually, check with london
+#TICK
+chk <- weightedaverages.perhourworked <- perhourworked %>% filter(year == 2021) %>% 
+  left_join(
+    totalhoursperweek.itl2 %>% filter(year == 2021) %>% select(region,hours_per_week,UK_minus_london),
+    by = 'region'
+  ) %>% filter(grepl('london',region,ignore.case = T)) %>% 
+  ungroup() %>% 
+  mutate(hours_per_week_normalised = hours_per_week / sum(hours_per_week)) %>% 
+  mutate(
+    manualweightedav_weights = movingav * hours_per_week_normalised,
+    manualweightedav = sum(manualweightedav_weights)
+    )
 
 
 
+#So we can then take the chained volume / actual economy size numbers and change those
+#This is what the SEP did, adjusting by x amount, projecting forward, working out how to get from one path to the other
+sy_gdp_2021 <- gdp.itl2 %>% filter(year == 2021, region == 'South Yorkshire') %>% select(gdp) %>% pull
 
+prop_difftoeng_av_minuslondon <- weightedaverages.perhourworked %>% filter(UK_minus_london == 'UK minus London') %>% select(prop_diff) %>% pull
+
+#5.6 billion extra
+sy_gdp_2021 * prop_difftoeng_av_minuslondon
+
+
+#Get population numbers for per person figures
+personcounts <- read_csv('data/Table 17 Total resident population numbers persons.csv') %>% 
+  rename(ITLcode = `ITL code`, region = `Region name`) %>% 
+  filter(ITL == 'ITL2') %>% 
+  pivot_longer(cols = `1998`:`2021`, names_to = 'year', values_to = 'personcount') %>% 
+  mutate(year = as.numeric(year))
+
+sy_people2021 <- personcounts %>% 
+  filter(year == 2021, region == 'South Yorkshire') %>% 
+  select(personcount) %>% pull
+
+
+#Extra amount of GDP per person
+((sy_gdp_2021 * prop_difftoeng_av_minuslondon)/sy_people2021)*1000000
 
 
 

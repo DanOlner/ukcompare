@@ -136,12 +136,20 @@ ggplotly(p, tooltip = 'region')
 perhourworked <- perhourworked %>% 
   arrange(year) %>% 
   group_by(region) %>%
-  mutate(movingav = rollapply(gva,3,mean,align='right',fill=NA))
+  mutate(
+    movingav = rollapply(gva,3,mean,align='right',fill=NA),
+    rank_movingav = rollapply(rank,3,mean,align='right',fill=NA),
+    rank_movingav_7yr = rollapply(rank,7,mean,align='right',fill=NA)
+    )
 
 perfilledjob <- perfilledjob %>% 
   arrange(year) %>% 
   group_by(region) %>%
-  mutate(movingav = rollapply(gva,3,mean,align='right',fill=NA))
+  mutate(
+    movingav = rollapply(gva,3,mean,align='right',fill=NA),
+    rank_movingav = rollapply(rank,3,mean,align='right',fill=NA),
+    rank_movingav_7yr = rollapply(rank,7,mean,align='right',fill=NA)
+    )
 
 
 #Picking out England and North etc...
@@ -258,6 +266,96 @@ p <- ggplot(perhourworked %>% filter(year %in% c(2018,2021)), aes(x = ns_england
 ggplotly(p, tooltip = 'region')
 
 
+#Just checking some other years
+#That's very interesting. Seems to suggest gap to London actually closed.
+#And SY caught up with rest of north.
+ggplot(perhourworked %>% filter(year %in% c(2006,2021)), aes(x = ns_england_restofUK_londonseparate, y = movingav, colour = is_sy, size = is_sy)) +
+  geom_point(alpha = 0.75) +
+  scale_size_manual(values = c(5,10)) +
+  facet_wrap(~year, scales = 'free_y')
+
+p <- ggplot(perhourworked %>% filter(year %in% c(2006,2021)), aes(x = ns_england_restofUK_londonseparate, y = movingav, colour = is_sy, size = is_sy, group = region)) +
+  geom_point(alpha = 0.75) +
+  scale_size_manual(values = c(3,6)) +
+  facet_wrap(~year, scales = 'free_y')
+  
+ggplotly(p, tooltip = 'region')
+
+
+
+#Attempt at showing year change in positions
+ggplot(perhourworked %>% filter(year %in% c(2006,2021)), aes(x = ns_england_restofUK_londonseparate, y = rank_movingav, colour = factor(year))) +
+  geom_point(alpha = 0.75, position = position_dodge(width = 0.5)) +
+  geom_line()
+
+
+#Want to get lines between dodge. Option here: don't use dodge at all.
+#https://stackoverflow.com/a/70122473/5023561
+#OK, that's pretty informative
+p <- ggplot(perhourworked %>% filter(year %in% c(2006,2021)), aes(x = factor(year), y = rank_movingav, group = region, color = factor(year))) +
+  geom_line(aes(group = region), color = "grey44") +
+  geom_point(aes(shape = is_sy, size = is_sy)) +
+  facet_wrap(vars(ns_england_restofUK_londonseparate), nrow = 1)
+
+ggplotly(p, tooltip = 'region')
+
+#7 year rank moving av... 2010 first year with data
+unique(perhourworked$year[!is.na(perhourworked$rank_movingav_7yr)])
+
+p <- ggplot(perhourworked %>% filter(year %in% c(2010,2018)), aes(x = factor(year), y = rank_movingav_7yr, group = region, color = factor(year))) +
+  geom_line(aes(group = region), color = "grey44") +
+  geom_point(aes(shape = is_sy, size = is_sy)) +
+  facet_wrap(vars(ns_england_restofUK_londonseparate), nrow = 1)
+
+ggplotly(p, tooltip = 'region')
+
+
+#What about more recently, just for three year overlap? And also pre and post covid?
+p <- ggplot(perhourworked %>% filter(year %in% c(2018,2021)), aes(x = factor(year), y = rank_movingav, group = region, color = factor(year))) +
+  geom_line(aes(group = region), color = "grey44") +
+  geom_point(aes(shape = is_sy, size = is_sy)) +
+  facet_wrap(vars(ns_england_restofUK_londonseparate), nrow = 1)
+
+ggplotly(p, tooltip = 'region')
+
+
+#And just pre covid
+p <- ggplot(perhourworked %>% filter(year %in% c(2015,2018)), aes(x = factor(year), y = rank_movingav, group = region, color = factor(year))) +
+  geom_line(aes(group = region), color = "grey44") +
+  geom_point(aes(shape = is_sy, size = is_sy)) +
+  facet_wrap(vars(ns_england_restofUK_londonseparate), nrow = 1)
+
+ggplotly(p, tooltip = 'region')
+
+
+#First coalition years to pre covid
+p <- ggplot(perhourworked %>% filter(year %in% c(2012,2018)), aes(x = factor(year), y = rank_movingav, group = region, color = factor(year))) +
+  geom_line(aes(group = region), color = "grey44") +
+  geom_point(aes(shape = is_sy, size = is_sy)) +
+  facet_wrap(vars(ns_england_restofUK_londonseparate), nrow = 1)
+
+ggplotly(p, tooltip = 'region')
+
+
+
+#Try also for smoothed per hour GVA... oh yes, totally uninteresting!
+# p <- ggplot(perhourworked %>% filter(year %in% c(2006,2021)), aes(x = factor(year), y = movingav, group = region, color = factor(year))) +
+#   geom_line(aes(group = region), color = "grey44") +
+#   geom_point(aes(shape = is_sy, size = is_sy)) +
+#   facet_wrap(vars(ns_england_restofUK_londonseparate), nrow = 1)
+# 
+# ggplotly(p, tooltip = 'region')
+
+
+
+
+#BOXPLOT
+ggplot(perhourworked %>% filter(year %in% c(2018,2021)), aes(x = ns_england_restofUK_londonseparate, y = movingav)) +
+  geom_boxplot() +
+  scale_size_manual(values = c(5,10)) +
+  facet_wrap(~year)
+
+
 
 #BASIC PERCENT DIFFERENCES IN PRODUCTIVITY, AVERAGES FOR ENGLAND, NORTH ETC
 #Note, sy and uk_av are both single value columns just added for comparison to the regional averages
@@ -276,6 +374,18 @@ averages.perhourworked <- perhourworked %>%
 
 
 
+#WEIGHTED AVERAGE FOR UK MINUS LONDON
+#Using number of hours worked per ITL2
+
+#Get hours worked per week total for ITL2
+totalhoursperweek.itl2 <- read_csv('data/Productivity Hours Worked per Week ITL2 and ITL3 subregions constrained to ITL1 2004 2021.csv') %>%
+  rename(ITL = `ITL level`, ITLcode = `ITL code`, region = `Region name`) %>% 
+  filter(ITL == 'ITL2') %>% 
+  pivot_longer(cols = `2004`:`2021`, names_to = 'year', values_to = 'hours_per_week') %>% 
+  mutate(year = as.numeric(year))
+
+
+#Add in all the region labels
 
 
 

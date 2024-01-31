@@ -274,6 +274,34 @@ resultsummary <- results %>%
   )
 
 
+#Merge back in the raw counts in those qual categories
+resultsummary <- resultsummary %>% 
+  left_join(
+    qe.w %>% select(GEOGRAPHY_NAME,qual_level,total_inemployment),
+    by = c('place' = 'GEOGRAPHY_NAME','qual_level')
+  )
+
+
+#Get % diffs between levels
+resultsummary <- resultsummary %>% 
+  arrange(place,qual_level) %>% 
+  group_by(place) %>% 
+  mutate(
+    diff_mean = meanval - lag(meanval),
+    diff_confmin = conf_min95 - lag(conf_min95),
+    diff_confmax = conf_max95 - lag(conf_max95),
+    percentdiff_mean = ((meanval - lag(meanval))/meanval)*100,
+    percentdiff_confmin = ((conf_min95 - lag(conf_min95))/conf_min95)*100,
+    percentdiff_confmax = ((conf_max95 - lag(conf_max95))/conf_max95)*100,
+    ifonepercent_mean = lag(total_inemployment) * 0.01 * diff_mean,
+    ifonepercent_confmin = lag(total_inemployment) * 0.01 * diff_confmin,
+    ifonepercent_confmax = lag(total_inemployment) * 0.01 * diff_confmax
+    )
+
+
+
+
+
 #Check
 #Looking plausible
 ggplot(resultsummary, aes(x = place, y = meanval, colour = qual_level)) +
@@ -284,36 +312,35 @@ ggplot(resultsummary, aes(x = place, y = meanval, colour = qual_level)) +
   ylab('weekly gross earnings')
 
 
-#Get % diffs between levels
-resultsummary <- resultsummary %>% 
-  arrange(place,qual_level) %>% 
-  group_by(place) %>% 
-  mutate(
-    percentdiff_mean = ((meanval - lag(meanval))/meanval)*100,
-    percentdiff_confmin = ((conf_min95 - lag(conf_min95))/conf_min95)*100,
-    percentdiff_confmax = ((conf_max95 - lag(conf_max95))/conf_max95)*100
-    )
-
-
-#Merge back in the raw counts in those qual categories
-resultsummary <- resultsummary %>% 
-  left_join(
-    qe.w %>% select(GEOGRAPHY_NAME,qual_level,total_inemployment),
-    by = c('place' = 'GEOGRAPHY_NAME','qual_level')
-  )
-
-
-
-
-
 #Save for viewing
 write_csv(resultsummary,'data/earnings_v_qualifications_sy4places.csv')
 
 
+#Let's pick a single number and think about what it means.
+#Let's try "if 1% of L3 moved to L4 in Sheffield..."
+#THIS ALL DONE IN-DF NOW ABOVE
 
-
-
-
+#1 person at L3: 
+# l3 = resultsummary$meanval[resultsummary$place=='Sheffield' & resultsummary$qual_level=='Level 3 qualifications']
+# l3min = resultsummary$conf_min95[resultsummary$place=='Sheffield' & resultsummary$qual_level=='Level 3 qualifications']
+# l3max = resultsummary$conf_max95[resultsummary$place=='Sheffield' & resultsummary$qual_level=='Level 3 qualifications']
+# 
+# #1 person at L4: 
+# l4 = resultsummary$meanval[resultsummary$place=='Sheffield' & resultsummary$qual_level=='Level 4 qualifications or above']
+# l4min = resultsummary$conf_min95[resultsummary$place=='Sheffield' & resultsummary$qual_level=='Level 4 qualifications or above']
+# l4max = resultsummary$conf_max95[resultsummary$place=='Sheffield' & resultsummary$qual_level=='Level 4 qualifications or above']
+# 
+# #Somewhere between £113 to £544 extra for L4 for 1 person
+# l4min - l3min
+# l4max - l3max
+# 
+# #1% of Sheffield L3 = 
+# onepercent = resultsummary$total_inemployment[resultsummary$place=='Sheffield' & resultsummary$qual_level=='Level 3 qualifications'] * 0.01
+# 
+# 
+# (l4 - l3) * onepercent#mean
+# (l4min - l3min) * onepercent
+# (l4max - l3max) * onepercent
 
 
 

@@ -1,4 +1,4 @@
-qual_level,sum(ifonepercent_mean) * 52,sum(ifonepercent_confmin) * 52,sum(ifonepercent_confmax) * 52
+qual_level,mean,min,max
 No qualifications,NA,NA,NA
 Level 1 and entry level qualifications,1674856.1275337143,-1393768.342146414,4743480.597213843
 Level 2 qualifications,3902016.0888635875,4897231.768691338,2906800.4090358373

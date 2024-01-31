@@ -1,0 +1,6 @@
+qual_level,sum(ifonepercent_mean) * 52,sum(ifonepercent_confmin) * 52,sum(ifonepercent_confmax) * 52
+No qualifications,NA,NA,NA
+Level 1 and entry level qualifications,1674856.1275337143,-1393768.342146414,4743480.597213843
+Level 2 qualifications,3902016.0888635875,4897231.768691338,2906800.4090358373
+Level 3 qualifications,5273864.150226945,4132681.5117148943,6415046.788738997
+Level 4 qualifications or above,19043123.636659756,6736847.7081919,31349399.56512761

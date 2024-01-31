@@ -299,6 +299,23 @@ resultsummary <- resultsummary %>%
     )
 
 
+#Can sum those 'if 1%' for each place for total money amounts...
+resultsummary %>% 
+  group_by(qual_level) %>% 
+  summarise(
+    sum(ifonepercent_mean),
+    sum(ifonepercent_confmin),
+    sum(ifonepercent_confmax)
+    )
+
+#Let's make those yearly huh?
+yearly.ifonepercents <- resultsummary %>% 
+  group_by(qual_level) %>% 
+  summarise(
+    sum(ifonepercent_mean) * 52,
+    sum(ifonepercent_confmin) * 52,
+    sum(ifonepercent_confmax) * 52
+  )
 
 
 
@@ -316,9 +333,9 @@ ggplot(resultsummary, aes(x = place, y = meanval, colour = qual_level)) +
 write_csv(resultsummary,'data/earnings_v_qualifications_sy4places.csv')
 
 
+#THIS ALL DONE IN-DF NOW ABOVE
 #Let's pick a single number and think about what it means.
 #Let's try "if 1% of L3 moved to L4 in Sheffield..."
-#THIS ALL DONE IN-DF NOW ABOVE
 
 #1 person at L3: 
 # l3 = resultsummary$meanval[resultsummary$place=='Sheffield' & resultsummary$qual_level=='Level 3 qualifications']

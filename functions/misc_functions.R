@@ -1282,7 +1282,34 @@ slopeDiffGrid <- function(slope_df, confidence_interval, column_to_grid, column_
 
 
 
-
+#Specific code for doing the equivalent of quantile, for the earnings dataset with text fields for percentiles
+sample_by_percentile <- function(data, percentile_var, value_var, sample_point) {
+  
+  percentile_var <- enquo(percentile_var)       
+  value_var <- enquo(value_var) 
+  
+  # Convert the percentile categories to numeric values 
+  percentiles <- as.numeric(gsub(" percentile", "", data[[quo_name(percentile_var)]]))
+  percentiles <- unique(percentiles) 
+  
+  #https://stackoverflow.com/a/47182392/5023561
+  #Select one of the percentiles based on closeness to sample 0-1
+  selected_percentile = percentiles[which.min(abs(percentiles - (sample_point * 100)))]
+  
+  #Get the confidence range from that subgroup
+  subgroup <- data %>% 
+    filter(grepl(as.character(selected_percentile), !!percentile_var))
+  
+  #pick a random value between the confidence range
+  # sampled_value = runif(1,min(subgroup$conf_min95), min(subgroup$conf_max95))
+  
+  #Could do this as a normal dist sample?
+  #We have mean and se after all, and 95% confs should tail off approx like this
+  sampled_value = rnorm(1, subgroup$Value[1], subgroup$se[1])
+  
+  return(sampled_value)
+  
+}
 
 
 

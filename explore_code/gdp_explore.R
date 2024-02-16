@@ -422,29 +422,11 @@ totalhoursperweek.itl2 <- totalhoursperweek.itl2 %>%
 
 table(totalhoursperweek.itl2$UK_minus_london, useNA = 'always')
 
-#Didn't need to do all the above, did I? Just about to merge, was already done in left join df
-#Oh, except the last one
 
 #Weighted averages for the various groupings
 #Check for 2021, do averages weighted by number of hours worker per week that year in that place
 
-#NOPE WRONG. WEIGHTS SHOULD BE THE ITL2S IN EACH OF THE SUBGROUPS
-# weightedaverages.perhourworked.wrong <- perhourworked %>% filter(year == 2021) %>%
-#   left_join(
-#     totalhoursperweek.itl2 %>% filter(year == 2021) %>% select(region,hours_per_week,UK_minus_london),
-#     by = 'region'
-#   ) %>%
-#   group_by(UK_minus_london) %>%
-#   mutate(
-#     totalhoursperweek = sum(hours_per_week)#get weights to use in average
-#   ) %>%
-#   group_by(UK_minus_london) %>%
-#   summarise(
-#     sy = perhourworked %>% filter(year == 2021, region == 'South Yorkshire') %>% select(movingav) %>% pull,
-#     mean_gva_av3years_weighted = weighted.mean(movingav, totalhoursperweek, na.rm=T)#get weighted average by each ITL2 grouping
-#   )
 
-  
 #Both go up, though London by more
 #Due presumably to cities having more hours per week / being more productive
 weightedaverages.perhourworked <- perhourworked %>% filter(year == 2021) %>% 

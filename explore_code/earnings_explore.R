@@ -312,9 +312,9 @@ resultsummary %>%
 yearly.ifonepercents <- resultsummary %>% 
   group_by(qual_level) %>% 
   summarise(
-    sum(ifonepercent_mean) * 52,
-    sum(ifonepercent_confmin) * 52,
-    sum(ifonepercent_confmax) * 52
+    mean = sum(ifonepercent_mean) * 52,
+    min = sum(ifonepercent_confmin) * 52,
+    max = sum(ifonepercent_confmax) * 52
   )
 
 
@@ -331,6 +331,7 @@ ggplot(resultsummary, aes(x = place, y = meanval, colour = qual_level)) +
 
 #Save for viewing
 write_csv(resultsummary,'data/earnings_v_qualifications_sy4places.csv')
+write_csv(yearly.ifonepercents,'data/earnings_v_qualifications_ifonepercentoflowerqual_movedtohigher.csv')
 
 
 #THIS ALL DONE IN-DF NOW ABOVE

@@ -282,6 +282,84 @@ resultsummary <- resultsummary %>%
   )
 
 
+#SANITY CHECK ON GETTING DIFFS 
+#Looking in resultsummary, we have mean and confidence mins and maxes in the first rows
+#Those are all sane-looking and the right polarity - plotted here:
+ggplot(resultsummary, aes(x = place, y = meanval, colour = qual_level)) +
+  geom_point(position = position_dodge(width = 1), size = 3) +
+  geom_errorbar(aes(ymin = conf_min95, ymax = conf_max95), width = 0.1, position = position_dodge(width = 1), linewidth = 1) +
+  scale_colour_brewer(palette = 'Paired') +
+  facet_wrap(~place, scales = 'free_x', nrow = 1) +
+  ylab('weekly gross earnings')
+
+
+#But note, the confidence min for level 1 is LOWER THAN the confidence min for 'no quals'
+#And the calcs below ended up with a min diff for L1 to L2 HIGHER THAN the max diff, which is likely going to be due to that too
+#So, what exactly are we after when we find differences in earnings between qualification levels?
+
+#Let's do some worked examples to make sure it's right
+#Picking out just barnsley
+b <- resultsummary %>% filter(place=='Barnsley')
+
+#No quals mean and 95% confidence min max
+noqual_mean = b$meanval[b$qual.sample == 'No qualifications']
+noqual_min = b$conf_min95[b$qual.sample == 'No qualifications']
+noqual_max = b$conf_max95[b$qual.sample == 'No qualifications']
+
+#Level 1 mean and 95% confidence min max
+l1_mean = b$meanval[b$qual.sample == 'Level 1 and entry level qualifications']
+l1_min = b$conf_min95[b$qual.sample == 'Level 1 and entry level qualifications']
+l1_max = b$conf_max95[b$qual.sample == 'Level 1 and entry level qualifications']
+
+#Level 2 mean and 95% confidence min max
+l2_mean = b$meanval[b$qual.sample == 'Level 2 qualifications']
+l2_min  = b$conf_min95[b$qual.sample == 'Level 2 qualifications']
+l2_max  = b$conf_max95[b$qual.sample == 'Level 2 qualifications']
+
+noqual_mean
+noqual_min 
+noqual_max 
+
+l1_mean
+l1_min 
+l1_max 
+
+l2_mean
+l2_min  
+l2_max  
+
+
+#So, questions we want to answer from those?
+#1. What's the mean difference in earnings between those qualification levels? i.e. the extra earnings at the level above?
+#Which is just 
+l1_mean - noqual_mean
+l2_mean - l1_mean
+
+#Do we have an issue though with trying to directly diff the confidence intervals?
+l1_min - noqual_min
+l1_max - noqual_max
+
+#Note, the min is higher than the max
+l2_min - l1_min
+l2_max - l1_max
+
+#Converting that into English:
+#The difference between the minimum likely level 2 wage and the likely min of the qual level below it is £116.87 a week per working person
+l2_min - l1_min
+#The difference between the maximum likely level 2 wage and the likely max of the qual level below it is £108.87 a week per working person
+l2_max - l1_max
+
+#mean is this, sitting between them still
+l2_mean - l1_mean
+
+#So what we're getting there is:
+#At 95% level, a most likely difference for earnings DIFFERENCES at mean, min 95% and max 95% points. Min doesn't need to be lower than max.
+
+#So that does give us the spread of possible differences
+#But  may not accurately capture the confidence interval of the difference between means
+#The formula for working that out requires the sample size, which we don't have from the earnings data
+
+#So... 
 #Get % diffs between levels
 resultsummary <- resultsummary %>% 
   arrange(place,qual_level) %>% 
@@ -319,6 +397,37 @@ yearly.ifonepercents <- resultsummary %>%
 
 
 
+
+#Repeat for no quals to L2 difference
+resultsummary.noqualstoL2 <- resultsummary %>% 
+  select(place,qual.sample,meanval,sd,conf_min95,conf_max95,qual_level,total_inemployment) %>% 
+  filter(qual.sample %in% c('No qualifications','Level 2 qualifications')) %>% 
+  arrange(place,qual_level) %>% 
+  group_by(place) %>% 
+  mutate(
+    diff_mean = meanval - lag(meanval),
+    diff_confmin = conf_min95 - lag(conf_min95),
+    diff_confmax = conf_max95 - lag(conf_max95),
+    percentdiff_mean = ((meanval - lag(meanval))/meanval)*100,
+    percentdiff_confmin = ((conf_min95 - lag(conf_min95))/conf_min95)*100,
+    percentdiff_confmax = ((conf_max95 - lag(conf_max95))/conf_max95)*100,
+    ifonepercent_mean = lag(total_inemployment) * 0.01 * diff_mean,
+    ifonepercent_confmin = lag(total_inemployment) * 0.01 * diff_confmin,
+    ifonepercent_confmax = lag(total_inemployment) * 0.01 * diff_confmax
+  )
+
+
+yearly.ifonepercents.noqualtoL2 <- resultsummary.noqualstoL2 %>% 
+  group_by(qual_level) %>% 
+  summarise(
+    mean = sum(ifonepercent_mean) * 52,
+    min = sum(ifonepercent_confmin) * 52,
+    max = sum(ifonepercent_confmax) * 52
+  )
+
+
+
+
 #Check
 #Looking plausible
 ggplot(resultsummary, aes(x = place, y = meanval, colour = qual_level)) +
@@ -334,31 +443,8 @@ write_csv(resultsummary,'data/earnings_v_qualifications_sy4places.csv')
 write_csv(yearly.ifonepercents,'data/earnings_v_qualifications_ifonepercentoflowerqual_movedtohigher.csv')
 
 
-#THIS ALL DONE IN-DF NOW ABOVE
-#Let's pick a single number and think about what it means.
-#Let's try "if 1% of L3 moved to L4 in Sheffield..."
 
-#1 person at L3: 
-# l3 = resultsummary$meanval[resultsummary$place=='Sheffield' & resultsummary$qual_level=='Level 3 qualifications']
-# l3min = resultsummary$conf_min95[resultsummary$place=='Sheffield' & resultsummary$qual_level=='Level 3 qualifications']
-# l3max = resultsummary$conf_max95[resultsummary$place=='Sheffield' & resultsummary$qual_level=='Level 3 qualifications']
-# 
-# #1 person at L4: 
-# l4 = resultsummary$meanval[resultsummary$place=='Sheffield' & resultsummary$qual_level=='Level 4 qualifications or above']
-# l4min = resultsummary$conf_min95[resultsummary$place=='Sheffield' & resultsummary$qual_level=='Level 4 qualifications or above']
-# l4max = resultsummary$conf_max95[resultsummary$place=='Sheffield' & resultsummary$qual_level=='Level 4 qualifications or above']
-# 
-# #Somewhere between £113 to £544 extra for L4 for 1 person
-# l4min - l3min
-# l4max - l3max
-# 
-# #1% of Sheffield L3 = 
-# onepercent = resultsummary$total_inemployment[resultsummary$place=='Sheffield' & resultsummary$qual_level=='Level 3 qualifications'] * 0.01
-# 
-# 
-# (l4 - l3) * onepercent#mean
-# (l4min - l3min) * onepercent
-# (l4max - l3max) * onepercent
+
 
 
 

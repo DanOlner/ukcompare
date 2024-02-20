@@ -422,7 +422,8 @@ yearly.ifonepercents.noqualtoL2 <- resultsummary.noqualstoL2 %>%
   summarise(
     mean = sum(ifonepercent_mean) * 52,
     min = sum(ifonepercent_confmin) * 52,
-    max = sum(ifonepercent_confmax) * 52
+    max = sum(ifonepercent_confmax) * 52,
+    total_inemployment = sum(total_inemployment)
   )
 
 

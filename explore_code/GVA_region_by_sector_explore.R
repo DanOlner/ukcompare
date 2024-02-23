@@ -4604,6 +4604,7 @@ slopeDiffGrid(slope_df = perjobslopes.log, confidence_interval = 95, column_to_g
 
 # daterange = c(2013:2019)
 daterange = c(2015:2021)
+daterange = c(2017:2021)
 perjobslopes.log <- get_slope_and_se_safely(data = itl2.gvaperjob %>% filter(year %in% daterange), ITL_region_name, SIC07_description, y = log(gvaperjob), x = year)
 
 
@@ -4611,7 +4612,7 @@ for(sector in unique(perjobslopes.log$SIC07_description)){
   
   p <- slopeDiffGrid(slope_df = perjobslopes.log, confidence_interval = 95, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = sector)
   
-  ggsave(plot = p, filename = paste0('local/localimages/GVAPERJOB_sectorgrids/',sector,'_',min(daterange),'_',max(daterange),'.png'), width = 13, height = 13)
+  ggsave(plot = p, filename = paste0('local/localimages/GVAPERJOB_sectorgrids_1721/',sector,'_',min(daterange),'_',max(daterange),'.png'), width = 13, height = 13)
   
 }
 

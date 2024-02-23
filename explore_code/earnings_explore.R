@@ -440,8 +440,53 @@ ggplot(resultsummary, aes(x = place, y = meanval, colour = qual_level)) +
 
 
 #Save for viewing
-write_csv(resultsummary,'data/earnings_v_qualifications_sy4places.csv')
+write_csv(resultsummary %>% select(-qual_level) %>% rename(qual_level = `qual.sample`,mean_gross_weekly_earnings = meanval),'data/earnings_v_qualifications_sy4places.csv')
 write_csv(yearly.ifonepercents,'data/earnings_v_qualifications_ifonepercentoflowerqual_movedtohigher.csv')
+
+
+
+
+#SOME EXTRA QUAL SUMS----
+
+#Reminder
+unique(qual.econ$C2021_EASTAT_7_NAME)
+unique(qual.econ$C2021_HIQUAL_8_NAME)
+
+#Just totals for each qual level currently
+qe_chk <- qual.econ %>% filter(C2021_EASTAT_7_NAME=='Total') %>% 
+  select(GEOGRAPHY_NAME,econ_activity = C2021_EASTAT_7_NAME, qual = C2021_HIQUAL_8_NAME, count = OBS_VALUE)
+
+ggplot(qe_chk %>% filter(qual!='Total'), aes(x = econ_activity, y = count, fill = qual)) +
+  geom_bar(position = 'fill', stat = 'identity') +
+  facet_wrap(~GEOGRAPHY_NAME, nrow = 1) +
+  # coord_flip() +
+  scale_fill_brewer(palette = 'Paired')
+
+#Save as CSV
+write_csv(qe_chk, 'data/census2021_SY_places_qualcounts.csv')
+
+#So we just want counts for:
+# Number of those with up to level 2 quals
+# Number of those with no quals
+# Number of those with level 3 quals
+# Number of those with level 4+ quals
+
+
+#Add 'Up to level 2'
+up_to_level2 <- qe_chk %>% 
+  filter(qual %in% c("No qualifications","Level 1 and entry level qualifications","Level 2 qualifications")) %>% 
+  group_by(GEOGRAPHY_NAME) %>% 
+  summarise(up_to_level2 = sum(count))
+
+
+#Sum for all of SY
+sy_allquals <- qe_chk %>% 
+  group_by(qual) %>% 
+  summarise(sy_count = sum(count))
+
+sy_up_to_level2 <- qe_chk %>% 
+  filter(qual %in% c("No qualifications","Level 1 and entry level qualifications","Level 2 qualifications")) %>% 
+  summarise(sy_count = sum(count))
 
 
 

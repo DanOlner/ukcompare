@@ -156,7 +156,8 @@ p <- twod_generictimeplot_multipletimepoints(
   y_var = jobcount_movingav,
   timevar = year,
   label_var = `gva/job_movingav`,
-  times = c(2016:2020) 
+  times = c(2016:2020)
+  # times = c(2016:2018) 
 )
 
 p + theme(aspect.ratio=1) +

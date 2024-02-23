@@ -6004,7 +6004,6 @@ itl2.cps <- itl2.cps %>%
 
 
 itl2.cps %>% filter(
-  # grepl(x = ITL_region_name, pattern = 'Manc'),
   grepl(x = ITL_region_name, pattern = 'South Y'),
   year == 2021
 ) %>% 
@@ -6012,6 +6011,40 @@ itl2.cps %>% filter(
   select(SIC07_description,regional_percent, LQ) %>% 
   arrange(-regional_percent) %>% 
   slice(1:length(unique(itl2.cps$SIC07_description)))
+
+itl2.cps %>% filter(
+  grepl(x = ITL_region_name, pattern = 'West Y'),
+  year == 2021
+) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(SIC07_description,regional_percent, LQ) %>% 
+  arrange(-regional_percent) %>% 
+  slice(1:length(unique(itl2.cps$SIC07_description)))
+
+itl2.cps %>% filter(
+  grepl(x = ITL_region_name, pattern = 'Mersey'),
+  year == 2021
+) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(SIC07_description,regional_percent, LQ) %>% 
+  arrange(-regional_percent) %>% 
+  slice(1:length(unique(itl2.cps$SIC07_description)))
+
+
+itl2.cps %>% filter(
+  grepl(x = ITL_region_name, pattern = 'Manc'),
+  year == 2021
+) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(SIC07_description,regional_percent, LQ) %>% 
+  arrange(-regional_percent) %>% 
+  slice(1:length(unique(itl2.cps$SIC07_description)))
+
+
+
+
+
+
 
 itl2.cps.proporder <- itl2.cps %>% filter(
   grepl(x = ITL_region_name, pattern = 'Manc'),

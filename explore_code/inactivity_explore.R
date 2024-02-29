@@ -281,7 +281,13 @@ ggplot(ALL.LAS.econ_active.nostudents, aes(x = PERCENT_MINUS_STUDENTS)) +
     aes(xintercept = PERCENT_MINUS_STUDENTS, colour = GEOGRAPHY_NAME)
   ) +
   stat_summary(aes(xintercept = ..x.., y = 0), fun = mean, geom = "vline", orientation = "y", size = 2, alpha = 0.25) +#https://stackoverflow.com/a/7318539
-  facet_wrap(~C2021_EASTAT_20_NAME, scales = 'free')
+  facet_wrap(~C2021_EASTAT_20_NAME, scales = 'free') +
+  ggtitle('Economic activity percents excluding FT students, sums to 100% per age group (each column)\nDensity for Eng/Wales authorities, Grey line is mean, four places in South Yorkshire marked\nPROPORTION OF EMPLOYED VS UNEMPLOYED (BUT ECON ACTIVE)')
+
+ggsave('images/econ_activity_fourplaces_percents_singlevar.png', width = 16, height = 9)
+
+
+
 
 
 
@@ -357,8 +363,10 @@ ggplot(SY.plus.ALL.LAS.econ_active.nostudents, aes(x = PERCENT_MINUS_STUDENTS)) 
     aes(xintercept = PERCENT_MINUS_STUDENTS, colour = GEOGRAPHY_NAME)
   ) +
   stat_summary(aes(xintercept = ..x.., y = 0), fun = mean, geom = "vline", orientation = "y", size = 2, alpha = 0.25) +#https://stackoverflow.com/a/7318539
-  facet_wrap(~C2021_EASTAT_20_NAME, scales = 'free')
+  facet_wrap(~C2021_EASTAT_20_NAME, scales = 'free') +
+  ggtitle('Economic activity percents excluding FT students, sums to 100% per age group (each column)\nDensity for Eng/Wales authorities, Grey line is mean, red line is South Yorkshire\nPROPORTION OF EMPLOYED VS UNEMPLOYED (BUT ECON ACTIVE)')
 
+ggsave('images/econ_activity_sy_percents_singlevar.png', width = 16, height = 9)
 
 
 #WITH THE SY NUMBERS, DO THIS:
@@ -805,7 +813,7 @@ ggplot(SY.ALL.LAS.econ_active_age_comp_nostudents.chk, aes(x = WITHINAGEGROUP_PE
   ) +
   stat_summary(aes(xintercept = ..x.., y = 0), fun = mean, geom = "vline", orientation = "y", size = 2, alpha = 0.25) +#https://stackoverflow.com/a/73185398/5023561
   facet_wrap(~C2021_EASTAT_7_NAME+C2021_AGE_7_NAME, scales = 'free', nrow=2) +
-  ggtitle('Economic activity percents excluding FT students, sums to 100% per age group (each column)\nDensity for Eng/Wales authorities, Grey line is mean, red line is South Yorkshire\nPROPORTION OF EMPLOYED VS UNEMPLOYED (BUT ECON ACTIVE')
+  ggtitle('Economic activity percents excluding FT students, sums to 100% per age group (each column)\nDensity for Eng/Wales authorities, Grey line is mean, red line is South Yorkshire\nPROPORTION OF EMPLOYED VS UNEMPLOYED (BUT ECON ACTIVE)')
 
 ggsave('images/econ_activity_sy_percents_per_agegroup_sumto100_noFTstudents_JUSTEMPLOYED_N_UNEMPLOYED.png', width = 22, height = 11)
 

@@ -24,6 +24,15 @@ gdp.itl2 <- read_csv('data/Table 10 Gross Domestic Product chained volume measur
   mutate(year = as.numeric(year))
 
 
+#Though if we're only doing a point estimate and don't need a slope, then current prices would be fine and better?
+gdp.cp.itl2 <- read_csv('data/Table 5 GDP at current market prices pounds million.csv') %>% 
+  rename(ITLcode = `ITL code`, region = `Region name`) %>% 
+  filter(ITL == 'ITL2') %>% 
+  pivot_longer(cols = `1998`:`2021`, names_to = 'year', values_to = 'gdp') %>% 
+  mutate(year = as.numeric(year))
+
+
+
 #Which is great, but we have to divide same by same, so mostly need to use GVA
 #And need to use current price to compare different places
 #Best source I seem to have for whole-ITL2 GVA (also balanced) is the sector sheet, already processed. Again:
@@ -483,11 +492,18 @@ chk <- weightedaverages.perhourworked <- perhourworked %>% filter(year == 2021) 
 #This is what the SEP did, adjusting by x amount, projecting forward, working out how to get from one path to the other
 sy_gdp_2021 <- gdp.itl2 %>% filter(year == 2021, region == 'South Yorkshire') %>% select(gdp) %>% pull
 
+#Current prices version
+sy_gdp_cp_2021 <- gdp.cp.itl2 %>% filter(year == 2021, region == 'South Yorkshire') %>% select(gdp) %>% pull
+
+
+
 prop_difftoeng_av_minuslondon <- weightedaverages.perhourworked %>% filter(UK_minus_london == 'UK minus London') %>% select(prop_diff) %>% pull
 
 #5.6 billion extra
 sy_gdp_2021 * prop_difftoeng_av_minuslondon
 
+#current prices
+sy_gdp_cp_2021 * prop_difftoeng_av_minuslondon
 
 #Get population numbers for per person figures
 personcounts <- read_csv('data/Table 17 Total resident population numbers persons.csv') %>% 
@@ -503,6 +519,20 @@ sy_people2021 <- personcounts %>%
 
 #Extra amount of GDP per person
 ((sy_gdp_2021 * prop_difftoeng_av_minuslondon)/sy_people2021)*1000000
+
+#Current price version
+((sy_gdp_cp_2021 * prop_difftoeng_av_minuslondon)/sy_people2021)*1000000
+
+
+
+#Using those numbers - what's 3% of that? 
+#For how much private investment could be crowded in by public investment if using numbers from 
+#Jan 2024 report: “Boosting growth and productivity in the United Kingdom through investments in the sustainable economy” (LSE, Grantham Foundation, CEP, Productivity Institute) 
+sy_gdp_2021 * 0.03 *1000000
+
+#current prices
+sy_gdp_cp_2021 * 0.03 *1000000
+
 
 
 

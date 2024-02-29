@@ -414,7 +414,7 @@ extraworkers <- sy.sick.count - sy.LLTI.count.ifav
 weightedwages <- resultsummary %>% 
   group_by(qual_level) %>% 
   summarise(weighted.mean = weighted.mean(meanval,w = total_inemployment)) %>% 
-  mutate(ifLLTIwasaverage = weighted.mean * extraworkers)
+  mutate(ifLLTIwasaverage_weeklyextraearnings = weighted.mean * extraworkers)
 
 
 
@@ -433,10 +433,26 @@ sy.LLTI.count.iflow = sy.all.count * (low.sick.percent/100)
 extraworkers.low <- sy.sick.count - sy.LLTI.count.iflow
 
 weightedwages <- weightedwages %>% 
-  mutate(ifLLTIwaslow10percent = weighted.mean * extraworkers.low)
+  mutate(ifLLTIwaslow10percent_weeklyextraearnings = weighted.mean * extraworkers.low)
 
+
+#What's that yearly then?
+weightedwages <- weightedwages %>% 
+  mutate(
+    ifLLTIwasaverage_YEARLYextraearnings = ifLLTIwasaverage_weeklyextraearnings * 52,
+    ifLLTIwaslow10percent_YEARLYextraearnings = ifLLTIwaslow10percent_weeklyextraearnings * 52
+    )
+  
 #So e.g.
 #That's 12,986,630 a week in extra earnings at L2 (370 a week * 35000 extra workers)
+#And yearly for L2 average then best case is 
+#215,340,550
+#675,487,303
+
+#Those are quite large numbers...!
+
+#Save for reference with reasonably clear name
+write_csv(weightedwages,'data/SY_LLTI_Census2021_IfLLTI_was_EnglandWales_average_howmuchweeklywage_IfLLTI_was_as_low_as_lowest10percent.csv')
 
 
 # INACTIVITY + CARE CROSSTAB----

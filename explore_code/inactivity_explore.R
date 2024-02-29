@@ -754,7 +754,7 @@ ggplot(SY.ALL.LAS.econ_active_age_comp_nostudents, aes(x = WITHINAGEGROUP_PERCEN
   facet_wrap(~C2021_EASTAT_7_NAME+C2021_AGE_7_NAME, scales = 'free', nrow=3) +
   ggtitle('Economic activity percents excluding FT students, sums to 100% per age group (each column)\nDensity for Eng/Wales authorities, Grey line is mean, red line is South Yorkshire')
 
-ggsave('images/econ_activity_sy_percents_per_agegroup_sumto100_noFTstudents.png', width = 18, height = 10)
+ggsave('images/econ_activity_sy_percents_per_agegroup_sumto100_noFTstudents.png', width = 20, height = 10)
 
 
 

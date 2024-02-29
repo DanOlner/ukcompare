@@ -490,6 +490,10 @@ sy_up_to_level2 <- qe_chk %>%
 
 
 
+#Weighted mean earnings values for SY at different qual levels
+resultsummary %>% 
+  group_by(qual_level) %>% 
+  summarise(weighted.mean = weighted.mean(meanval,w = total_inemployment))
 
 
 

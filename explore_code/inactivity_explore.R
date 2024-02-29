@@ -11,6 +11,8 @@ library(ggrepel)
 library(ggmosaic)
 options(scipen = 99)
 
+#Note: SBDR = Sheffield Barnsley Doncaster Rotherham
+
 #Census download----
 
 ##Get inactivity table----
@@ -172,9 +174,6 @@ ggplot(inactivity_percents, aes(fill = GEOGRAPHY_NAME, y = OBS_VALUE, x = C2021_
   geom_bar(stat = 'identity', position = 'dodge') +
   coord_flip() +
   scale_fill_brewer(palette = 'Paired')
-
-
-#WANT THOSE NUMBERS FOR SY. So will need to use totals and then recalculate the percentages
 
 
 
@@ -362,8 +361,82 @@ ggplot(SY.plus.ALL.LAS.econ_active.nostudents, aes(x = PERCENT_MINUS_STUDENTS)) 
 
 
 
+#WITH THE SY NUMBERS, DO THIS:
+#Economic inactivity
+#Closing to national average (min)
+#Going beyond national average (max)
+
+#Mean for sick/disabled inactive
+mean.sick.percent <- SY.plus.ALL.LAS.econ_active.nostudents %>% 
+  filter(grepl('sick',C2021_EASTAT_20_NAME)) %>% 
+  summarise(mean(PERCENT_MINUS_STUDENTS)) %>% 
+  pull()
+
+#South yorkshire value
+sy.sick.percent <- SY.plus.ALL.LAS.econ_active.nostudents %>% 
+  filter(grepl('sick',C2021_EASTAT_20_NAME), GEOGRAPHY_NAME == 'South Yorkshire') %>% 
+  select(PERCENT_MINUS_STUDENTS) %>% 
+  pull()
+
+#This is the percent difference of the SY TOTAL in this DF
+diff(c(mean.sick.percent,sy.sick.percent))
+
+#That total is... 1,026,345
+sy.all.count <- SY.plus.ALL.LAS.econ_active.nostudents %>% 
+  filter(GEOGRAPHY_NAME == 'South Yorkshire') %>% 
+  select(Value) %>% 
+  summarise(sum(Value)) %>% 
+  pull
+
+#What's national av percent of that?
+sy.LLTI.count.ifav = sy.all.count * (mean.sick.percent/100)
+
+sy.sick.count <- SY.plus.ALL.LAS.econ_active.nostudents %>% 
+  filter(grepl('sick',C2021_EASTAT_20_NAME), GEOGRAPHY_NAME == 'South Yorkshire') %>% 
+  select(Value) %>% 
+  pull()
+
+#diff in count
+extraworkers <- sy.sick.count - sy.LLTI.count.ifav
 
 
+#So just in terms of earnings, we can plug that into "earning at lowest qual level" or pick some other levels
+#Just multiply up (then later find public savings)
+
+#From the weighted means in earnings_explore around line 490
+# No qualifications                               197.
+# Level 1 and entry level qualifications          246.
+# Level 2 qualifications                          370.
+# Level 3 qualifications                          482.
+# Level 4 qualifications or above                 774.
+
+#Relies on earnings_explore code results still in memory
+weightedwages <- resultsummary %>% 
+  group_by(qual_level) %>% 
+  summarise(weighted.mean = weighted.mean(meanval,w = total_inemployment)) %>% 
+  mutate(ifLLTIwasaverage = weighted.mean * extraworkers)
+
+
+
+#And then the same for some reasonably very low LLTI number, say top 20 average? Which is top 10% approx
+#Yeah, 2,5.
+low.sick.percent <- SY.plus.ALL.LAS.econ_active.nostudents %>% 
+  filter(grepl('sick',C2021_EASTAT_20_NAME)) %>% 
+  arrange(PERCENT_MINUS_STUDENTS) %>% 
+  slice(1:20) %>% 
+  summarise(mean(PERCENT_MINUS_STUDENTS)) %>% 
+  pull()
+
+#50K
+sy.LLTI.count.iflow = sy.all.count * (low.sick.percent/100)
+
+extraworkers.low <- sy.sick.count - sy.LLTI.count.iflow
+
+weightedwages <- weightedwages %>% 
+  mutate(ifLLTIwaslow10percent = weighted.mean * extraworkers.low)
+
+#So e.g.
+#That's 12,986,630 a week in extra earnings at L2 (370 a week * 35000 extra workers)
 
 
 # INACTIVITY + CARE CROSSTAB----
@@ -614,55 +687,106 @@ ggplot(ALL.LAS.chk, aes(x = WITHINAGEGROUP_PERCENT)) +
 
 
 
-#might also want to consider the following:
-#Across each econ_active category, what percentage of age group makes up that category for all the LAs? (So, 90 degrees to what I’ve done above)
-#That way, should be able to see demographic differences between places for those
-#Tho less useful
 
-#Sticking to no full time students to get %s
-# ALL.LAS.across_econ_active_comp_nostudents <- ALL.LAS.econ_active_age_crosstab %>% 
-#   filter(
-#     C_SEX_NAME=='All persons',
-#     !C2021_AGE_7_NAME %in% c('Total','Aged 15 years and under'),#15 years and under not in this data, those are zeroes, not inc in %
-#     !C2021_EASTAT_7_NAME %in% c('Total','Economically active and a full-time student: Unemployed','Economically active and a full-time student: In employment','Economically inactive and a full-time student')      
-#   ) %>% 
-#   select(GEOGRAPHY_NAME,C2021_AGE_7_NAME,C2021_EASTAT_7_NAME,OBS_VALUE)
-# 
-# #Get correct age group totals and get percentage
-# ALL.LAS.across_econ_active_comp_nostudents <- ALL.LAS.across_econ_active_comp_nostudents %>% 
-#   group_by(GEOGRAPHY_NAME,C2021_EASTAT_7_NAME) %>% 
-#   mutate(
-#     WITHIN_EA_TOTALS = sum(OBS_VALUE)
-#   ) %>% 
-#   ungroup() %>% 
-#   mutate(WITHIN_EA_PERCENT = (OBS_VALUE/WITHIN_EA_TOTALS) * 100)
-# 
-# #Check that worked... tick
-# ALL.LAS.across_econ_active_comp_nostudents %>% 
-#   group_by(GEOGRAPHY_NAME,C2021_EASTAT_7_NAME) %>% 
-#   summarise(sum(WITHIN_EA_PERCENT))
-# 
-# 
-# #Plot four places against everywhere else
-# ggplot(ALL.LAS.across_econ_active_comp_nostudents, aes(x = WITHIN_EA_PERCENT)) +
-#   geom_histogram() +
-#   geom_vline(
-#     data  = ALL.LAS.across_econ_active_comp_nostudents %>% filter(grepl('sheff|rother|barnsley|doncaster', GEOGRAPHY_NAME, ignore.case = T)),
-#     aes(xintercept = WITHIN_EA_PERCENT, colour = GEOGRAPHY_NAME)
-#   ) +
-#   facet_wrap(~C2021_EASTAT_7_NAME+C2021_AGE_7_NAME, scales = 'free', nrow=3)
-#   
+
+#MAKE A VERSION OF THE TWO PLOTS ABOVE WHERE SY REPLACES SBDR
+SY.ALL.LAS.econ_active_age_crosstab <- ALL.LAS.econ_active_age_crosstab %>% 
+  filter(
+    C_SEX_NAME=='All persons',
+    !C2021_AGE_7_NAME %in% c('Total','Aged 15 years and under'),#15 years and under not in this data, those are zeroes, not inc in %
+    !C2021_EASTAT_7_NAME %in% c('Total','Economically active and a full-time student: Unemployed','Economically active and a full-time student: In employment','Economically inactive and a full-time student')      
+  ) %>% 
+  select(GEOGRAPHY_NAME,C2021_AGE_7_NAME,C2021_EASTAT_7_NAME,OBS_VALUE)
+  
+#Get just SY totals 
+sy.agecrosstab <- SY.ALL.LAS.econ_active_age_crosstab %>% 
+  filter(grepl('sheff|rother|barnsley|doncaster', GEOGRAPHY_NAME, ignore.case = T)) %>% 
+  group_by(C2021_AGE_7_NAME,C2021_EASTAT_7_NAME) %>% 
+  summarise(OBS_VALUE = sum(OBS_VALUE)) %>% 
+  mutate(GEOGRAPHY_NAME = 'South Yorkshire')
+
+#Append and drop SBDR
+SY.ALL.LAS.econ_active_age_crosstab <- SY.ALL.LAS.econ_active_age_crosstab %>% 
+  filter(!grepl('sheff|rother|barnsley|doncaster', GEOGRAPHY_NAME, ignore.case = T)) %>% 
+  rbind(sy.agecrosstab)
 
 
 
+#Repeat calcs
+SY.ALL.LAS.econ_active_age_comp_nostudents <- SY.ALL.LAS.econ_active_age_crosstab %>% 
+  group_by(GEOGRAPHY_NAME,C2021_AGE_7_NAME) %>% 
+  mutate(
+    WITHINAGEGROUP_TOTALS = sum(OBS_VALUE)
+  ) %>% 
+  ungroup() %>% 
+  mutate(WITHINAGEGROUP_PERCENT = (OBS_VALUE/WITHINAGEGROUP_TOTALS) * 100)
+
+#Check that worked... tick
+SY.ALL.LAS.econ_active_age_comp_nostudents %>% 
+  group_by(GEOGRAPHY_NAME,C2021_AGE_7_NAME) %>% 
+  summarise(sum(WITHINAGEGROUP_PERCENT))
+
+
+#Plot
+ggplot(SY.ALL.LAS.econ_active_age_comp_nostudents, aes(x = WITHINAGEGROUP_PERCENT)) +
+  geom_density(fill = 'grey', alpha = 0.5) +
+  geom_vline(
+    data  = SY.ALL.LAS.econ_active_age_comp_nostudents %>% filter(GEOGRAPHY_NAME == 'South Yorkshire'),
+    aes(xintercept = WITHINAGEGROUP_PERCENT, colour = GEOGRAPHY_NAME)
+  ) +
+  stat_summary(aes(xintercept = ..x.., y = 0), fun = mean, geom = "vline", orientation = "y", size = 2, alpha = 0.25) +#https://stackoverflow.com/a/73185398/5023561
+  facet_wrap(~C2021_EASTAT_7_NAME+C2021_AGE_7_NAME, scales = 'free', nrow=3)
 
 
 
 
+#FOR SY, REPEAT JUST FOR EMPLOYED VS UNEMPLOYED (BUT ECON ACTIVE)
+SY.ALL.LAS.chk <- ALL.LAS.econ_active_age_crosstab %>% 
+  filter(
+    C_SEX_NAME=='All persons',
+    !C2021_AGE_7_NAME %in% c('Total','Aged 15 years and under'),#15 years and under not in this data, those are zeroes, not inc in %
+    !C2021_EASTAT_7_NAME %in% c('Total','Economically active and a full-time student: Unemployed','Economically active and a full-time student: In employment','Economically inactive and a full-time student','Economically inactive (excluding full-time students)')      
+  ) %>% 
+  select(GEOGRAPHY_NAME,C2021_AGE_7_NAME,C2021_EASTAT_7_NAME,OBS_VALUE)
+
+#Get just SY totals 
+sy.agecrosstab.chk <- SY.ALL.LAS.chk %>% 
+  filter(grepl('sheff|rother|barnsley|doncaster', GEOGRAPHY_NAME, ignore.case = T)) %>% 
+  group_by(C2021_AGE_7_NAME,C2021_EASTAT_7_NAME) %>% 
+  summarise(OBS_VALUE = sum(OBS_VALUE)) %>% 
+  mutate(GEOGRAPHY_NAME = 'South Yorkshire')
+
+#Append and drop SBDR
+SY.ALL.LAS.chk <- SY.ALL.LAS.chk %>% 
+  filter(!grepl('sheff|rother|barnsley|doncaster', GEOGRAPHY_NAME, ignore.case = T)) %>% 
+  rbind(sy.agecrosstab.chk)
 
 
 
+#Repeat calcs
+SY.ALL.LAS.econ_active_age_comp_nostudents.chk <- SY.ALL.LAS.chk %>% 
+  group_by(GEOGRAPHY_NAME,C2021_AGE_7_NAME) %>% 
+  mutate(
+    WITHINAGEGROUP_TOTALS = sum(OBS_VALUE)
+  ) %>% 
+  ungroup() %>% 
+  mutate(WITHINAGEGROUP_PERCENT = (OBS_VALUE/WITHINAGEGROUP_TOTALS) * 100)
 
+#Check that worked... tick
+SY.ALL.LAS.econ_active_age_comp_nostudents.chk %>% 
+  group_by(GEOGRAPHY_NAME,C2021_AGE_7_NAME) %>% 
+  summarise(sum(WITHINAGEGROUP_PERCENT))
+
+
+#Plot
+ggplot(SY.ALL.LAS.econ_active_age_comp_nostudents.chk, aes(x = WITHINAGEGROUP_PERCENT)) +
+  geom_density(fill = 'grey', alpha = 0.5) +
+  geom_vline(
+    data  = SY.ALL.LAS.econ_active_age_comp_nostudents.chk %>% filter(GEOGRAPHY_NAME == 'South Yorkshire'),
+    aes(xintercept = WITHINAGEGROUP_PERCENT, colour = GEOGRAPHY_NAME)
+  ) +
+  stat_summary(aes(xintercept = ..x.., y = 0), fun = mean, geom = "vline", orientation = "y", size = 2, alpha = 0.25) +#https://stackoverflow.com/a/73185398/5023561
+  facet_wrap(~C2021_EASTAT_7_NAME+C2021_AGE_7_NAME, scales = 'free', nrow=2)
 
 
 

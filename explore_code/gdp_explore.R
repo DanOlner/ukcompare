@@ -562,8 +562,10 @@ p <- ggplot(pip, aes(x = measure, y = value, group = Place, colour = SCR, alpha 
   coord_flip() +
   xlab('') + ylab('index value (UK average is 100)')
   
-ggplotly(p, tooltip = 'Place')
+p <- ggplotly(p, tooltip = 'Place')
 
+#Makes horrible separate folder for libraries, but works (manual export via RStudio puts in single html script)
+htmlwidgets::saveWidget(as_widget(p), "docs/plotly/pip_chart.html")
 
 
 

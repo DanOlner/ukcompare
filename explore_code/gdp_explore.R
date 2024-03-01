@@ -537,5 +537,43 @@ sy_gdp_cp_2021 * 0.03 *1000000
 
 
 
+#CRESR PRODUCTIVTY----
+
+#Table pulled from this report:
+#The productivity of industries and places, Christina Beatty Steve Fothergill 2020
+#https://www.shu.ac.uk/centre-regional-economic-social-research/publications/the-productivity-of-industries-and-places
+
+#Drop UK, can assume that's the av and add line
+pip <- read_csv('data/productivity-industries-places.csv') %>% filter(Place!='United Kingdom')
+
+#Get factor order from column order before converting to long
+measure_factororder = names(pip)[2:9]
+
+pip <- pip %>% 
+  pivot_longer(cols = 2:9, names_to = "measure", values_to = "value") %>% 
+  mutate(measure = factor(measure, ordered = T, levels = measure_factororder)) %>% 
+  mutate(SCR = ifelse(Place == 'Sheffield City Region', T,F))
+
+p <- ggplot(pip, aes(x = measure, y = value, group = Place, colour = SCR, alpha = SCR)) +
+  geom_jitter(width = 0.1, size = 3) +
+  geom_hline(yintercept = 100, colour = 'red', size = 3, alpha = 0.25) +
+  scale_colour_manual(values = c('black','red')) +
+  scale_alpha_manual(values = c(0.5,1)) +
+  coord_flip() +
+  xlab('') + ylab('index value (UK average is 100)')
+  
+ggplotly(p, tooltip = 'Place')
+
+
+
+
+
+
+
+
+
+
+
+
 
 

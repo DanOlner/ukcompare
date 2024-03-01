@@ -364,7 +364,7 @@ ggplot(SY.plus.ALL.LAS.econ_active.nostudents, aes(x = PERCENT_MINUS_STUDENTS)) 
   ) +
   stat_summary(aes(xintercept = ..x.., y = 0), fun = mean, geom = "vline", orientation = "y", size = 2, alpha = 0.25) +#https://stackoverflow.com/a/7318539
   facet_wrap(~C2021_EASTAT_20_NAME, scales = 'free') +
-  ggtitle('Economic activity percents excluding FT students, , sums to 100% in each authority across all 6 plots\nDensity for Eng/Wales authorities, Grey line is mean, red line is South Yorkshire\nPROPORTION OF EMPLOYED VS UNEMPLOYED (BUT ECON ACTIVE)')
+  ggtitle('Economic activity percents excluding FT students, sums to 100% in each authority across all 6 plots\nDensity for Eng/Wales authorities, Grey line is mean, red line is South Yorkshire\nPROPORTION OF EMPLOYED VS UNEMPLOYED (BUT ECON ACTIVE)')
 
 ggsave('images/econ_activity_sy_percents_singlevar.png', width = 16, height = 9)
 

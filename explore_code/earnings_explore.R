@@ -164,6 +164,9 @@ fourplaces <- fourplaces %>%
     # conf_max95 = Value + (Value * (Confidence/100) * 1.96)
       )
 
+#save that for elsewhere
+write_csv(fourplaces,'data/SY_earnings_percentiles_2023.csv')
+
 percentiles <- fourplaces %>% 
   filter(
     grepl('percentile',ITEM_NAME),

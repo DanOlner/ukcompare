@@ -419,7 +419,25 @@ extraworkers <- sy.sick.count - sy.LLTI.count.ifav
 # Level 4 qualifications or above                 774.
 
 #Relies on earnings_explore code results still in memory
+
+#Get four places total in employment numbers
+total.4places <- resultsummary %>% 
+  select(place,total_inemployment) %>% 
+  group_by(place) %>% 
+  summarise(total_inemployment = sum(total_inemployment))
+
+#Add in row for median wage
+#Loead earnings data and use median that's already in there
+#Change col names to match below for merging
+median.earnings <- read_csv('data/SY_earnings_percentiles_2023.csv') %>% 
+  filter(ITEM_NAME == 'Median', PAY_NAME == 'Weekly pay - gross') %>%
+  select(place = GEOGRAPHY_NAME, qual_level = ITEM_NAME, meanval = Value) %>% 
+  left_join(total.4places, by = 'place')#this may missing apprenticeship count but will affect overall result a tiny amount
+  
+
 weightedwages <- resultsummary %>% 
+  select(qual_level, meanval, total_inemployment) %>% 
+  rbind(median.earnings) %>% #Add in medians
   group_by(qual_level) %>% 
   summarise(weighted.mean = weighted.mean(meanval,w = total_inemployment)) %>% 
   mutate(ifLLTIwasaverage_weeklyextraearnings = weighted.mean * extraworkers)

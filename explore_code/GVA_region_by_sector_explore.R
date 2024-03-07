@@ -104,15 +104,15 @@ itl1.hluk <- itl1 %>%
 
 #Break down into sector size tranches and facet
 #Use sizes in most recent year
-sectorsizes <- itl1.hluk %>% 
-  group_by(`SIC07 code`) %>% 
-  summarise(av = mean(value)) %>% 
-  mutate(group = as.integer(cut_number(av, n = 5)))
+# sectorsizes <- itl1.hluk %>% 
+#   group_by(`SIC07 code`) %>% 
+#   summarise(av = mean(value)) %>% 
+#   mutate(group = as.integer(cut_number(av, n = 5)))
 
 #Or size of sector for most recent value, which might make more sense than average for viewing
 sectorsizes <- itl1.hluk %>% 
-  filter(year == 2021) %>% 
-  mutate(group = as.integer(cut_number(value, n = 5)))
+  filter(year == 2019) 
+# %>% mutate(group = as.integer(cut_number(value, n = 5)))
 
 #While we're here... what are proportions?
 sectorsizes$percent <- (sectorsizes$value / sum(sectorsizes$value))*100
@@ -6047,9 +6047,22 @@ itl2.cps %>% filter(
 
 
 itl2.cps.proporder <- itl2.cps %>% filter(
-  grepl(x = ITL_region_name, pattern = 'Manc'),
-  # grepl(x = ITL_region_name, pattern = 'South Y'),
+  # grepl(x = ITL_region_name, pattern = 'Manc'),
+  grepl(x = ITL_region_name, pattern = 'South Y'),
+  # year == 2021
+  year == 2015
+) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(SIC07_description,regional_percent, LQ) %>% 
+  arrange(-regional_percent) %>% 
+  slice(1:length(unique(itl2.cps$SIC07_description)))
+
+
+itl2.cps %>% filter(
+  # grepl(x = ITL_region_name, pattern = 'Manc'),
+  grepl(x = ITL_region_name, pattern = 'South Y'),
   year == 2021
+  # year == 2019
 ) %>% 
   mutate(regional_percent = sector_regional_proportion *100) %>% 
   select(SIC07_description,regional_percent, LQ) %>% 
@@ -6058,9 +6071,92 @@ itl2.cps.proporder <- itl2.cps %>% filter(
 
 
 
+#Checking size changes
+#Current prices
+itl2.cps %>% filter(
+  grepl(x = ITL_region_name, pattern = 'South Y'),
+  # grepl(x = SIC07_description, pattern = 'Information')
+  grepl(x = SIC07_description, pattern = 'health', ignore.case=T)) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(year,SIC07_description,value,regional_percent, LQ) %>% 
+  arrange(year) %>% 
+  print(n = 25)
+
+
+#Chained volume 20 sectors
+itl2.gvaperjob %>% 
+  filter(
+    grepl(x = ITL_region_name, pattern = 'South Y'),
+    grepl(x = SIC07_description, pattern = 'Information')
+    # grepl(x = SIC07_description, pattern = 'Manuf')
+  ) %>% 
+  print(n = 25)
+
+
+itl2.gvaperjob %>% filter(
+  grepl(x = ITL_region_name, pattern = 'South Y'),
+  # grepl(x = SIC07_description, pattern = 'Information')
+  grepl(x = SIC07_description, pattern = 'health', ignore.case=T)) %>% 
+  select(year,SIC07_description,gva) %>% 
+  arrange(year) %>% 
+  print(n = 25)
 
 
 
+#Check these numbers from PfG, think they're wrong
+#"There are over 1,800 businesses in the health sector in South Yorkshire, which has nearly 90,000 employees, making it greater as a proportion of workers than that in Greater Cambridge, West Yorkshire, London, and Oxfordshire. In 2019, it represented £3.34 billion (12.3%) of GVA – considerably higher than the national share (8.6%)."
+
+#Chained volume for money amount (is in 2019 prices), current prices for %.
+#CP for national share. Which I can pull out separately right?
+
+#Get national level current prices
+itl1.cp <- read_csv('data/sectors/Table 1c ITL1 UK current price estimates pounds million.csv')
+
+names(itl1.cp) <- gsub(x = names(itl1.cp), pattern = ' ', replacement = '_')
+
+#Use different df to get the twenty sections easily (not the same match with this one, other spaces)
+cvSICkeeps <- itl2.cv$SIC07_code[substr(itl2.cv$SIC07_code,2,2) == ' '] %>% unique
+
+#Filter out duplicate value rows and make long by year
+#Also convert year to numeric
+itl1.cp <- itl1.cp %>% 
+  filter(SIC07_code %in% cvSICkeeps, ITL_region_name == 'United Kingdom') %>% 
+  pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'value') %>% 
+  mutate(year = as.numeric(year))
+
+#Get by year percentages of whole
+itl1.cp <- itl1.cp %>% 
+  group_by(year) %>% 
+  mutate(sector_percent = (value / sum(value)) * 100)
+
+#Sanity check. Tick.
+itl1.cp %>% 
+  group_by(year) %>% 
+  summarise(sum(sector_percent))
+
+#So, health in 2019 percent
+itl1.cp %>% filter(year == 2019, grepl('health',SIC07_description,ignore.case = T)) %>% select(sector_percent) %>% pull
+
+
+#Then, confirm health % in current prices in South Yorkshire
+itl2.cps %>% filter(
+  # grepl(x = ITL_region_name, pattern = 'Manc'),
+  grepl(x = ITL_region_name, pattern = 'South Y'),
+  # year == 2021
+  year == 2019
+) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(SIC07_description,regional_percent, LQ) %>% 
+  arrange(-regional_percent) %>% #stop here to get full list
+  filter(grepl('health',SIC07_description,ignore.case = T)) %>% select(regional_percent) %>% pull
+
+
+
+#Then, health money amount in chained volume measure
+itl2.cvs %>% 
+  filter(year == 2019, grepl('health',SIC07_description,ignore.case = T), grepl('south y',ITL_region_name,ignore.case = T)) %>% 
+  select(value) %>% pull
+  
 
 
 

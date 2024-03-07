@@ -25,6 +25,7 @@ gdp.itl2 <- read_csv('data/Table 10 Gross Domestic Product chained volume measur
 
 
 #Though if we're only doing a point estimate and don't need a slope, then current prices would be fine and better?
+#At least if finding proportions
 gdp.cp.itl2 <- read_csv('data/Table 5 GDP at current market prices pounds million.csv') %>% 
   rename(ITLcode = `ITL code`, region = `Region name`) %>% 
   filter(ITL == 'ITL2') %>% 
@@ -137,7 +138,7 @@ ggplotly(p, tooltip = 'region')
 
 
 #GETTING BASIC IF THENS ON GROWTH
-#If SY was as large as England av, and England av minus London, how much bigger would it be? (And Northern av?
+#If SY was as large as England av, and England av minus London, how much bigger would it be? (And Northern av?)
 #Which just involves comparing per job / hour proportions and their change
 
 #I want some smoothing though. For doing size comparisons, might be worth trying a few things
@@ -474,7 +475,7 @@ weightedaverages.perhourworked.north <- perhourworked %>% filter(year == 2021) %
 
 #Sanity check the weighted average manually, check with london
 #TICK
-chk <- weightedaverages.perhourworked <- perhourworked %>% filter(year == 2021) %>% 
+chk <- perhourworked %>% filter(year == 2021) %>% 
   left_join(
     totalhoursperweek.itl2 %>% filter(year == 2021) %>% select(region,hours_per_week,UK_minus_london),
     by = 'region'

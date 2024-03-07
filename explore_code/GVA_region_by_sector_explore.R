@@ -6066,7 +6066,8 @@ itl2.cps %>% filter(
 ) %>% 
   mutate(regional_percent = sector_regional_proportion *100) %>% 
   select(SIC07_description,regional_percent, LQ) %>% 
-  arrange(-regional_percent) %>% 
+  # arrange(-LQ) %>% 
+  arrange(-regional_percent) %>%
   slice(1:length(unique(itl2.cps$SIC07_description)))
 
 
@@ -6157,6 +6158,97 @@ itl2.cvs %>%
   filter(year == 2019, grepl('health',SIC07_description,ignore.case = T), grepl('south y',ITL_region_name,ignore.case = T)) %>% 
   select(value) %>% pull
   
+
+
+
+#Make a little current size of economy plot
+#Let's try to get jobs and GVA proportion for rest of UK vs SY in there
+#For some key sectors
+
+#Getting LQs for 20 sections
+place = 'South Yorkshire'
+
+p <- twod_proportionplot(
+  df = itl2.cps,
+  x_regionnames = place, 
+  y_regionnames = unique(itl2.cps$ITL_region_name[itl2.cps$ITL_region_name != place]),
+  regionvar = ITL_region_name,
+  category_var = SIC07_description, 
+  valuevar = value, 
+  timevar = year, 
+  start_time = 2015, 
+  end_time = 2021 
+  # compasspoints_to_display = c('SE','NE')
+)
+
+#add some extras
+p <- p + 
+  xlab(paste0(place, ' GVA proportion')) +
+  ylab(paste0('UK GVA proportion (MINUS ',place,')')) 
+  # coord_fixed(xlim = c(0.1,12), ylim = c(0.1,12)) +  # good for log scale
+  # scale_y_log10() +
+  # scale_x_log10()
+
+p
+
+
+#Get data from that to make a simpler plot and add in employment numbers
+d <- return_compasspoints(
+  df = itl2.cps,
+  x_regionnames = place, 
+  y_regionnames = unique(itl2.cps$ITL_region_name[itl2.cps$ITL_region_name != place]),
+  regionvar = ITL_region_name,
+  category_var = SIC07_description, 
+  valuevar = value, 
+  timevar = year, 
+  start_time = 2015, 
+  end_time = 2021 
+  # compasspoints_to_display = c('SE','NE')
+)
+
+d <- d %>% 
+  left_join(
+    itl2.gvaperjob %>% filter(ITL_region_name == place, year == 2021) %>% select(SIC07_description, jobcount),#This has job counts in
+    by = 'SIC07_description'
+  ) %>% filter(SIC07_description!='Activities of households') %>% ungroup() %>% 
+  mutate(
+    x_sector_percent = x_sector_total_proportion * 100,
+    y_sector_percent = y_sector_total_proportion * 100,
+    INDUSTRY_NAME_REDUCED = gsub(x = SIC07_description, pattern = 'of |and |activities|equipment|products', replacement = '')
+  )
+
+
+#Plot subset
+ggplot(d %>% filter(x_sector_percent > 4, SIC07_description!='Real estate activities'), aes(x = x_sector_percent, y = y_sector_percent, size = jobcount)) +
+  geom_point() +
+  geom_abline(slope = 1, size = 1, colour='blue', alpha = 0.5) +
+  coord_fixed(xlim = c(4,12.6), ylim = c(4,12.6)) +
+  geom_text_repel(
+    aes(label = paste0(INDUSTRY_NAME_REDUCED, "\n(",jobcount," jobs)")),
+    # aes(label = paste0(SIC07_description, "\n(",round(x_sector_total_proportion * 100,2),"%,",round(y_sector_total_proportion * 100,2),"%)")),
+    alpha=1,
+    nudge_x = .05,
+    box.padding = 1,
+    nudge_y = 0.05,
+    segment.curvature = -0.1,
+    segment.ncp = 0.3,
+    segment.angle = 20,
+    max.overlaps = 20,
+    size = 4
+    ) +
+  scale_size(range = c(2,10)) +
+  guides(size = F) +
+  xlab(paste0(place, ' GVA percentage')) +
+  ylab(paste0('UK GVA percentage (MINUS ',place,')')) +
+  theme_bw()
+  
+
+
+
+
+
+
+
 
 
 

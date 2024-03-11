@@ -5874,8 +5874,6 @@ for(sector in unique(itl3.cv2digit$SIC07_description)){
 #Ideally for raw GVA and then GVA per job
 #Can potentially do for different CIs
 
-
-#this is how it worked
 slopes.log1521 <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2015:2021), ITL_region_name,SIC07_description, y = log(value), x = year)
 slopes.log1319 <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2013:2019), ITL_region_name,SIC07_description, y = log(value), x = year)
 
@@ -5886,7 +5884,7 @@ p + coord_fixed()
 confinteral = 95
 
 #Ah, good ol' past me put this in (returnddata = T)
-slopes.data <- slopeDiffGrid(slope_df = slopes.log1521, confidence_interval = confinteral, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'South Yorkshire', returndata = T)
+slopes.data <- slopeDiffGrid(slope_df = slopes.log1319, confidence_interval = confinteral, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'South Yorkshire', returndata = T)
 
 
 #Just need to count CIs overlap along one dimension of the grid (i.e. not its inverse at 90 degrees). 
@@ -6041,28 +6039,15 @@ ggplot() +
   # scale_fill_brewer(palette = 'Dark2', direction = 1) +
   scale_fill_brewer(palette = 'Paired', direction = 1) +
   coord_flip() +
+  theme_bw() +
   theme(
-    axis.text.y = element_text(colour = slopecolours_y)
-  )
-# ggplot() +
-#   geom_bar(data = allslopecounts %>% filter(slopetype == 'sig neg', sector!= 'Real estate activities', regional_percent > 2), 
-#            aes(x = paste0(sector,' (',slopetwo_percent,'% CI: ',min.citwo_percent,'%,',max.citwo_percent,'%)'), 
-#                y = -percent, fill = source), stat = 'identity', position = 'dodge', alpha = 0.7) +
-#   geom_bar(data = allslopecounts %>% filter(slopetype == 'sig pos', sector!= 'Real estate activities', regional_percent > 2), 
-#            aes(x = paste0(sector,' (',slopetwo_percent,'% CI: ',min.citwo_percent,'%,',max.citwo_percent,'%)'), 
-#                y = percent, fill = source), stat = 'identity', position = 'dodge') +
-#   geom_hline(yintercept = 0, size = 2) +
-#   # scale_fill_distiller(type = 'qual', direction = -1) +
-#   # scale_fill_brewer(palette = 'Dark2', direction = 1) +
-#   scale_fill_brewer(palette = 'Paired', direction = 1) +
-#   coord_flip() +
-#   theme(
-#     axis.text.y = element_text(colour = slopecolours_y)
-#   )
-  
+    axis.text.y = element_text(colour = slopecolours_y),
+    legend.title = element_blank()
+  ) +
+  ylab('negative << Percent of slopes with significant differences >> positive') +
+  xlab('Sector (text gives yearly change + 95% confidence intervals, bold text are significant trends)') 
 
-
-
+ggsave('local/localimages/gvaslope_sigcountplot.png', width = 10, height = 7)
 
 
 

@@ -287,9 +287,11 @@ SICremoves = c(
 #Given that - the GVA current price values actually sum correctly across industries and within regions (unlike volume-chained)
 itl2.cp <- read_csv('data/sectors/Table 2c ITL2 UK current price estimates pounds million.csv')
 
+names(itl2.cp) <- gsub(x = names(itl2.cp), pattern = ' ', replacement = '_')
+
 #Filter out duplicate value rows and make long by year
 #Also convert year to numeric
-itl2.cp <- itl2.cp %>% filter(!`SIC07 code` %in% SICremoves) %>% 
+itl2.cp <- itl2.cp %>% filter(!SIC07_code %in% SICremoves) %>% 
   pivot_longer(`1998`:`2021`, names_to = 'year', values_to = 'value') %>% 
   mutate(year = as.numeric(year))
 
@@ -344,12 +346,12 @@ itl2.cp <- itl2.cp %>%
 
 #For regional proportion calc, Add values for calc steps into the same DF
 itl2.cp <- itl2.cp %>%
-  group_by(`ITL region name`, year) %>% 
+  group_by(ITL_region_name, year) %>% 
   mutate(
     region_totalsize = sum(value, na.rm = T),#a. Current price per region per year, for regional denominator
     sector_regional_proportion = value / region_totalsize#b. regional sector proportion (noting that a single row in this group is a single sector)
     ) %>% 
-  group_by(year, `SIC07 code`) %>% 
+  group_by(year, SIC07_code) %>% 
   mutate(
     uk_sectorsize = sum(value, na.rm = T),#c. Summed current prices for EACH SECTOR, UK-wide
     ) %>% 
@@ -5861,6 +5863,209 @@ for(sector in unique(itl3.cv2digit$SIC07_description)){
 
 
 
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#GVA SLOPES: COUNT THEM, FIND PROPORTIONS, COMBINE----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Use the slope diff grids to count which are statistically higher or lower than others
+#Both within SY and compared to elsewhere
+#And make proportion plots, counting up which sectors stand out in their growth slopes
+#Ideally for raw GVA and then GVA per job
+#Can potentially do for different CIs
+
+
+#this is how it worked
+slopes.log1521 <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2015:2021), ITL_region_name,SIC07_description, y = log(value), x = year)
+slopes.log1319 <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2013:2019), ITL_region_name,SIC07_description, y = log(value), x = year)
+
+p <- slopeDiffGrid(slope_df = slopes.log1521, confidence_interval = 95, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'South Yorkshire')
+
+p + coord_fixed()
+
+confinteral = 95
+
+#Ah, good ol' past me put this in (returnddata = T)
+slopes.data <- slopeDiffGrid(slope_df = slopes.log1521, confidence_interval = confinteral, column_to_grid = SIC07_description, column_to_filter = ITL_region_name, filterval = 'South Yorkshire', returndata = T)
+
+
+#Just need to count CIs overlap along one dimension of the grid (i.e. not its inverse at 90 degrees). 
+#So need the correct unique pairs don't we?
+#gridcol2 is on the y axis and has the 'if this sector positively different, show green' values.
+#Same values then - it's just for gridcol2 sectors or places that we're counting the number of sigs
+#Trickier for all sectors for all places, different loop needed to pull out SY, but step at a time
+sy_slopediffcount <- slopes.data %>% 
+  mutate(slopetype = case_when(
+    !CIs_overlap & slopediff > 0 ~ 'sig pos',
+    !CIs_overlap & slopediff < 0 ~ 'sig neg',
+    .default = "not sig"
+  )) %>% 
+  mutate(slopetype = factor(slopetype, levels = c('sig pos','sig neg','not sig'))) %>% 
+  # mutate(slopetype = factor(slopetype)) %>% 
+  group_by(gridcol2,slopetype) %>% 
+  summarise(count = n()) %>% 
+  complete(slopetype, fill = list(count = 0)) %>% 
+  group_by(gridcol2) %>% 
+  mutate(percent = (count / sum(count)) * 100) %>% 
+    mutate(source = 'SY internal')
+
+
+
+#For SY vs places, bit trickier. Have to run for each sector and pull out SY values each time
+getsectorslopecounts <- function(sector){
+  
+  slopes.data <- slopeDiffGrid(slope_df = slopes.log1521, confidence_interval = confinteral, column_to_grid = ITL_region_name, column_to_filter = SIC07_description, filterval = sector, returndata = T)
+  
+  #Again pulling out values from grid2 perspective, for South Yorkshire each time
+  slopes.data <- slopes.data %>% filter(gridcol2 == 'South Yorkshire')
+  
+  #Now count slopes in same way
+  sector_slopediffcount <- slopes.data %>% 
+    mutate(slopetype = case_when(
+      !CIs_overlap & slopediff > 0 ~ 'sig pos',
+      !CIs_overlap & slopediff < 0 ~ 'sig neg',
+      .default = "not sig"
+    )) %>% 
+    mutate(slopetype = factor(slopetype, levels = c('sig pos','sig neg','not sig'))) %>% 
+    group_by(slopetype) %>% 
+    summarise(count = n()) %>% 
+    complete(slopetype, fill = list(count = 0)) %>% 
+    mutate(percent = (count / sum(count)) * 100) %>% 
+    mutate(gridcol2 = sector, source = 'SY to other places')#add in sector name
+  
+}
+
+allsectorslopecounts <- purrr::map(unique(slopes.log1319$SIC07_description), getsectorslopecounts) %>% bind_rows()
+
+
+#both
+allslopecounts <- rbind(sy_slopediffcount,allsectorslopecounts) %>% rename(sector = gridcol2) 
+
+#Do separately to make bespoke factor order from subset
+# allslopecounts <- allslopecounts %>% mutate(
+#     sector = factor(sector, ordered = T, levels = unique(itl2.cvs$SIC07_description)[order(allslopecounts %>% filter(slopetype=='sig pos', source == 'SY to other places') %>% select(percent) %>% ungroup() %>% pull)]),
+#   )
+
+#order(allslopecounts %>% filter(slopetype=='sig pos', source == 'SY to other places') %>% select(percent) %>% ungroup() %>% pull)
+
+
+#For version where only >2% of economy per sector. Or label and split
+ordered.itl2.cps <- itl2.cps %>% filter(
+  # grepl(x = ITL_region_name, pattern = 'Manc'),
+  grepl(x = ITL_region_name, pattern = 'South Y'),
+  year == 2021
+  # year == 2019
+) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(SIC07_description,regional_percent, LQ) %>% 
+  # arrange(-LQ) %>% 
+  arrange(-regional_percent) %>%
+  slice(1:length(unique(itl2.cps$SIC07_description))) %>% 
+  rename(sector = SIC07_description)
+
+
+allslopecounts <- allslopecounts %>% 
+  left_join(ordered.itl2.cps, by = 'sector') %>% 
+  mutate(lessthan2percent = ifelse(regional_percent < 2, 'Less than 2% GVA', 'More than 2% GVA')) 
+
+#Add slope colours and values back in then use for axis text as in grids
+#Slopes match to sectors, so can take from any source with those in here
+allslopecounts <- allslopecounts %>% 
+  left_join(
+    slopes.data %>% select(gridcol2,slopecolour_y,slopetwo_percent,min.citwo_percent,max.citwo_percent) %>% distinct(gridcol2, .keep_all = T) %>% rename(sector = gridcol2), by = 'sector'
+    ) %>% 
+  ungroup() %>% 
+  mutate(
+    sector = gsub(x = sector, pattern = ' and ', replacement = ' / '),
+    sector = gsub(x = sector, pattern = 'of |activities|equipment|products', replacement = '')
+  ) 
+
+
+# #Get values of percent for correct unique order for factor
+# o <- allslopecounts %>% filter(slopetype=='sig pos', source == 'SY to other places') %>% select(count) %>% ungroup() %>% pull
+# order(o)
+# sort(o)
+# 
+# View(allslopecounts %>% filter(slopetype=='sig pos', source == 'SY to other places'))
+# 
+# View(data.frame(o,order(o)))
+# 
+# x = sample.int(10, 10, replace = F)
+# View(data.frame(x,order(x)))
+# x = runif(10)
+# View(data.frame(x,order(x)))
+
+
+allslopecounts <- allslopecounts %>% 
+  mutate(
+    sector = paste0(sector,' (',slopetwo_percent,'% CI: ',min.citwo_percent,'%,',max.citwo_percent,'%)'),
+    sector = factor(sector, ordered = T, levels = unique(sector)[order(allslopecounts %>% filter(slopetype=='sig pos', source == 'SY to other places') %>% arrange(sector) %>% select(count) %>% pull)])
+  )#loses factor
+
+
+# unique(allslopecounts$sector)[order(allslopecounts %>% filter(slopetype=='sig pos', source == 'SY to other places') %>% select(percent) %>% ungroup() %>% pull)]
+
+
+
+
+#Plot. One for neg one for pos
+# ggplot() +
+#   geom_bar(data = allslopecounts %>% filter(slopetype == 'sig neg', sector!= 'Real estate activities'), aes(x = sector, y = -percent, fill = source), stat = 'identity', position = 'dodge', alpha = 0.7) +
+#   geom_bar(data = allslopecounts %>% filter(slopetype == 'sig pos', sector!= 'Real estate activities'), aes(x = sector, y = percent, fill = source), stat = 'identity', position = 'dodge') +
+#   geom_hline(yintercept = 0, size = 2) +
+#   # scale_fill_distiller(type = 'qual', direction = -1) +
+#   # scale_fill_brewer(palette = 'Dark2', direction = 1) +
+#   scale_fill_brewer(palette = 'Paired', direction = 1) +
+#   coord_flip() +
+#   facet_wrap(~lessthan2percent, ncol = 1, scales = 'free_y')
+
+
+
+#Removing < 2%
+
+#Pull out slope colours
+slopecolours_y <- allslopecounts %>% 
+  filter(slopetype == 'sig neg', !grepl('Real estate',sector,ignore.case = T), regional_percent > 2) %>% 
+  distinct(sector, .keep_all = T) %>% 
+  arrange(sector) %>% #will arrange by factor
+  select(slopecolour_y) %>% 
+  pull
+
+ggplot() +
+  geom_bar(data = allslopecounts %>% filter(slopetype == 'sig neg', !grepl('Real estate',sector,ignore.case = T), regional_percent > 2), 
+           aes(x = sector, y = -percent, fill = source), stat = 'identity', position = 'dodge', alpha = 0.7) +
+  geom_bar(data = allslopecounts %>% filter(slopetype == 'sig pos', !grepl('Real estate',sector,ignore.case = T), regional_percent > 2), 
+           aes(x = sector, y = percent, fill = source), stat = 'identity', position = 'dodge') +
+  geom_hline(yintercept = 0, size = 2) +
+  # scale_fill_distiller(type = 'qual', direction = -1) +
+  # scale_fill_brewer(palette = 'Dark2', direction = 1) +
+  scale_fill_brewer(palette = 'Paired', direction = 1) +
+  coord_flip() +
+  theme(
+    axis.text.y = element_text(colour = slopecolours_y)
+  )
+# ggplot() +
+#   geom_bar(data = allslopecounts %>% filter(slopetype == 'sig neg', sector!= 'Real estate activities', regional_percent > 2), 
+#            aes(x = paste0(sector,' (',slopetwo_percent,'% CI: ',min.citwo_percent,'%,',max.citwo_percent,'%)'), 
+#                y = -percent, fill = source), stat = 'identity', position = 'dodge', alpha = 0.7) +
+#   geom_bar(data = allslopecounts %>% filter(slopetype == 'sig pos', sector!= 'Real estate activities', regional_percent > 2), 
+#            aes(x = paste0(sector,' (',slopetwo_percent,'% CI: ',min.citwo_percent,'%,',max.citwo_percent,'%)'), 
+#                y = percent, fill = source), stat = 'identity', position = 'dodge') +
+#   geom_hline(yintercept = 0, size = 2) +
+#   # scale_fill_distiller(type = 'qual', direction = -1) +
+#   # scale_fill_brewer(palette = 'Dark2', direction = 1) +
+#   scale_fill_brewer(palette = 'Paired', direction = 1) +
+#   coord_flip() +
+#   theme(
+#     axis.text.y = element_text(colour = slopecolours_y)
+#   )
+  
+
+
+
+
+
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #BASIC PROPORTIONS FOR ITL3 AND 20 SIC SECTIONS----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -6058,6 +6263,7 @@ itl2.cps.proporder <- itl2.cps %>% filter(
   slice(1:length(unique(itl2.cps$SIC07_description)))
 
 
+#Ordered SIC sections
 itl2.cps %>% filter(
   # grepl(x = ITL_region_name, pattern = 'Manc'),
   grepl(x = ITL_region_name, pattern = 'South Y'),
@@ -6069,6 +6275,24 @@ itl2.cps %>% filter(
   # arrange(-LQ) %>% 
   arrange(-regional_percent) %>%
   slice(1:length(unique(itl2.cps$SIC07_description)))
+
+
+
+#Larger number of SIC sectors plz
+itl2.cp %>% filter(
+  # grepl(x = ITL_region_name, pattern = 'Manc'),
+  grepl(x = ITL_region_name, pattern = 'South Y'),
+  year == 2021
+  # year == 2019
+) %>% 
+  mutate(regional_percent = sector_regional_proportion *100) %>% 
+  select(SIC07_description,regional_percent, LQ) %>% 
+  # arrange(-LQ) %>% 
+  arrange(-regional_percent) %>%
+  slice(1:length(unique(itl2.cps$SIC07_description)))
+
+
+
 
 
 
@@ -6168,24 +6392,34 @@ itl2.cvs %>%
 #Getting LQs for 20 sections
 place = 'South Yorkshire'
 
+#Let's get a smooth moving average for GVA plotting of growth movement
+itl2.cps <- itl2.cps %>% 
+  group_by(ITL_region_name,SIC07_description) %>% 
+  arrange(year) %>% 
+  mutate(gva_movingav = rollapply(value,3,mean,align='center',fill=NA)) %>% 
+  ungroup()
+
+unique(itl2.cps$year[!is.na(itl2.cps$gva_movingav)])
+
 p <- twod_proportionplot(
   df = itl2.cps,
   x_regionnames = place, 
   y_regionnames = unique(itl2.cps$ITL_region_name[itl2.cps$ITL_region_name != place]),
   regionvar = ITL_region_name,
   category_var = SIC07_description, 
-  valuevar = value, 
+  valuevar = gva_movingav, 
   timevar = year, 
-  start_time = 2015, 
-  end_time = 2021 
+  start_time = 2008, 
+  end_time = 2018,
+  sectors_to_display = unique(itl2.cps$SIC07_description)[grepl(pattern = 'wholesale|manuf|health|financ|constr|educ|admin|inform|profes', x = unique(itl2.cps$SIC07_description), ignore.case = T)]
   # compasspoints_to_display = c('SE','NE')
 )
 
 #add some extras
 p <- p + 
   xlab(paste0(place, ' GVA proportion')) +
-  ylab(paste0('UK GVA proportion (MINUS ',place,')')) 
-  # coord_fixed(xlim = c(0.1,12), ylim = c(0.1,12)) +  # good for log scale
+  ylab(paste0('UK GVA proportion (MINUS ',place,')')) +
+  coord_fixed(xlim = c(4,12.6), ylim = c(4,12.6))
   # scale_y_log10() +
   # scale_x_log10()
 
@@ -6214,7 +6448,8 @@ d <- d %>%
   mutate(
     x_sector_percent = x_sector_total_proportion * 100,
     y_sector_percent = y_sector_total_proportion * 100,
-    INDUSTRY_NAME_REDUCED = gsub(x = SIC07_description, pattern = 'of |and |activities|equipment|products', replacement = '')
+    INDUSTRY_NAME_REDUCED = gsub(x = SIC07_description, pattern = ' and ', replacement = ' / '),
+    INDUSTRY_NAME_REDUCED = gsub(x = INDUSTRY_NAME_REDUCED, pattern = 'of |activities|equipment|products', replacement = '')
   )
 
 
@@ -6241,8 +6476,8 @@ ggplot(d %>% filter(x_sector_percent > 4, SIC07_description!='Real estate activi
   xlab(paste0(place, ' GVA percentage')) +
   ylab(paste0('UK GVA percentage (MINUS ',place,')')) +
   theme_bw()
-  
 
+ggsave('local/localimages/SY_gva_percent_vs_restofUK.png', width = 7, height = 7)  
 
 
 

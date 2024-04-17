@@ -6394,17 +6394,20 @@ p <- twod_proportionplot(
   category_var = SIC07_description, 
   valuevar = gva_movingav, 
   timevar = year, 
-  start_time = 2008, 
-  end_time = 2018,
-  sectors_to_display = unique(itl2.cps$SIC07_description)[grepl(pattern = 'wholesale|manuf|health|financ|constr|educ|admin|inform|profes', x = unique(itl2.cps$SIC07_description), ignore.case = T)]
-  # compasspoints_to_display = c('SE','NE')
+  start_time = 1999, 
+  end_time = 2006,
+  # start_time = 2008, 
+  # end_time = 2019
+  # sectors_to_display = unique(itl2.cps$SIC07_description)[grepl(pattern = 'wholesale|manuf|health|financ|constr|educ|admin|inform|profes', x = unique(itl2.cps$SIC07_description), ignore.case = T)]
+  # compasspoints_to_display = c('SW')
+  compasspoints_to_display = c('NE')
 )
 
 #add some extras
 p <- p + 
   xlab(paste0(place, ' GVA proportion')) +
-  ylab(paste0('UK GVA proportion (MINUS ',place,')')) +
-  coord_fixed(xlim = c(4,12.6), ylim = c(4,12.6))
+  ylab(paste0('UK GVA proportion (MINUS ',place,')'))
+  # coord_fixed(xlim = c(4,12.6), ylim = c(4,12.6))
   # scale_y_log10() +
   # scale_x_log10()
 
@@ -6466,8 +6469,11 @@ ggsave('local/localimages/SY_gva_percent_vs_restofUK.png', width = 7, height = 7
 
 
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#LOOK FOR STRUCTURAL CHANGE IN 20 SECTIONS----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
+#For the 2 pager.
 
 
 

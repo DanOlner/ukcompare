@@ -434,7 +434,7 @@ table(totalhoursperweek.itl2$UK_minus_london, useNA = 'always')
 
 
 #Weighted averages for the various groupings
-#Check for 2021, do averages weighted by number of hours worker per week that year in that place
+#Check for 2021, do averages weighted by number of hours work per week that year in that place
 
 
 #Both go up, though London by more
@@ -503,7 +503,7 @@ prop_difftoeng_av_minuslondon <- weightedaverages.perhourworked %>% filter(UK_mi
 #5.6 billion extra
 sy_gdp_2021 * prop_difftoeng_av_minuslondon
 
-#current prices
+#current prices (GDP)
 sy_gdp_cp_2021 * prop_difftoeng_av_minuslondon
 
 #Get population numbers for per person figures

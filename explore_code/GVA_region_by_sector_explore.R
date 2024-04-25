@@ -6386,6 +6386,7 @@ itl2.cps <- itl2.cps %>%
 
 unique(itl2.cps$year[!is.na(itl2.cps$gva_movingav)])
 
+# debugonce(twod_proportionplot)
 p <- twod_proportionplot(
   df = itl2.cps,
   x_regionnames = place, 
@@ -6394,19 +6395,20 @@ p <- twod_proportionplot(
   category_var = SIC07_description, 
   valuevar = gva_movingav, 
   timevar = year, 
-  start_time = 1999, 
+  start_time = 1999,
   end_time = 2006,
-  # start_time = 2008, 
-  # end_time = 2019
+  labeldisplay_xy = F,#display start and end values for the x geography
+  # start_time = 2016,
+  # end_time = 2020,
   # sectors_to_display = unique(itl2.cps$SIC07_description)[grepl(pattern = 'wholesale|manuf|health|financ|constr|educ|admin|inform|profes', x = unique(itl2.cps$SIC07_description), ignore.case = T)]
-  # compasspoints_to_display = c('SW')
-  compasspoints_to_display = c('NE')
+  compasspoints_to_display = c('SW','NW')
+  # compasspoints_to_display = c('NE','SE')
 )
 
 #add some extras
 p <- p + 
   xlab(paste0(place, ' GVA proportion')) +
-  ylab(paste0('UK GVA proportion (MINUS ',place,')'))
+  ylab(paste0('UK GVA proportion (MINUS ',place,')')) 
   # coord_fixed(xlim = c(4,12.6), ylim = c(4,12.6))
   # scale_y_log10() +
   # scale_x_log10()
@@ -6470,10 +6472,74 @@ ggsave('local/localimages/SY_gva_percent_vs_restofUK.png', width = 7, height = 7
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#LOOK FOR STRUCTURAL CHANGE IN 20 SECTIONS----
+#STRUCTURAL CHANGE IN 20 SECTIONS----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#For the 2 pager.
+#For the 2 pager. Taken from above, repeat and make suitable for report
+#Getting LQs for 20 sections
+place = 'South Yorkshire'
+
+#Let's get a smooth moving average for GVA plotting of growth movement
+itl2.cps <- itl2.cps %>% 
+  group_by(ITL_region_name,SIC07_description) %>% 
+  arrange(year) %>% 
+  mutate(gva_movingav = rollapply(value,3,mean,align='center',fill=NA)) %>% 
+  ungroup()
+
+unique(itl2.cps$year[!is.na(itl2.cps$gva_movingav)])
+
+#Reduce name lengths
+itl2.cpsinr <- itl2.cps %>% 
+  mutate(
+    INDUSTRY_NAME_REDUCED = gsub(x = SIC07_description, pattern = ' and ', replacement = ' / '),
+    INDUSTRY_NAME_REDUCED = gsub(x = INDUSTRY_NAME_REDUCED, pattern = 'of |activities|equipment|products', replacement = '')
+  )
+
+
+# debugonce(twod_proportionplot)
+
+#Same plot, different years...
+structureplot = function(startyear, endyear, compasspoints, displaycompasscolours = F){
+
+  p <- twod_proportionplot(
+    df = itl2.cpsinr,
+    x_regionnames = place, 
+    y_regionnames = unique(itl2.cps$ITL_region_name[itl2.cps$ITL_region_name != place]),
+    regionvar = ITL_region_name,
+    category_var = INDUSTRY_NAME_REDUCED, 
+    valuevar = gva_movingav, 
+    timevar = year, 
+    start_time = startyear,
+    end_time = endyear,
+    # sectors_to_display = unique(itl2.cps$SIC07_description)[grepl(pattern = 'wholesale|manuf|health|financ|constr|educ|admin|inform|profes', x = unique(itl2.cps$SIC07_description), ignore.case = T)]
+    labeldisplay_xy = F,#display start and end values for the x geography
+    displaycompasscolours = displaycompasscolours,#display start and end values for the x geography
+    compasspoints_to_display = compasspoints
+  )
+  
+  #add some extras
+  p <- p + 
+    xlab(paste0(place, ' GVA proportion (3 year moving av)')) +
+    ylab(paste0('UK GVA proportion (MINUS ',place,', 3 year moving av)')) +
+    theme_bw() 
+    # coord_fixed() 
+  # coord_fixed(xlim = c(4,12.6), ylim = c(4,12.6))
+  # scale_y_log10() +
+  # scale_x_log10()
+  
+  p
+
+}
+
+cp <- plot_grid(
+  structureplot(1999,2006, c('NW','SW'), displaycompasscolours = T), 
+  structureplot(2016,2020, c('NE','SE'), displaycompasscolours = T),
+  # labels = c('A', 'B', 'C', 'D'), label_size = 12)
+  labels = c('A', 'B'), label_size = 12)
+
+cp
+
+cowplot::save_plot('local/localimages/structuralGVAplot.png', cp, base_height = 8, base_width = 17)
 
 
 

@@ -266,9 +266,10 @@ addplacename_to_LQplot <- function(df, plot_to_addto, placename, shapenumber=16,
 # Start time
 # End time
 # Compass position to display
-twod_proportionplot <- function(df, regionvar, category_var, valuevar, timevar, start_time, end_time, x_regionnames, y_regionnames, compasspoints_to_display = c('NE','NW','SE','SW'), sectors_to_display = NULL){
+# labeldisplay_xy: if true, label will display proportions from x and y axis at final time point. Otherwise will display first and last values for x geography
+twod_proportionplot <- function(df, regionvar, category_var, valuevar, timevar, start_time, end_time, x_regionnames, y_regionnames, compasspoints_to_display = c('NE','NW','SE','SW'), sectors_to_display = NULL, labeldisplay_xy = T, displaycompasscolours = T){
   
-  regionvar <- enquo(regionvar) 
+  regionvar <- enquo(regionvar)  
   category_var <- enquo(category_var)
   valuevar <- enquo(valuevar)
   timevar <- enquo(timevar)
@@ -342,16 +343,16 @@ twod_proportionplot <- function(df, regionvar, category_var, valuevar, timevar, 
   
   twoy.wide <- twoy %>% filter(compass %in% compasspoints_to_display) %>%
     mutate(!!timevar := ifelse(!!timevar == min(!!timevar), 'start', 'end')) %>%
-    select(!!category_var,!!timevar,x_sector_total_proportion,y_sector_total_proportion) %>%
+    select(!!category_var,!!timevar,x_sector_total_proportion,y_sector_total_proportion,compass) %>%
     pivot_wider(names_from = !!timevar, values_from = c(x_sector_total_proportion,y_sector_total_proportion))
-
+  
   p <- ggplot() +
     geom_segment(data = twoy.wide, aes(x = x_sector_total_proportion_start * 100, y = y_sector_total_proportion_start  * 100,
                                        xend = x_sector_total_proportion_end * 100, yend = y_sector_total_proportion_end * 100),
                  arrow = arrow(length = unit(0.5, "cm")),
                  size = 1
     )
-
+  
   p <- p +
     geom_point(data = twoy %>% filter(compass%in%compasspoints_to_display), size = 5, alpha = 0.75,
                aes(x = x_sector_total_proportion * 100, y = y_sector_total_proportion * 100,colour = factor(!!timevar), group = !!category_var)) +
@@ -361,27 +362,84 @@ twod_proportionplot <- function(df, regionvar, category_var, valuevar, timevar, 
     # scale_y_log10() +
     # scale_x_log10() +
     guides(colour=guide_legend(title=" "))
+
   
-  p <- p + geom_text_repel(
-    data = twoy %>% filter(!!timevar==max(!!timevar), compass%in%compasspoints_to_display),
-    aes(x = x_sector_total_proportion * 100, y = y_sector_total_proportion * 100,
-        label = paste0(!!category_var, "\n(",round(x_sector_total_proportion * 100,2),"%,",round(y_sector_total_proportion * 100,2),"%)"), 
-        # label = paste0(!!category_var, "\n(x:",round(x_sector_total_proportion * 100,2),"%,y:",round(y_sector_total_proportion * 100,2),"%)"), 
-        colour = compass),
-    alpha=1,
-    nudge_x = .05,
-    box.padding = 1,
-    nudge_y = 0.05,
-    segment.curvature = -0.1,
-    segment.ncp = 0.3,
-    segment.angle = 20,
-    max.overlaps = 20
-  ) +
-    scale_color_manual(values = setNames(c("red", "black",'#7fc97f','#beaed4','#fdc086','#1f78b4'),
-                                         c(start_time, end_time,'NE','SE','NW','SW')))
+  #Option to display in label either the proportions of x and y geographies
+  #Or the proportion of the x geography (Which will be e.g. South Yorkshire)
+  if(labeldisplay_xy){
+    
+    p <- p + geom_text_repel(
+      data = twoy %>% filter(!!timevar==max(!!timevar), compass%in%compasspoints_to_display),
+      aes(x = x_sector_total_proportion * 100, y = y_sector_total_proportion * 100,
+          label = paste0(!!category_var, "\n(",round(x_sector_total_proportion * 100,2),"%,",round(y_sector_total_proportion * 100,2),"%)"), 
+          # label = paste0(!!category_var, "\n(x:",round(x_sector_total_proportion * 100,2),"%,y:",round(y_sector_total_proportion * 100,2),"%)"), 
+          colour = compass),
+      alpha=1,
+      nudge_x = .05,
+      box.padding = 1,
+      nudge_y = 0.05,
+      segment.curvature = -0.1,
+      segment.ncp = 0.3,
+      segment.angle = 20,
+      max.overlaps = 20
+    ) 
+    
+  } else {
+    
+    #twoy.wide has already been filtered to just the compass points to display
+    #But we need compass label for the colours... so add them back in (can't keep above from pivot_wider)
+    # twoy.wide <- twoy.wide %>% 
+    #   left_join(
+    #     twoy %>% filter(!!timevar == min(!!timevar)) %>% #pick just one timepoint arbitrarily
+    #       select(!!category_var,compass)
+    #     )
+    
+    p <- p + geom_text_repel(
+      data = twoy.wide,
+      aes(x = x_sector_total_proportion_end * 100, y = y_sector_total_proportion_end * 100,#display on last timepoint
+          label = paste0(!!category_var, "\n(",round(x_sector_total_proportion_start * 100,2),"% to ",round(x_sector_total_proportion_end * 100,2),"%)"), 
+          colour = compass),
+      alpha=1,
+      nudge_x = .05,
+      box.padding = 1,
+      nudge_y = 0.05,
+      segment.curvature = -0.1,
+      segment.ncp = 0.3,
+      segment.angle = 20,
+      max.overlaps = 20
+    ) 
+    
+    
+  }
+  
+  if(displaycompasscolours){
+    
+    p <- p + scale_color_manual(values = setNames(c("red", "black",'#7fc97f','#beaed4','#fdc086','#1f78b4'),
+                                           c(start_time, end_time,'NE','SE','NW','SW')))
+    
+  } else {
+    
+    #Overrride previous labels
+    p <- p + geom_text_repel(
+      data = twoy.wide,
+      aes(x = x_sector_total_proportion_end * 100, y = y_sector_total_proportion_end * 100,#display on last timepoint
+          label = paste0(!!category_var, "\n(",round(x_sector_total_proportion_start * 100,2),"% to ",round(x_sector_total_proportion_end * 100,2),"%)")),
+      alpha=1,
+      nudge_x = .05,
+      box.padding = 1,
+      nudge_y = 0.05,
+      segment.curvature = -0.1,
+      segment.ncp = 0.3,
+      segment.angle = 20,
+      max.overlaps = 20
+    ) 
+    
+    
+    p <- p + scale_color_manual(values = setNames(c("red", "black"), c(start_time, end_time)))
+    
+  }
 
   p
-
   
 }
 

@@ -6543,7 +6543,8 @@ cowplot::save_plot('local/localimages/structuralGVAplot.png', cp, base_height = 
 
 
 
-
+structureplot(1999,2006, c('NE','SE'), displaycompasscolours = T)
+structureplot(2010,2020, c('NW','SW'), displaycompasscolours = T) 
 
 
 

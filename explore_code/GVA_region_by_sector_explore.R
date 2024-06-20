@@ -795,6 +795,8 @@ ggplot(
 #The London split is fascinating: inner london becoming MORE important GVA wise if imputed rent removed
 #Going from 11.32% to 12% of whole UK economy
 
+#Given that - what difference does IR make to GVA per hour worked? To apparent productivity? Mulling...
+
 
 #That totally needs a map making!
 itl2.geo <- st_read('data/geographies/International_Territorial_Level_2_January_2021_UK_BFE_V2_2022_-4735199360818908762/ITL2_JAN_2021_UK_BFE_V2.shp') %>% 

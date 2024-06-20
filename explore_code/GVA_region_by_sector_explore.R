@@ -4,7 +4,7 @@ library(zoo)
 library(sf)
 library(tmap)
 library(plotly)
-library(magick)
+# library(magick)
 library(cowplot)
 library(ggrepel)
 source('functions/misc_functions.R')
@@ -370,13 +370,13 @@ itl2.cp <- itl2.cp %>%
 #SIDEQUEST, MAINLY CONTINUED BELOW IN ITS OWN SECTION
 #REPEAT GETTING THE ABOVE PROPORTIONS BUT WITH IMPUTED RENT REMOVED
 itl2.cp.no.ir <- itl2.cp %>%
-  filter(`SIC07 description`!="Owner-occupiers' imputed rental") %>% 
-  group_by(`ITL region name`, year) %>% 
+  filter(SIC07_description!="Owner-occupiers' imputed rental") %>% 
+  group_by(ITL_region_name, year) %>% 
   mutate(
     region_totalsize = sum(value, na.rm = T),#a. Current price per region per year, for regional denominator
     sector_regional_proportion = value / region_totalsize#b. regional sector proportion (noting that a single row in this group is a single sector)
   ) %>% 
-  group_by(year, `SIC07 code`) %>% 
+  group_by(year, SIC07_code) %>% 
   mutate(
     uk_sectorsize = sum(value, na.rm = T),#c. Summed current prices for EACH SECTOR, UK-wide
   ) %>% 
@@ -409,7 +409,7 @@ itl2.cp.no.ir <- itl2.cp %>%
 #   coord_cartesian(xlim = c(-25,25))
 
 #Check one LQ spread...
-y <- itl2.cp %>% filter(year==2021, `SIC07 code` == 75)
+y <- itl2.cp %>% filter(year==2021, SIC07_code == 75)
 plot(density(y$LQ))
 hist(y$LQ,breaks = 10)
 
@@ -418,7 +418,7 @@ hist(y$LQ,breaks = 10)
 x <- itl2.cp %>% 
   filter(year==2021) %>% 
   mutate(LQ_log = log(LQ)) %>% 
-  group_by(`SIC07 description`) %>% 
+  group_by(SIC07_description) %>% 
   summarise(
     mean = mean(LQ), min = min(LQ), max = max(LQ),
     mean_log = mean(LQ_log), min_log = min(LQ_log), max_log = max(LQ_log)
@@ -426,13 +426,16 @@ x <- itl2.cp %>%
 
 #We do have a reasonable spread there. Would quite like to see.
 ggplot(x %>% pivot_longer(min:max, names_to = 'minmax', values_to = 'value'), 
-       aes(y = `SIC07 description`, x = value, colour = minmax)) +
+       aes(y = SIC07_description, x = value, colour = minmax)) +
   geom_point() + 
-  coord_cartesian(xlim = c(-25,25))
-
+  coord_cartesian(xlim = c(-25,25)) +
+  scale_x_log10()
 
 
 #SAME
+
+##!!!!!!!!!!GOT THIS FAR REPLACING QUOTEMARKED VARIABLE NAMES
+
 
 #Log version... this is looking more useful to me
 #Reorder based on minimum values: close to zeroes, no sectoral presence there
@@ -697,16 +700,16 @@ glimpse(itl2.cp.no.ir)
 #what is each ITL2 proportion of UK total GVA?
 #Also just need a single unique region total size and UK total size, to get proportion
 no.ir2021 <- itl2.cp.no.ir %>% filter(year==2021) %>% 
-  distinct(`ITL region name`,region_totalsize,uk_totalsize) %>% 
+  distinct(ITL_region_name,region_totalsize,uk_totalsize) %>% 
   mutate(percent_of_uk_gva = (region_totalsize/uk_totalsize)*100)
 
 #Repeat for with imputed rent
 with.ir2021 <- itl2.cp %>% filter(year==2021) %>% 
-  distinct(`ITL region name`,region_totalsize,uk_totalsize) %>% 
+  distinct(ITL_region_name,region_totalsize,uk_totalsize) %>% 
   mutate(percent_of_uk_gva = (region_totalsize/uk_totalsize)*100)
 
 #Check there weren't any duplicate totalsize values... tick
-length(unique(ir2021$`ITL region name`)) == length(unique(itl2.cp$`ITL region name`))
+# length(unique(ir2021$ITL_region_name)) == length(unique(itl2.cp$ITL_region_name))
 
 #Check orig total size uk was correct... tick
 no.ir2021 %>% 
@@ -729,8 +732,8 @@ no.ir2021 %>%
 
 #So we can just look at the proportion that imputed rent is in different ITL2s?
 ggplot(
-  itl2.cp %>% filter(`SIC07 description` == "Owner-occupiers' imputed rental"),
-  aes(x = year, y = sector_regional_proportion*100, colour = `ITL region name`)
+  itl2.cp %>% filter(SIC07_description == "Owner-occupiers' imputed rental"),
+  aes(x = year, y = sector_regional_proportion*100, colour = ITL_region_name)
   ) +
   geom_line() +
   geom_point()
@@ -738,9 +741,9 @@ ggplot(
 
 
 plot_ly(
-  data = itl2.cp %>% ungroup() %>% filter(`SIC07 description` == "Owner-occupiers' imputed rental"), 
-        x = ~year, y = ~sector_regional_proportion*100, color = ~`ITL region name`,
-        text = ~paste("ITL:", `ITL region name`),  # Add this line for hover text
+  data = itl2.cp %>% ungroup() %>% filter(SIC07_description == "Owner-occupiers' imputed rental"), 
+        x = ~year, y = ~sector_regional_proportion*100, color = ~ITL_region_name,
+        text = ~paste("ITL:", ITL_region_name),  # Add this line for hover text
         hoverinfo = 'text+y+x',
         type = 'scatter', mode = 'lines+markers', line = list(shape = 'linear')) %>%
   layout(title = "Yearly values by SIC", 
@@ -764,15 +767,15 @@ both <- no.ir2021 %>%
   rename(percent_of_uk_gva_NO_IR = percent_of_uk_gva) %>% 
   left_join(
     with.ir2021 %>% rename(percent_of_uk_gva_WITH_IR = percent_of_uk_gva) %>% select(-region_totalsize,-uk_totalsize),
-    by = c('year','ITL region name')
+    by = c('year','ITL_region_name')
   ) %>% 
   relocate(percent_of_uk_gva_WITH_IR, .before = percent_of_uk_gva_NO_IR) %>% 
   mutate(percentdiff = (percent_of_uk_gva_NO_IR/percent_of_uk_gva_WITH_IR)*100)
 
 
 ggplot(
-  both %>% mutate(`ITL region name` = factor(`ITL region name`)), 
-  aes(x = fct_reorder(`ITL region name`,percentdiff), y = percentdiff)
+  both %>% mutate(ITL_region_name = factor(ITL_region_name)), 
+  aes(x = fct_reorder(ITL_region_name,percentdiff), y = percentdiff)
   ) +
   geom_bar(stat='identity') +
   coord_flip(ylim = c(90,107)) +
@@ -782,8 +785,15 @@ ggplot(
 
 #Let's just stare at Inner London West.
 #I know underlying reason: finance there massive, so imputed rent relatively less strong.
+#i.e. average GVA there goes UP because imputed rent sector is relatively smaller (which is MAD)
 #But...
 
+#One way to interpret that plot's number:
+#Taking IR out, places like West Yorkshire make up a LARGER PART of the UK economy
+#i.e. they appear economically more important to the UK as whole, without imputed rent
+#And the difference is A LOT for some places
+#The London split is fascinating: inner london becoming MORE important GVA wise if imputed rent removed
+#Going from 11.32% to 12% of whole UK economy
 
 
 #That totally needs a map making!
@@ -793,20 +803,20 @@ itl2.geo <- st_read('data/geographies/International_Territorial_Level_2_January_
 chk <- itl2.geo %>% 
   right_join(
     both,
-    by = c('ITL221NM'='ITL region name')
+    by = c('ITL221NM'='ITL_region_name')
   )
 
 
 #Just interpreted that
 #If a place is 90%, its GVA is a 10% smaller proportion of the whole UK economy (for that year) than if imputed rent included.
-tm_shape(chk) +
-  tm_polygons('percentdiff', n = 11)
-  # tm_polygons('percentdiff', n = 11, palette="-RdYlGn")
+#Mutate so it's less than / more than 100%
+tm_shape(chk %>% mutate(lessthan100percent = percentdiff - 100)) +
+  # tm_polygons('percentdiff', n = 6)
+  tm_polygons('lessthan100percent', n = 6, palette="PRGn")
 
-
-
+#Interesting that the geography isn't entirely as obvious as you'd think (though outer London is entirely predictable!)
 #Next Q. How have those percentages changed over time?
-
+#And: repeat for ITL3 level
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~
 #LQ/ITL2 CHANGE CHARTS----

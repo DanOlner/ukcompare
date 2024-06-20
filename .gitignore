@@ -9,6 +9,8 @@
 *.ppt
 *.pptx
 *.tmp
+*.odt
+*.odt#
 local/
 cuttinz/
 rsconnect/

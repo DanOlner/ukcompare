@@ -4,7 +4,7 @@ library(zoo)
 library(sf)
 library(tmap)
 library(plotly)
-library(magick)
+# library(magick)
 library(nomisr)
 library(pryr)
 library(ggrepel)
@@ -173,8 +173,6 @@ district$label.en[!district$label.en %in% county$label.en]
 
 
 
-
-
 #So let's do that for the others we need to pick from too.
 #Only the first one is failing to work... API problem? If I can't specify that, that's going to make life hard
 nomis_get_metadata(id = "NM_189_1", concept = "INDUSTRY")
@@ -281,7 +279,7 @@ z <- nomis_get_data(id = "NM_189_1", time = "2020", geography = "TYPE438")
 saveRDS(z,'local/data/BRES_NUTS2_2020.rds')
 
 #Let's just try it, see if it complains.
-years = c(2015:2021)
+years = c(2015:2022)
 # years = c(2015:2021)
 
 download_all_BRESopen <- function(year){
@@ -314,7 +312,7 @@ lapply(years, function(x) download_all_BRESopen_earlier(x))
 #Very quick, not huge, might as well get all
 # chk <- nomis_get_data(id = "NM_190_1", time = "2021", geography = "TYPE438")
 
-years = c(2015:2021)
+years = c(2015:2022)
 
 download_all_BRES_PUBLICPRIVATE <- function(year){
   z <- nomis_get_data(id = "NM_190_1", time = as.character(year), geography = "TYPE438")
@@ -556,6 +554,11 @@ itl2$INDUSTRY_NAME <- iconv(itl2$INDUSTRY_NAME, "UTF-8", "UTF-8",sub='')
 #Save for use elsewhere
 saveRDS(itl2, 'data/sectors/ITL2_Employment_countandpercent2digitSIC_BRESopen15to21.rds')
 
+
+
+#check column names
+chk <- readRDS("local/data/BRES_NUTS2_2021.rds")
+#Ones to keep:DATE,GEOGRAPHY_NAME,INDUSTRY_NAME,INDUSTRY_TYPE,OBS_VALUE
 
 
 
@@ -2865,6 +2868,48 @@ for (sector in unique(itl2.cvs$SIC07_code)) {
   result_df <- rbind(result_df, sector_df)
 }
 
+#Potentially useful lookup. Save.
+saveRDS(result_df,'local/SIC_section_numberlookup.rds')
+
+#Can it be added directly to the full SIC lookup?
+SIClookup <- read_csv('data/SIClookup.csv')
+
+#Temp numeric version for the match
+SIClookup <- SIClookup %>% 
+  mutate(SIC_2DIGIT_CODE_NUMERIC = as.numeric(SIC_2DIGIT_CODE))
+
+#Check match... missing is going to be job related isn't it?
+table(unique(SIClookup$SIC_2DIGIT_CODE_NUMERIC) %in% result_df$Number)
+
+#Activities of extraterritorial orgs and bodies...
+unique(SIClookup$SIC_2DIGIT_CODE_NUMERIC)[!unique(SIClookup$SIC_2DIGIT_CODE_NUMERIC) %in% result_df$Number]
+unique(SIClookup$SIC_2DIGIT_NAME)[!unique(SIClookup$SIC_2DIGIT_CODE_NUMERIC) %in% result_df$Number]
+
+#Just add back in that SIC section for completeness
+#Note it only has the one sub-entry as well at all SIC levels
+#See here: https://onsdigital.github.io/dp-classification-tools/standard-industrial-classification/ONS_SIC_hierarchy_view.html
+#And in the SIClookup, just the one line
+
+#Add in missing section
+result_df <- result_df %>% 
+  rbind(
+   data.frame(Letter = "U", 
+              Number = 99, 
+              SIC_SECTION_CODE = "U (99)", 
+              SIC_SECTION_NAME = "Activities of extraterritorial organisations and bodies"
+              ) 
+  )
+
+
+#Add in sections to lookup
+SIClookup <- SIClookup %>% 
+  left_join(
+    result_df %>% rename(SIC_SECTION_LETTER = Letter),
+    by = c('SIC_2DIGIT_CODE_NUMERIC'='Number')
+  )
+
+#Keep version updated with sections
+write_csv(SIClookup,'data/SIClookup.csv')
 
 #This is the slightly more efficient way chatGPT suggested, but I'll keep the above as it's more readable.
 # for (sector in unique(itl2.cvs$SIC07_code)) {

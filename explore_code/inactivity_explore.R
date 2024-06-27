@@ -37,12 +37,16 @@ unique(econ_active$C2021_EASTAT_20_NAME)
 
 #Get all local authorities, to find which has the min econ active in certain categories
 ALL.LAS.econ_active <- nomis_get_data(id = "NM_2083_1", time = "latest", geography = "TYPE423")
-
+#Save for use elsewhere
+write_csv(ALL.LAS.econ_active, 'data/Census2021_econactive_localauthorities.csv')
 
 
 #Get England and Wales version of the same
 EW.econ_active <- nomis_get_data(id = "NM_2083_1", time = "latest", geography = '2092957703')
 
+
+a <- nomis_overview("NM_2083_1")
+a$value
 
 
 ##Get inactivity  / health / care crosstab----
@@ -92,8 +96,8 @@ EW.activity_age_crosstab <- nomis_get_data(id = "NM_2124_1", time = "latest", ge
 
 #Get all local authorities, to find which has the min econ active in certain categories
 ALL.LAS.econ_active_age_crosstab <- nomis_get_data(id = "NM_2124_1", time = "latest", geography = "TYPE423")
-
-
+#save for use elsewhere
+write_csv(ALL.LAS.econ_active_age_crosstab, 'data/Census2021_econactivity_age_crosstab.csv')
 
 
 # INACTIVITY TABLE----

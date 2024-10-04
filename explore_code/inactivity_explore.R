@@ -40,6 +40,12 @@ ALL.LAS.econ_active <- nomis_get_data(id = "NM_2083_1", time = "latest", geograp
 #Save for use elsewhere
 write_csv(ALL.LAS.econ_active, 'data/Census2021_econactive_localauthorities.csv')
 
+#Random check while here - match of LAs to ITL3 zones in the GVA data?
+gva.cp <- read_csv('https://raw.githubusercontent.com/DanOlner/RegionalEconomicTools/gh-pages/data/Table%203c%20ITL3%20current%20price%20estimates%20pounds%20million%202024.csv')
+
+
+
+
 
 #Get England and Wales version of the same
 EW.econ_active <- nomis_get_data(id = "NM_2083_1", time = "latest", geography = '2092957703')

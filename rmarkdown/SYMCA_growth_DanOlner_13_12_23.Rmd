@@ -15,6 +15,7 @@ library(zoo)
 library(sf)
 library(tmap)
 library(flextable)
+library(ggrepel)
 source('../functions/misc_functions.R')
 options(scipen = 99)#Avoids scientific notation
 ```
@@ -24,12 +25,17 @@ itl2.cvs <- readRDS('../data/UKchainedvolume_itl2_SIC_sections.rds')
 
 itl2.jobs <- readRDS('../data/itl2_BRES_jobs_SIC_sections.rds')
 
-#local test
-#itl2.cvs <- readRDS('data/UKchainedvolume_itl2_SIC_sections.rds')
-#itl2.jobs <- readRDS('data/itl2_BRES_jobs_SIC_sections.rds')
 itl2.cv2digit <- readRDS('../data/UKchainedvolume_itl2_SIC_2digit.rds')
 
 itl2.cv2digit.jobs <- readRDS('../data/ITL2_chainedvolumeGVA_2digitSICs_andjobs.rds')
+
+#local test
+# itl2.cvs <- readRDS('data/UKchainedvolume_itl2_SIC_sections.rds')
+# itl2.jobs <- readRDS('data/itl2_BRES_jobs_SIC_sections.rds')
+# itl2.cv2digit <- readRDS('data/UKchainedvolume_itl2_SIC_2digit.rds')
+# itl2.cv2digit.jobs <- readRDS('data/ITL2_chainedvolumeGVA_2digitSICs_andjobs.rds')
+
+
 
 #Mark South Yorkshire
 itl2.cvs$ITL_region_name[itl2.cvs$ITL_region_name == 'South Yorkshire'] <- 'SOUTH YORKSHIRE <<<'
@@ -47,7 +53,7 @@ itl2.gvaperjob <- itl2.cvs %>%
   mutate(gvaperjob = (gva/jobcount) * 1000000)
 
 
-
+# saveRDS(itl2.gvaperjob,'data/itl2_gvaperjob.rds')
 
 
 #Add smoothed
@@ -70,7 +76,8 @@ slopes.log1319 <- get_slope_and_se_safely(data = itl2.cvs %>% filter(year %in% 2
 
 
 ```{r loaddata2}
-itl2.cp <- read_csv('../data/sectors/ITL2currentprices_long.csv') %>% 
+# itl2.cp <- read_csv('data/sectors/ITL2currentprices_long.csv') %>% 
+itl2.cp <- read_csv('../data/sectors/ITL2currentprices_long.csv') %>%
   mutate(
     INDUSTRY_NAME_REDUCED = gsub(x = SIC07_description, pattern = 'of |and |acture|acturing| activities| equipment| products', replacement = '')
   )
@@ -85,7 +92,8 @@ itl2.cp <- itl2.cp %>%
 
 
 
-itl3.cp <- read_csv('../data/ITL3currentprices_long.csv') %>% 
+itl3.cp <- read_csv('../data/ITL3currentprices_long.csv') %>%
+# itl3.cp <- read_csv('data/ITL3currentprices_long.csv') %>% 
   mutate(
     INDUSTRY_NAME_REDUCED = gsub(x = SIC07_description, pattern = 'of |and |acture|acturing| activities| equipment| products', replacement = '')
   )
@@ -522,6 +530,22 @@ p <- twod_generictimeplot_normalisetozero(
   end_time = 2021
 )
 
+#Test version
+p <- twod_generictimeplot_normalisetozero(
+  # df = itl2.gvaperjob %>% filter(SIC07_description=='Information and communication') %>% mutate(`gva/job` = gvaperjob/1000),
+  df = itl2.gvaperjob %>% filter(SIC07_description=='Manufacturing') %>% mutate(`gva/job` = gvaperjob/1000),
+  # df = itl2.gvaperjob %>% filter(grepl('Health',SIC07_description,ignore.case=T)) %>% mutate(`gva/job` = gvaperjob/1000),
+  # df = itl2.gvaperjob %>% filter(ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
+  category_var = ITL_region_name,
+  x_var = gva_movingav,
+  y_var = jobcount_movingav,
+  timevar = year,
+  label_var = `gva/job`,
+  category_var_value_to_highlight = 'SOUTH YORKSHIRE <<<',
+  start_time = 2016,
+  end_time = 2019
+)
+
 
 xrange_adjust = diff(range(p[[2]]$x_pct_change)) * 0.1
 yrange_adjust = diff(range(p[[2]]$y_pct_change)) * 0.1
@@ -536,7 +560,7 @@ p[[1]] + coord_fixed(
   )
 ) 
 
-p[[1]]
+# p[[1]]
 
 ```
 

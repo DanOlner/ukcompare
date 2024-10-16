@@ -4793,10 +4793,11 @@ for(loggit in c(T,F)){
 
 #TEST VERSION OF 2D PLOT THAT NORMALISES ALL VECTORS TO ZERO AND SCALES BY % CHANGE BETWEEN TIMEPOINTS
 #Getting a list this time, including produced data, so we can expand the range of the plot for the labels
-debugonce(twod_generictimeplot_normalisetozero)
+# debugonce(twod_generictimeplot_normalisetozero)
 p <- twod_generictimeplot_normalisetozero(
   # df = itl2.gvaperjob %>% filter(SIC07_description=='Information and communication') %>% mutate(`gva/job` = gvaperjob/1000),
-  df = itl2.gvaperjob %>% filter(SIC07_description=='Manufacturing') %>% mutate(`gva/job` = gvaperjob/1000),
+  df = itl2.gvaperjob %>% filter(SIC07_description=='Arts, entertainment and recreation') %>% mutate(`gva/job` = gvaperjob/1000),
+  # df = itl2.gvaperjob %>% filter(SIC07_description=='Manufacturing') %>% mutate(`gva/job` = gvaperjob/1000),
   # df = itl2.gvaperjob %>% filter(grepl('Health',SIC07_description,ignore.case=T)) %>% mutate(`gva/job` = gvaperjob/1000),
   # df = itl2.gvaperjob %>% filter(ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
   category_var = ITL_region_name,
@@ -4805,7 +4806,7 @@ p <- twod_generictimeplot_normalisetozero(
   timevar = year,
   label_var = `gva/job`,
   category_var_value_to_highlight = 'South Yorkshire',
-  start_time = 2015,
+  start_time = 2019,
   end_time = 2021
 )
 
@@ -4896,6 +4897,106 @@ for(place in unique(itl2.gvaperjob$ITL_region_name)){
   ggsave(plot = p, filename = paste0('local/localimages/2D_COMPASSPLOTS_PLACES/',gsub("[^A-Za-z]", "", place),'.png'), width = 12, height = 12)
   
 }
+
+
+
+
+#Examine the gva per job data map wise and north south wise
+
+#get north south flag
+#Northern England
+north <- itl2.gvaperjob$ITL_region_name[grepl('Greater Manc|Merseyside|West Y|Cumbria|Cheshire|Lancashire|East Y|North Y|Tees|Northumb|South Y', itl2.gvaperjob$ITL_region_name, ignore.case = T)] %>% unique
+
+#South England
+south <- itl2.gvaperjob$ITL_region_name[!grepl('Greater Manc|Merseyside|West Y|Cumbria|Cheshire|Lancashire|East Y|North Y|Tees|Northumb|South Y|Scot|Highl|Wales|Ireland', itl2.gvaperjob$ITL_region_name, ignore.case = T)] %>% unique
+
+
+#Maaap
+itl2.geo <- st_read('data/geographies/International_Territorial_Level_2_January_2021_UK_BFE_V2_2022_-4735199360818908762/ITL2_JAN_2021_UK_BFE_V2.shp') %>% 
+  st_simplify(preserveTopology = T, dTolerance = 100)
+
+#chk
+table(c(north,south) %in% itl2.geo$ITL221NM)
+
+#which don't match in north south? Oh yeah, tweaked SY...
+c(north,south)[!c(north,south) %in% itl2.geo$ITL221NM]
+
+#fix
+itl2.geo$ITL221NM[itl2.geo$ITL221NM == 'Northumberland, and Tyne and Wear'] <- 'Northumberland and Tyne and Wear'
+itl2.geo$ITL221NM[itl2.geo$ITL221NM == 'South Yorkshire'] <- 'SOUTH YORKSHIRE <<<'
+
+
+
+#Look just at arts
+#Get % changes from the data (in second list item)
+p <- twod_generictimeplot_normalisetozero(
+  # df = itl2.gvaperjob %>% filter(SIC07_description=='Information and communication') %>% mutate(`gva/job` = gvaperjob/1000),
+  df = itl2.gvaperjob %>% filter(SIC07_description=='Arts, entertainment and recreation') %>% mutate(`gva/job` = gvaperjob/1000),
+  # df = itl2.gvaperjob %>% filter(SIC07_description=='Manufacturing') %>% mutate(`gva/job` = gvaperjob/1000),
+  # df = itl2.gvaperjob %>% filter(grepl('Health',SIC07_description,ignore.case=T)) %>% mutate(`gva/job` = gvaperjob/1000),
+  # df = itl2.gvaperjob %>% filter(ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
+  category_var = ITL_region_name,
+  x_var = gva,
+  y_var = jobcount,
+  timevar = year,
+  label_var = `gva/job`,
+  category_var_value_to_highlight = 'South Yorkshire',
+  start_time = 2019,
+  end_time = 2021
+)
+
+#Why does northumberland vanish?
+#It's here... 40 ITL2s
+itl2.gvaperjob$ITL_region_name[order(itl2.gvaperjob$ITL_region_name)] %>% unique
+
+#But not here? Down to 38.
+p[[2]]$ITL_region_name[order(p[[2]]$ITL_region_name)] %>% unique
+
+#Which two?
+gvanames <- itl2.gvaperjob$ITL_region_name[order(itl2.gvaperjob$ITL_region_name)] %>% unique
+pnames <- p[[2]]$ITL_region_name[order(p[[2]]$ITL_region_name)] %>% unique
+
+gvanames[!gvanames %in% pnames]
+
+#It's not the sector filter is it? Yep. Err.
+checksector <- itl2.gvaperjob %>% filter(SIC07_description=='Arts, entertainment and recreation')
+unique(checksector$ITL_region_name[order(checksector$ITL_region_name)])
+
+#OK, it doesn't have ANY data. Must have been a merge non match error, along with Wales, earlier on.
+
+
+#Just straight up plot north south diffs to start with 
+arts <- p[[2]]
+
+arts <- arts %>% 
+  filter(ITL_region_name %in% c(north,south)) %>% 
+  mutate(northsouth = ifelse(ITL_region_name %in% north, 'North','South'))
+
+ggplot(arts,aes(x = x_pct_change, y = y_pct_change, colour = northsouth, label = ITL_region_name)) +
+  geom_point(size = 3) +
+  geom_hline(yintercept = 0) +
+  geom_text_repel() +
+  xlab('gva percent change 2019-2021') +
+  ylab('jobs percent change 2019-2021') 
+
+
+
+
+#Maaap
+mapz <- itl2.geo %>% 
+  right_join(
+    arts, by = c('ITL221NM' = 'ITL_region_name')
+  )
+
+tm_shape(mapz) +
+  tm_polygons('y_pct_change', n = 9) +
+  tm_layout(title = '', legend.outside = T)
+
+tm_shape(mapz) +
+  tm_polygons('y_pct_change', n = 9) +
+  tm_layout(title = '', legend.outside = T)
+
+
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

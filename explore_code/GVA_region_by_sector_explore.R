@@ -820,6 +820,9 @@ tm_shape(chk %>% mutate(lessthan100percent = percentdiff - 100)) +
 #Next Q. How have those percentages changed over time?
 #And: repeat for ITL3 level
 
+#The question there is actually:
+#What proportion of GVA growth over time is imputed rent, in different places?
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~
 #LQ/ITL2 CHANGE CHARTS----
 #~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -4794,20 +4797,69 @@ for(loggit in c(T,F)){
 #TEST VERSION OF 2D PLOT THAT NORMALISES ALL VECTORS TO ZERO AND SCALES BY % CHANGE BETWEEN TIMEPOINTS
 #Getting a list this time, including produced data, so we can expand the range of the plot for the labels
 # debugonce(twod_generictimeplot_normalisetozero)
+
+#Let's just reload data and recalc (via rmarkdown for SYMCA_growth)
+itl2.cvs <- readRDS('data/UKchainedvolume_itl2_SIC_sections.rds')
+
+itl2.jobs <- readRDS('data/itl2_BRES_jobs_SIC_sections.rds')
+
+itl2.cv2digit <- readRDS('data/UKchainedvolume_itl2_SIC_2digit.rds')
+
+itl2.cv2digit.jobs <- readRDS('data/ITL2_chainedvolumeGVA_2digitSICs_andjobs.rds')
+
+#local test
+# itl2.cvs <- readRDS('data/UKchainedvolume_itl2_SIC_sections.rds')
+# itl2.jobs <- readRDS('data/itl2_BRES_jobs_SIC_sections.rds')
+# itl2.cv2digit <- readRDS('data/UKchainedvolume_itl2_SIC_2digit.rds')
+# itl2.cv2digit.jobs <- readRDS('data/ITL2_chainedvolumeGVA_2digitSICs_andjobs.rds')
+
+
+#Right join to match the fewer available years in the BRES data
+itl2.gvaperjob <- itl2.cvs %>% 
+  rename(gva = value) %>% 
+  right_join(
+    itl2.jobs %>% select(-SIC_SECTION_NAME) %>% rename(jobcount = COUNT),
+    by = c('year' = 'DATE','ITL_region_name' = 'GEOGRAPHY_NAME','SIC07_code' = 'SIC_SECTION_CODE')
+  ) %>% 
+  mutate(gvaperjob = (gva/jobcount) * 1000000)
+
+
+
+#smoothing
+#Year is already in correct order
+#ISSUE WITH NON MATCHING TYNE AND WEAR AND WEST WALES
+#Filter by NA
+itl2.gvaperjob.movingavs <- itl2.gvaperjob %>% 
+  filter(!is.na(SIC07_description)) %>% 
+  group_by(ITL_region_name,SIC07_description) %>% 
+  mutate(
+    jobcount_movingav = rollapply(jobcount,3,mean,align='center',fill=NA),
+    gva_movingav = rollapply(gva,3,mean,align='center',fill=NA),
+    `gva/job_movingav` = rollapply(gvaperjob/1000,3,mean,align='center',fill=NA)
+  ) %>% 
+  ungroup()
+
+#Recheck... tick
+unique(itl2.gvaperjob.movingavs$year[!is.na(itl2.gvaperjob.movingavs$jobcount_movingav)])
+unique(itl2.gvaperjob.movingavs$year[!is.na(itl2.gvaperjob.movingavs$gva_movingav)])
+
+#Currently movin av version
 p <- twod_generictimeplot_normalisetozero(
   # df = itl2.gvaperjob %>% filter(SIC07_description=='Information and communication') %>% mutate(`gva/job` = gvaperjob/1000),
-  df = itl2.gvaperjob %>% filter(SIC07_description=='Arts, entertainment and recreation') %>% mutate(`gva/job` = gvaperjob/1000),
-  # df = itl2.gvaperjob %>% filter(SIC07_description=='Manufacturing') %>% mutate(`gva/job` = gvaperjob/1000),
+  # df = itl2.gvaperjob %>% filter(SIC07_description=='Arts, entertainment and recreation') %>% mutate(`gva/job` = gvaperjob/1000),
   # df = itl2.gvaperjob %>% filter(grepl('Health',SIC07_description,ignore.case=T)) %>% mutate(`gva/job` = gvaperjob/1000),
   # df = itl2.gvaperjob %>% filter(ITL_region_name == 'South Yorkshire', SIC07_description!='Real estate activities') %>% mutate(`gva/job` = gvaperjob/1000), 
+  df = itl2.gvaperjob.movingavs %>% filter(SIC07_description=='Manufacturing') %>% mutate(`gva/job` = `gva/job_movingav`),
   category_var = ITL_region_name,
-  x_var = gva,
-  y_var = jobcount,
+  x_var = gva_movingav,
+  y_var = jobcount_movingav,
+  # x_var = gva,
+  # y_var = jobcount,
   timevar = year,
   label_var = `gva/job`,
-  category_var_value_to_highlight = 'South Yorkshire',
-  start_time = 2019,
-  end_time = 2021
+  category_var_value_to_highlight = 'West Yorkshire',
+  start_time = 2017,
+  end_time = 2020
 )
 
 
@@ -4822,7 +4874,21 @@ p[[1]] + coord_fixed(
   ylim = c(
     min(p[[2]]$y_pct_change) - yrange_adjust,max(p[[2]]$y_pct_change) + yrange_adjust 
   )
-) 
+) +
+  xlab('GVA percent change 2016-18 to 2019-21 av') +
+  ylab('JOBS percent change 2016-18 to 2019-21 av') 
+
+ggsave('local/localimages/Manuf_percentchanges_WY_16_18.png', width = 12, height = 12)
+
+
+
+
+
+
+
+
+
+
 
 
 #All plz!
@@ -6658,6 +6724,207 @@ cowplot::save_plot('local/localimages/structuralGVAplot.png', cp, base_height = 
 
 structureplot(1999,2006, c('NE','SE'), displaycompasscolours = T)
 structureplot(2010,2020, c('NW','SW'), displaycompasscolours = T) 
+
+
+
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#UPDATE ITL2 GVA AND JOB DATA TO 2022 / % change plots----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Processing here:
+#https://github.com/DanOlner/RegionalEconomicTools/blob/gh-pages/prepcode/BRES_process.R
+bres22 <- readRDS(url('https://github.com/DanOlner/RegionalEconomicTools/raw/refs/heads/gh-pages/data/itl2_BRES_jobs_SIC_sections2015to2022.rds')) %>% 
+  rename(Region_name = GEOGRAPHY_NAME, SIC07_description = SIC_SECTION_NAME, year = DATE)#mnames to match GVA data for easy join
+
+#Get up to 2022 ITL2 section chained vol data
+#Direct from website
+cv <- readxl::read_excel('data/sectors/regionalgrossvalueaddedbalancedbyindustryandallitlregions2022.xlsx',range = "Table 2b!A2:AC3938") 
+
+#Can nab from here or above
+#https://github.com/DanOlner/RegionalEconomicTools/blob/49a60beb49f2541ca0756dc19e72afbcbf819f55/prepcode/LCREE_linkToBres_and_GVA_currentprices.R#L594
+names(cv) <- gsub(x = names(cv), pattern = ' ', replacement = '_')
+
+#Keep SIC sections
+#This gets all the letters, nice
+cvSICkeeps <- cv$SIC07_code[substr(cv$SIC07_code,2,2) == ' '] %>% unique
+
+
+
+#REPLACE "L (68)" REAL ESTATE ACTIVITIES (WHICH INCLUDES IMPUTED RENT) WITH JUST 68 "Real estate activities, excluding imputed rental"  
+cvSICkeeps[cvSICkeeps == 'L (68)'] <- '68'
+
+
+#Filter out duplicate value rows and make long by year
+#Also convert year to numeric
+#NEED TO MANUALLY UPDATE LATEST YEAR
+cv <- cv %>% 
+  filter(SIC07_code %in% cvSICkeeps) %>% 
+  pivot_longer(`1998`:`2022`, names_to = 'year', values_to = 'value') %>% 
+  mutate(year = as.numeric(year))
+
+unique(cv$Region_name)
+unique(cv$SIC07_description)
+
+
+#Check structure of df we want to replace...
+#OK, it's just simply adding in job count, assuming match is good
+glimpse(itl2.gvaperjob)
+
+#BRES is GB, so join will drop NI...
+table(bres22$Region_name %in% cv$Region_name)
+
+#...But we have some other non-matches
+cv$Region_name[!cv$Region_name %in% bres22$Region_name] %>% unique
+
+bres22$Region_name[!bres22$Region_name %in% cv$Region_name] %>% unique
+
+#Make necessary tweaks
+#And this is why we use codes!
+cv$Region_name[cv$Region_name == 'Northumberland, and Tyne and Wear'] <- 'Northumberland and Tyne and Wear'
+cv$Region_name[cv$Region_name == 'Gloucestershire, Wiltshire and Bath/Bristol Area'] <- 'Gloucestershire, Wiltshire and Bath/Bristol area'#lowercase a!
+cv$Region_name[cv$Region_name == 'West Wales and The Valleys'] <- 'West Wales'
+
+
+#Sectors?
+table(bres22$SIC07_description %in%  cv$SIC07_description)
+
+#Ah yes, reminder:
+#BRES doesn't have imputed rent because of course it has no jobs
+#Only "Real estate activities"
+bres22$SIC07_description[!bres22$SIC07_description %in% cv$SIC07_description] %>% unique
+cv$SIC07_description[!cv$SIC07_description %in% bres22$SIC07_description] %>% unique
+
+#So in CV data: Real estate activities, excluding imputed rental
+#Can just reduce to:
+cv$SIC07_description[cv$SIC07_description == 'Real estate activities, excluding imputed rental'] <- 'Real estate activities'
+
+#What matching years? 2015 to 22
+bres22$year[bres22$year %in% cv$year] %>% unique
+
+#Can now join
+#Right join so NI is dropped from CV data to match BRES geography
+itl2.gvaperjob22 <- cv %>% rename(gva = value) %>% 
+  right_join(
+    bres22 %>% rename(jobcount = COUNT),
+    by = c('year','Region_name','SIC07_description')
+  )
+
+#Some NA?? Ah yes - no agri data for scotland for job count
+table(!is.na(itl2.gvaperjob22$jobcount))
+View(itl2.gvaperjob22 %>% filter(is.na(jobcount)))
+
+table(!is.na(itl2.gvaperjob22$gva))
+
+#SAVE!
+saveRDS(itl2.gvaperjob22, 'data/itl2_gva_to2022_plusBRES_jobs_to2022.rds')
+
+
+
+
+
+
+
+#Add in LQs / regional props so we can high-pass filter sector sizes etc
+itl2.gvaperjob22 <- itl2.gvaperjob22 %>% 
+  split(.$year) %>% 
+  map(add_location_quotient_and_proportions, 
+      regionvar = Region_name,
+      lq_var = SIC07_description,
+      valuevar = gva) %>% 
+  bind_rows()
+
+
+
+#Get smoothed avs
+itl2.gvaperjob.movingavs <- itl2.gvaperjob22 %>% 
+  group_by(Region_name,SIC07_description) %>% 
+  mutate(
+    gvaperjob_1000s = (gva / jobcount) * 1000,
+    #3 years
+    jobcount_movingav = rollapply(jobcount,3,mean,align='center',fill=NA),
+    gva_movingav = rollapply(gva,3,mean,align='center',fill=NA),
+    `gva/job_movingav` = rollapply(gvaperjob_1000s,3,mean,align='center',fill=NA),
+    sector_regional_proportion_movingav = rollapply(sector_regional_proportion,3,mean,align='center',fill=NA),
+    LQ_movingav = rollapply(LQ,3,mean,align='center',fill=NA)
+    #2 years 
+    # jobcount_movingav = rollapply(jobcount,2,mean,align='left',fill=NA),
+    # gva_movingav = rollapply(gva,2,mean,align='left',fill=NA),
+    # `gva/job_movingav` = rollapply(gvaperjob_1000s,2,mean,align='left',fill=NA),
+    # sector_regional_proportion_movingav = rollapply(sector_regional_proportion,2,mean,align='left',fill=NA)
+  ) %>% 
+  ungroup()
+
+#Recheck... tick
+unique(itl2.gvaperjob.movingavs$year[!is.na(itl2.gvaperjob.movingavs$jobcount_movingav)])
+unique(itl2.gvaperjob.movingavs$year[!is.na(itl2.gvaperjob.movingavs$gva_movingav)])
+
+#get sector name
+sectorname <- itl2.gvaperjob22$SIC07_description[grepl('manufacturing',itl2.gvaperjob22$SIC07_description,ignore.case=T)] %>% unique
+sectorname <- itl2.gvaperjob22$SIC07_description[grepl('information',itl2.gvaperjob22$SIC07_description,ignore.case=T)] %>% unique
+
+#Check looks sane, look at smoothed sector reg prop avs
+mostrecentvals <- itl2.gvaperjob.movingavs %>% filter(
+  SIC07_description == sectorname,
+  year == 2021
+) %>% 
+  mutate(regional_percent = sector_regional_proportion_movingav *100, LQ = LQ_movingav) %>%#movinav version 
+  # mutate(regional_percent = sector_regional_proportion_movingav *100) %>% 
+  select(Region_name,regional_percent, LQ) %>%
+  arrange(-LQ) %>% 
+  print(n = 40)
+
+#VIZ PERCENT CHANGE
+#Currently movin av version
+
+#Reduce to places where sector makes up more than x% of the regional econ
+itl2.viz <- itl2.gvaperjob.movingavs %>% 
+  filter(
+    Region_name %in%  mostrecentvals$Region_name[mostrecentvals$regional_percent > 10],
+    SIC07_description == sectorname
+    )
+
+
+p <- twod_generictimeplot_normalisetozero(
+  df = itl2.viz %>% rename(`GVA/job` = `gva/job_movingav`),
+  category_var = Region_name,
+  x_var = gva_movingav,
+  y_var = jobcount_movingav,
+  # x_var = gva,
+  # y_var = jobcount,
+  timevar = year,
+  label_var = `GVA/job`,
+  category_var_value_to_highlight = 'West Yorkshire',
+  start_time = 2016,
+  end_time = 2021
+)
+
+
+xrange_adjust = diff(range(p[[2]]$x_pct_change)) * 0.1
+yrange_adjust = diff(range(p[[2]]$y_pct_change)) * 0.1
+
+p[[1]] + coord_fixed(
+  xlim = c(
+    min(p[[2]]$x_pct_change) - xrange_adjust,
+    ifelse(max(p[[2]]$x_pct_change) > 0,max(p[[2]]$x_pct_change) + xrange_adjust,0)#hack for health, need to make generic
+  ),
+  ylim = c(
+    min(p[[2]]$y_pct_change) - yrange_adjust,max(p[[2]]$y_pct_change) + yrange_adjust 
+  )
+) +
+  xlab('GVA percent change 2015-17 av to 2020-22 av') +
+  ylab('JOBS percent change 2015-17 av to 2020-22 av') +
+  guides(colour = F)
+
+ggsave('local/localimages/Manuf_percentchanges_WY_16_21_3av.png', width = 14, height = 10)
+
+
+
+
+
+
 
 
 

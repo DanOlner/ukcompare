@@ -6864,6 +6864,9 @@ unique(itl2.gvaperjob.movingavs$year[!is.na(itl2.gvaperjob.movingavs$gva_movinga
 #get sector name
 sectorname <- itl2.gvaperjob22$SIC07_description[grepl('manufacturing',itl2.gvaperjob22$SIC07_description,ignore.case=T)] %>% unique
 sectorname <- itl2.gvaperjob22$SIC07_description[grepl('information',itl2.gvaperjob22$SIC07_description,ignore.case=T)] %>% unique
+# sectorname <- itl2.gvaperjob22$SIC07_description[grepl('health',itl2.gvaperjob22$SIC07_description,ignore.case=T)] %>% unique
+
+#Issue with health: mainly public sector, and GVA is worked out directly from jobs, so is circular
 
 #Check looks sane, look at smoothed sector reg prop avs
 mostrecentvals <- itl2.gvaperjob.movingavs %>% filter(
@@ -6882,7 +6885,8 @@ mostrecentvals <- itl2.gvaperjob.movingavs %>% filter(
 #Reduce to places where sector makes up more than x% of the regional econ
 itl2.viz <- itl2.gvaperjob.movingavs %>% 
   filter(
-    Region_name %in%  mostrecentvals$Region_name[mostrecentvals$regional_percent > 10],
+    Region_name %in%  mostrecentvals$Region_name[mostrecentvals$regional_percent > 5],
+    # Region_name %in%  mostrecentvals$Region_name[mostrecentvals$LQ > 1],
     SIC07_description == sectorname
     )
 
@@ -6918,7 +6922,61 @@ p[[1]] + coord_fixed(
   ylab('JOBS percent change 2015-17 av to 2020-22 av') +
   guides(colour = F)
 
-ggsave('local/localimages/Manuf_percentchanges_WY_16_21_3av.png', width = 14, height = 10)
+ggsave('local/localimages/ICT_percentchanges_WY_16_21_3av.png', width = 14, height = 10)
+
+
+
+#Map! Is there any geography to the places where GVA is growing
+#But some jobs going up others down?
+itl2.geo <- st_read('data/geographies/International_Territorial_Level_2_January_2021_UK_BFE_V2_2022_-4735199360818908762/ITL2_JAN_2021_UK_BFE_V2.shp', quiet = T) %>% 
+  st_simplify(preserveTopology = T, dTolerance = 100)
+
+#Note: no Northern Ireland because of BRES link, which is GB only
+itl2.geo$ITL221NM[itl2.geo$ITL221NM == 'Northumberland, and Tyne and Wear'] <- 'Northumberland and Tyne and Wear'
+itl2.geo$ITL221NM[itl2.geo$ITL221NM == 'West Wales and The Valleys'] <- 'West Wales'
+
+#This has the % table in
+#We want:
+#gva per job went UP
+#Then divide into 
+#Jobs DOWN OR UP
+
+itl2.geo.jobs <- itl2.geo %>% 
+  right_join(
+    p[[2]],
+    by = c('ITL221NM' = 'Region_name')
+  )
+
+#Add in GB undermap also
+gb_under <- itl2.geo %>% filter(
+  !grepl('Northern Ire', ITL221NM, ignore.case = T)
+)
+
+#Not perfect but fiiiine
+gb_under <- st_union(gb_under)
+
+
+#On map, plot ONLY places where productivity increased
+#Then show job losses or gains
+tm_shape(gb_under) +
+  tm_polygons(col = 'darkslategrey', border.col = 'darkslategrey') +
+tm_shape(itl2.geo.jobs %>% filter(label_pct_change > 0)) +
+  tm_borders(col = 'white', lwd = 5, alpha = 0.8) +
+  tm_layout(title = "", legend.outside = T) +
+tm_shape(itl2.geo.jobs %>% filter(label_pct_change > 0) %>% rename(`% job change` = y_pct_change)) +
+  tm_polygons('% job change', n = 9, palette = 'RdBu', border.alpha = 0.2) +
+  tm_layout(title = "", legend.outside = T)
+
+
+
+
+
+
+
+
+
+
+
 
 
 

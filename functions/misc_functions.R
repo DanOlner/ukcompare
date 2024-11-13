@@ -691,6 +691,7 @@ twod_generictimeplot_normalisetozero <- function(df, category_var, x_var, y_var,
     mutate(
       x_pct_change = percent_change(x_start, x_end),
       y_pct_change = percent_change(y_start, y_end),
+      label_pct_change = percent_change(label_start, label_end),#just used in return
       category_var_val_to_highlight = ifelse(!!category_var == category_var_value_to_highlight, T,F)
     )
   

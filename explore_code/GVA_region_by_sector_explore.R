@@ -6654,6 +6654,8 @@ ggsave('local/localimages/SY_gva_percent_vs_restofUK.png', width = 7, height = 7
 #STRUCTURAL CHANGE IN 20 SECTIONS----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+#itl2.cps <- readRDS('data/UKcurrentprices_itl2_SIC_sections.rds')
+
 #For the 2 pager. Taken from above, repeat and make suitable for report
 #Getting LQs for 20 sections
 place = 'South Yorkshire'
@@ -6678,8 +6680,11 @@ itl2.cpsinr <- itl2.cps %>%
 # debugonce(twod_proportionplot)
 
 #Same plot, different years...
-structureplot = function(startyear, endyear, compasspoints, displaycompasscolours = F){
+structureplot = function(startyear, endyear, compasspoints = c('NE','SE','NW','SW'), displaycompasscolours = F, sectors_to_display = NULL){
 
+  #Doing this way so if no sectors to diplay passed in, don't pass arg, then will draw all
+  if(is.null(sectors_to_display)){
+  
   p <- twod_proportionplot(
     df = itl2.cpsinr,
     x_regionnames = place, 
@@ -6696,10 +6701,32 @@ structureplot = function(startyear, endyear, compasspoints, displaycompasscolour
     compasspoints_to_display = compasspoints
   )
   
+  } else {
+    
+    p <- twod_proportionplot(
+      df = itl2.cpsinr,
+      x_regionnames = place, 
+      y_regionnames = unique(itl2.cps$ITL_region_name[itl2.cps$ITL_region_name != place]),
+      regionvar = ITL_region_name,
+      category_var = INDUSTRY_NAME_REDUCED, 
+      valuevar = gva_movingav, 
+      timevar = year, 
+      start_time = startyear,
+      end_time = endyear,
+      sectors_to_display = sectors_to_display,
+      labeldisplay_xy = F,#display start and end values for the x geography
+      displaycompasscolours = displaycompasscolours,#display start and end values for the x geography
+      compasspoints_to_display = compasspoints
+    )
+    
+  }
+  
   #add some extras
   p <- p + 
-    xlab(paste0(place, ' GVA proportion (3 year moving av)')) +
-    ylab(paste0('UK GVA proportion (MINUS ',place,', 3 year moving av)')) +
+    xlab(paste0('Percent of ', place, ' economy (3 year average, GVA)')) +#friendlier labels
+    ylab(paste0('Percent of total UK economy (MINUS ',place,', 3 year average, GVA)')) +
+    # xlab(paste0(place, ' GVA proportion (3 year moving av)')) +
+    # ylab(paste0('UK GVA proportion (MINUS ',place,', 3 year moving av)')) +
     theme_bw() 
     # coord_fixed() 
   # coord_fixed(xlim = c(4,12.6), ylim = c(4,12.6))
@@ -6710,11 +6737,49 @@ structureplot = function(startyear, endyear, compasspoints, displaycompasscolour
 
 }
 
+
+#Pull out sectors over a certain percentage to display in each case
+
+#Going to need the proportions to work with, gimme those plz!
+#Use smoothed versions to match data being used...
+lq <- itl2.cpsinr %>% 
+  split(.$year) %>% 
+  map(add_location_quotient_and_proportions, 
+      regionvar = ITL_region_name,
+      lq_var = SIC07_description,
+      valuevar = value) %>% 
+  bind_rows() %>% 
+  group_by(ITL_region_name,SIC07_description) %>% #group within place and sector, find rolling av across years within those
+  mutate(
+    sector_regional_proportion_movingav = rollapply(sector_regional_proportion,3,mean,align='center',fill=NA)
+    # sector_total_proportion_movingav = rollapply(sector_total_proportion,3,mean,align='center',fill=NA)
+  ) %>%
+  ungroup()
+
+# lq %>% filter(year == 1999) %>% View
+
+sectors1 <- lq %>% 
+  filter(ITL_region_name == place, year == 1999, sector_regional_proportion_movingav > 0.05) %>% #more than 5% of regional economy
+  # filter(year == 1999, sector_total_proportion_movingav > 0.1) %>% #more than 5% of regional economy
+  select(INDUSTRY_NAME_REDUCED) %>% 
+  pull() %>% 
+  unique
+
+sectors2 <- lq %>% 
+  filter(ITL_region_name == place, year == 2016, sector_regional_proportion_movingav > 0.05) %>% #more than 5% of regional economy
+  # filter(year == 2016, sector_total_proportion_movingav > 0.1) %>% #more than 5% of regional economy
+  select(INDUSTRY_NAME_REDUCED) %>% 
+  pull() %>% 
+  unique
+
 cp <- plot_grid(
-  structureplot(1999,2006, c('NW','SW'), displaycompasscolours = T), 
-  structureplot(2016,2020, c('NE','SE'), displaycompasscolours = T),
+  structureplot(1999,2006, displaycompasscolours = T, sectors_to_display = sectors1), 
+  structureplot(2016,2020, displaycompasscolours = T, sectors_to_display = sectors2), 
+  # structureplot(1999,2006, c('NW','SW'), displaycompasscolours = T), 
+  # structureplot(2016,2020, c('NE','SE'), displaycompasscolours = T),
   # labels = c('A', 'B', 'C', 'D'), label_size = 12)
   labels = c('A', 'B'), label_size = 12)
+  # labels = c('A:\nShrinking\nsectors', 'B:\nGrowing\nsectors\n'), label_size = 12)
 
 cp
 

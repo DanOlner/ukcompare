@@ -547,9 +547,10 @@ gb %>%
 #ITL2: ENTERPRISE BUSINESS COUNT EXPLORE----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#Local units plz
-bc <- readRDS('data/sectors/ITL2_BUSINESSCOUNTS_LOCALUNITS_9CATSIZEBAND_LEGALSTATUSALL_ALLINDUSTRYTYPES_16to21.rds')
-# bc <- readRDS('data/sectors/ITL2_BUSINESSCOUNTS_ENTERPRISE_9CATSIZEBAND_LEGALSTATUSALL_ALLINDUSTRYTYPES_16to21.rds')
+#Local units
+# bc <- readRDS('data/sectors/ITL2_BUSINESSCOUNTS_LOCALUNITS_9CATSIZEBAND_LEGALSTATUSALL_ALLINDUSTRYTYPES_16to21.rds')
+#Enterprises
+bc <- readRDS('data/sectors/ITL2_BUSINESSCOUNTS_ENTERPRISE_9CATSIZEBAND_LEGALSTATUSALL_ALLINDUSTRYTYPES_16to21.rds')
 
 #Ah, no "all industries" category.
 #Can sum 2 digit, but rounding errors will compound?
@@ -610,7 +611,7 @@ lu.all <- lu23 %>%
 #See map at https://en.wikipedia.org/wiki/Liverpool_City_Region
 
 #List of comparators
-places = unique(lu.all$GEOGRAPHY_NAME[grepl('Merseyside|South York|Manchester|West York', lu.all$GEOGRAPHY_NAME)])
+places = unique(lu.all$GEOGRAPHY_NAME[grepl('Merseyside|South York|Manchester|West York|West mid', lu.all$GEOGRAPHY_NAME, ignore.case = T)])
 
 #OK, so with totals, basic comparison
 ggplot(
@@ -631,9 +632,11 @@ ggplot(
 
 
 
-#Repeat for the broad industrial groups
+#Repeat for the broad industrial groups...
+#Option to remove micro firms to make other groupings clear
 lu.ind <- lu23 %>% 
-  filter(Sizeband!='All', Industry!='Column Total') %>% #otherwise, double counting!
+  filter(!Sizeband %in% c('All','Micro (0 to 9)'), Industry!='Column Total') %>% #otherwise, double counting!
+  # filter(Sizeband!='All', Industry!='Column Total') %>% #otherwise, double counting!
   group_by(Sizeband,GEOGRAPHY_NAME,Industry) %>% 
   summarise(COUNT = sum(COUNT)) %>% 
   group_by(GEOGRAPHY_NAME) %>% 

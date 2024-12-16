@@ -6,6 +6,7 @@ library(tmap)
 library(plotly)
 # library(magick)
 library(cowplot)
+library(patchwork)
 library(ggrepel)
 source('functions/misc_functions.R')
 options(scipen = 99)
@@ -6723,11 +6724,11 @@ structureplot = function(startyear, endyear, compasspoints = c('NE','SE','NW','S
   
   #add some extras
   p <- p + 
+    theme_bw() +
     xlab(paste0('Percent of ', place, ' economy (3 year average, GVA)')) +#friendlier labels
-    ylab(paste0('Percent of total UK economy (MINUS ',place,', 3 year average, GVA)')) +
+    ylab(paste0('Percent of total UK economy (MINUS ',place,', 3 year average, GVA)')) 
     # xlab(paste0(place, ' GVA proportion (3 year moving av)')) +
     # ylab(paste0('UK GVA proportion (MINUS ',place,', 3 year moving av)')) +
-    theme_bw() 
     # coord_fixed() 
   # coord_fixed(xlim = c(4,12.6), ylim = c(4,12.6))
   # scale_y_log10() +
@@ -6772,18 +6773,40 @@ sectors2 <- lq %>%
   pull() %>% 
   unique
 
-cp <- plot_grid(
-  structureplot(1999,2006, displaycompasscolours = T, sectors_to_display = sectors1), 
-  structureplot(2016,2020, displaycompasscolours = T, sectors_to_display = sectors2), 
-  # structureplot(1999,2006, c('NW','SW'), displaycompasscolours = T), 
-  # structureplot(2016,2020, c('NE','SE'), displaycompasscolours = T),
-  # labels = c('A', 'B', 'C', 'D'), label_size = 12)
-  labels = c('A', 'B'), label_size = 12)
-  # labels = c('A:\nShrinking\nsectors', 'B:\nGrowing\nsectors\n'), label_size = 12)
+plot1 <- structureplot(1999,2006, displaycompasscolours = T, sectors_to_display = sectors1)
+plot2 <- structureplot(2016,2020, displaycompasscolours = T, sectors_to_display = sectors2)
 
-cp
+plot1 <- plot1 + ggtitle('A: 1999 to 2006') + theme(plot.title = element_text(size = 25, face = "bold"))
+plot2 <- plot2 + ggtitle('B: 2016 to 2020') + theme(plot.title = element_text(size = 25, face = "bold"))
 
-cowplot::save_plot('local/localimages/structuralGVAplot.png', cp, base_height = 8, base_width = 17)
+# plot1+plot2
+
+# 
+# ggplot_build(plot1)$layout$panel_scales_x[[1]]$range$range
+# ggplot_build(plot1)$layout$panel_scales_y[[1]]$range$range
+
+#This doesn't work, possibly because of geom_text_repel interference tho not sure
+# plot1 <- plot1 + geom_label(x = 6, y = 6, label = "1999 to 2006", size = 100, label.size = 0.35)
+  # geom_label(x = 13, y = 10, label = "1999 to 2006", size = 10, label.size = 0.35,color = "black",fill="black")
+# 
+# cp <- plot_grid(
+#   structureplot(1999,2006, displaycompasscolours = T, sectors_to_display = sectors1),
+#   structureplot(2016,2020, displaycompasscolours = T, sectors_to_display = sectors2),
+#   # structureplot(1999,2006, displaycompasscolours = T),
+#   # structureplot(2016,2020, displaycompasscolours = T),
+#   # structureplot(1999,2006, c('NW','SW'), displaycompasscolours = T), 
+#   # structureplot(2016,2020, c('NE','SE'), displaycompasscolours = T),
+#   # labels = c('A', 'B', 'C', 'D'), label_size = 12)
+#   labels = c('1999\nto 2006', '2016\nto2020'), label_size = 12)
+#   # labels = c('A:\nShrinking\nsectors', 'B:\nGrowing\nsectors\n'), label_size = 12)
+# 
+# cp
+# 
+# cowplot::save_plot('local/localimages/structuralGVAplot.png', cp, base_height = 8, base_width = 17)
+
+cp <- plot_grid(plot1,plot2)
+
+cowplot::save_plot('local/localimages/structuralGVAplot2.png', cp, base_height = 8, base_width = 17)
 
 
 
@@ -6973,6 +6996,7 @@ p <- twod_generictimeplot_normalisetozero(
 
 xrange_adjust = diff(range(p[[2]]$x_pct_change)) * 0.1
 yrange_adjust = diff(range(p[[2]]$y_pct_change)) * 0.1
+
 
 p[[1]] + coord_fixed(
   xlim = c(

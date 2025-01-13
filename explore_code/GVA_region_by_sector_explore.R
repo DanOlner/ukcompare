@@ -1,16 +1,4 @@
-#Regional GVA per sector explore
-library(tidyverse)
-library(zoo)
-library(sf)
-library(tmap)
-library(plotly)
-# library(magick)
-library(cowplot)
-library(patchwork)
-library(ggrepel)
-source('functions/misc_functions.R')
-options(scipen = 99)
-
+s
 #for work laptop library path setting
 # .libPaths('C:/Users/mg1dol/Documents/templibpaths')
 

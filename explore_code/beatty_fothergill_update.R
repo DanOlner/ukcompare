@@ -459,8 +459,8 @@ allz_long <- allz %>%
 
 
 p <- ggplot(
-  # allz_long[!is.na(allz_long$`percent of UK average`),],
-  allz_long[!is.na(allz_long$`percent of UK average`),] %>% filter(!Region_name %in% c('Inner London - West', 'Inner London - East')),#filter out London outliers
+  allz_long[!is.na(allz_long$`percent of UK average`),],
+  # allz_long[!is.na(allz_long$`percent of UK average`),] %>% filter(!Region_name %in% c('Inner London - West', 'Inner London - East')),#filter out London outliers
   aes(x = year, y = `percent of UK average`, colour = SY, alpha = SY, size = SY, group = Region_name)) +
   geom_point() +
   # geom_jitter(width = 0.25) +
@@ -474,7 +474,7 @@ p <- ggplot(
 
 p
 
-ggplotly(p, tooltip = c('Region_name','percent of UK average'))
+ggplotly(p, tooltip = c('year','Region_name','percent of UK average'))
 
 
 

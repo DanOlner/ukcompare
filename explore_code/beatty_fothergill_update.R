@@ -11,21 +11,11 @@ library(pryr)
 
 
 
-#RAW REGIONAL GVA DATA----
+#~~~~~~~~~~~~~~~~
+#GET DATASETS----
+#~~~~~~~~~~~~~~~~
 
-#Taking code to update to latest from here:
-#https://github.com/DanOlner/ukcompare/blob/095d7efc8a308c60743e2940f8c7959512f09ec7/explore_code/GVA_region_by_sector_explore.R#L6822
-#(Currently 6822 in GVA_region_by_sector_explore.R)
-
-#This is jobcounts via BRES. Does it match job counts from the per filled job data?
-#Also: it's already got imputed rent removed, to match sectors in BRES (imputed rent of course doesn't have any related jobs)
-
-#All done there and saved, so can reuse for 2022
-# itl2.gvaperjob22 <- readRDS('data/itl2_gva_to2022_plusBRES_jobs_to2022.rds')
-
-
-
-#GET LATEST REGIONAL GVA DATA----
+##1. REGIONAL AND UK GVA CURRENT PRICES, WITH/WITHOUT IMPUTED RENT----
 
 #Code taken from here, section "UPDATE ITL2 GVA AND JOB DATA TO 2022 / % change plots": 
 #https://github.com/DanOlner/ukcompare/blob/095d7efc8a308c60743e2940f8c7959512f09ec7/explore_code/GVA_region_by_sector_explore.R#L6832
@@ -138,7 +128,7 @@ gva.uk.totals.minusimputedrent <- gva.uk.minusimputedrent %>%
   ungroup()
   
 
-#GET LATEST HOURLY / PER FILLED JOB NUMBERS----
+##2. GET LATEST HOURLY / PER FILLED JOB NUMBERS----
 
 #Current versions as code being written (ONS should link to latest when updated at the top of these)
 #"Subregional productivity: labour productivity indices by UK ITL2 and ITL3 subregions" - 
@@ -155,10 +145,36 @@ perhourworked <- readxl::read_excel(path = p1f,range = "Productivity Hours!A5:V2
 
 perfilledjob <- readxl::read_excel(path = p1f,range = "Productivity Jobs!A5:X239") 
 
+#HOURS WORKED PER WEEK - needs multiplying up to match yearly GVA values
+perhourworked.itl2 <- perhourworked %>% 
+  filter(ITL_level == 'ITL2') %>% 
+  select(-ITL_level) %>% 
+  pivot_longer(contains('Hours'), names_to = 'year', values_to = 'hoursworked') %>% 
+  mutate(year = str_sub(year, start = 7, end = 10) %>% as.numeric)
+
+perhourworked.uk <- perhourworked %>% 
+  filter(ITL_code == 'UKX') %>% 
+  select(-ITL_level) %>% 
+  pivot_longer(contains('Hours'), names_to = 'year', values_to = 'hoursworked') %>% 
+  mutate(year = str_sub(year, start = 7, end = 10) %>% as.numeric)
+
+
+perfilledjob.itl2 <- perfilledjob %>% 
+  filter(ITL_level == 'ITL2') %>% 
+  select(-ITL_level) %>% 
+  pivot_longer(contains('Jobs'), names_to = 'year', values_to = 'jobsfilled') %>% 
+  mutate(year = str_sub(year, start = 6, end = 9) %>% as.numeric)
+
+perfilledjob.uk <- perfilledjob %>% 
+  filter(ITL_code == 'UKX') %>% 
+  select(-ITL_level) %>% 
+  pivot_longer(contains('Jobs'), names_to = 'year', values_to = 'jobsfilled') %>% 
+  mutate(year = str_sub(year, start = 6, end = 9) %>% as.numeric)
 
 
 
-#GET LATEST REGIONAL POPULATION NUMBERS----
+
+##3. GET LATEST REGIONAL POPULATION NUMBERS----
 
 #... Which can handily be found in the regional GDP data xls
 #Though these don't have CIs, like we can get from the APS data...
@@ -168,12 +184,30 @@ url1 <- 'https://www.ons.gov.uk/file?uri=/economy/grossdomesticproductgdp/datase
 p1f <- tempfile(fileext=".xlsx")
 download.file(url1, p1f, mode="wb")
 
-residentpop <- readxl::read_excel(path = p1f,range = "Table 6!A2:AB238") 
+#Last col is character, not numeric... 
+#Due to ONS introducing some "not trustworthy number" indicators in some regions
+#Converting to numeric will convert these to NA, which is fine...
+#It does affect some Scots ITL2s, but not the UK total
+residentpop <- readxl::read_excel(path = p1f,range = "Table 6!A2:AB238") %>%
+  rename(Region_name = `Region name`) %>% 
+  mutate(`2022` = as.numeric(`2022`))
+
+residentpop.itl2 <- residentpop %>% 
+  filter(ITL == 'ITL2') %>% 
+  select(-ITL) %>% 
+  pivot_longer(cols = 3:length(names(.)), names_to = 'year', values_to = 'resident_pop') %>% 
+  mutate(year = as.numeric(year))
+
+residentpop.uk <- residentpop %>% 
+  filter(`ITL code` == 'UKX') %>% 
+  select(-ITL) %>% 
+  pivot_longer(cols = 3:length(names(.)), names_to = 'year', values_to = 'resident_pop') %>%  
+  mutate(year = as.numeric(year))
 
 
 
 
-#NOMISR FOR LATEST 16-64 POP NUMBERS----
+##4. NOMISR FOR LATEST 16-64 POP NUMBERS----
 
 #https://cran.r-project.org/web/packages/nomisr/vignettes/introduction.html
 
@@ -248,7 +282,8 @@ pop16to64 <- pop16to64 %>%
   ) %>% 
   pivot_wider(
     names_from = MEASURES_NAME, values_from = OBS_VALUE 
-  )
+  ) %>% 
+  rename(Region_name = GEOGRAPHY_NAME)
 
 
 uk16to64 <- uk16to64 %>% 
@@ -264,21 +299,182 @@ uk16to64 <- uk16to64 %>%
   ) %>% 
   pivot_wider(
     names_from = MEASURES_NAME, values_from = OBS_VALUE 
+  ) %>% 
+  rename(Region_name = GEOGRAPHY_NAME)
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#CHECK ITL2 NAME/CODE MATCHES----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#At least one - 16 to 64 counts - won't have matching codes as NI was added separately
+#But what about name matches? Usual list of ones that don't match...?
+allnames <- list(
+  unique(gva.itl2.totals.minusimputedrent$Region_name),
+  unique(perhourworked.itl2$Region_name),
+  unique(perfilledjob.itl2$Region_name),
+  unique(residentpop.itl2$Region_name),
+  unique(pop16to64$Region_name)
+)
+
+#Perfect matches all round, nice
+mapply(function(x, y) sum(x %in% y), allnames, allnames)
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#MAKE UK LEVEL NUMERATORS/DENOMINATORS----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Add each to the UK GVA df to be used directly
+
+#Use only minus imputed rent for now...
+#Not all years will match, those will be NA, that's OK...
+
+#1. GVA in UK (no imputed rent) over total population
+#sub with "UK" as we'll combine into one DF with ITL2 after this
+gva.uk.totals.mir.ratios <- gva.uk.totals.minusimputedrent %>% 
+  left_join(
+    residentpop.uk %>% select(year,resident_pop), by = 'year'
+  ) %>% 
+  mutate(
+    UK_gvaperhead_pounds_cp = (value / resident_pop) * 1000000
+  )
+
+#2. GVA over 16 to 64 pop
+gva.uk.totals.mir.ratios <- gva.uk.totals.mir.ratios %>% 
+  left_join(
+    uk16to64 %>% select(year = DATE,count16to64 = Value), by = 'year'
+  ) %>% 
+  mutate(
+    UK_gvaper16to64_pounds_cp = (value / count16to64) * 1000000
+  )
+
+#3. GVA over hours worked
+#HOURS WORKED PER WEEK - needs multiplying up to match yearly GVA values
+gva.uk.totals.mir.ratios <- gva.uk.totals.mir.ratios %>% 
+  left_join(
+    perhourworked.uk %>% select(year,hoursworked), by = 'year'
+  ) %>% 
+  mutate(
+    UK_perhourworked_pounds_cp = (value / (hoursworked * 52)) * 1000000
+  )
+
+#4. per filled job
+gva.uk.totals.mir.ratios <- gva.uk.totals.mir.ratios %>% 
+  left_join(
+    perfilledjob.uk %>% select(year,jobsfilled), by = 'year'
+  ) %>% 
+  mutate(
+    UK_perfilledjob_pounds_cp = (value / jobsfilled) * 1000000
   )
 
 
 
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#CALCULATE NUMERATORS/DENOMINATORS----
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-#Use only minus imputed rent for now...
-
-##1. GVA per region (no imputed rent) over total population
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#MAKE ITL2 NUMERATORS/DENOMINATORS----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
+gva.itl2.totals.mir.ratios <- gva.itl2.totals.minusimputedrent %>% 
+  left_join(
+    residentpop.itl2 %>% select(year,Region_name,resident_pop), by = c('year','Region_name')
+  ) %>% 
+  mutate(
+    gvaperhead_pounds_cp = (value / resident_pop) * 1000000
+  )
 
+#2. GVA over 16 to 64 pop
+gva.itl2.totals.mir.ratios <- gva.itl2.totals.mir.ratios %>% 
+  left_join(
+    pop16to64 %>% select(year = DATE,Region_name,count16to64 = Value), by = c('year','Region_name')
+  ) %>% 
+  mutate(
+    gvaper16to64_pounds_cp = (value / count16to64) * 1000000
+  )
+
+#3. GVA over hours worked
+#HOURS WORKED PER WEEK - needs multiplying up to match yearly GVA values
+gva.itl2.totals.mir.ratios <- gva.itl2.totals.mir.ratios %>% 
+  left_join(
+    perhourworked.itl2 %>% select(year,Region_name,hoursworked), by = c('year','Region_name')
+  ) %>% 
+  mutate(
+    perhourworked_pounds_cp = (value / (hoursworked * 52)) * 1000000
+  )
+
+#4. per filled job
+gva.itl2.totals.mir.ratios <- gva.itl2.totals.mir.ratios %>% 
+  left_join(
+    perfilledjob.itl2 %>% select(year,Region_name,jobsfilled), by = c('year','Region_name')
+  ) %>% 
+  mutate(
+    perfilledjob_pounds_cp = (value / jobsfilled) * 1000000
+  )
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#COMBINE TO FIND ITL2 % DIFF TO UK AVERAGES----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+allz <- gva.itl2.totals.mir.ratios %>% 
+  select(Region_name,year,gvaperhead_pounds_cp,gvaper16to64_pounds_cp,perhourworked_pounds_cp,perfilledjob_pounds_cp) %>% 
+  left_join(
+    gva.uk.totals.mir.ratios %>% 
+      select(year,UK_gvaperhead_pounds_cp,UK_gvaper16to64_pounds_cp,UK_perhourworked_pounds_cp,UK_perfilledjob_pounds_cp),
+    by = 'year'
+  )
+
+#Save...
+write_csv(allz,'data/GVA_measures_ITL2_aspercentofUKaverage1998_2022.csv')
+
+#Then find ITL2 zone GVA values as percentage of UK average
+allz <- allz %>% 
+  mutate(
+    gvaperhead_percentofUKav = (gvaperhead_pounds_cp/UK_gvaperhead_pounds_cp) * 100,
+    gvaper16to64_percentofUKav = (gvaper16to64_pounds_cp/UK_gvaper16to64_pounds_cp) * 100,
+    gvaperhourworked_percentofUKav = (perhourworked_pounds_cp/UK_perhourworked_pounds_cp) * 100,
+    gvaperjobfilled_percentofUKav = (perfilledjob_pounds_cp/UK_perfilledjob_pounds_cp) * 100
+  )
+
+
+#first up for plot with view of data, facet the data type (make long)
+allz_long <- allz %>% 
+  select(
+    Region_name,year,
+    `GVA per head (percent of UK av)` = gvaperhead_percentofUKav,
+    `GVA per 16 to 64 yr old (percent of UK av)` = gvaper16to64_percentofUKav,
+    `GVA per filled job (percent of UK av)` = gvaperjobfilled_percentofUKav,
+    `GVA per hour worked (percent of UK av)` = gvaperhourworked_percentofUKav
+    ) %>% 
+  pivot_longer(
+    cols = `GVA per head (percent of UK av)`:`GVA per hour worked (percent of UK av)`,
+    names_to = 'measure', values_to = 'percent of UK average'
+  ) %>% 
+  mutate(
+    SY = ifelse(Region_name == 'South Yorkshire', 'SY', 'other')
+  )
+
+
+p <- ggplot(
+  # allz_long[!is.na(allz_long$`percent of UK average`),],
+  allz_long[!is.na(allz_long$`percent of UK average`),] %>% filter(!Region_name %in% c('Inner London - West', 'Inner London - East')),#filter out London outliers
+  aes(x = year, y = `percent of UK average`, colour = SY, alpha = SY, size = SY, group = Region_name)) +
+  geom_point() +
+  # geom_jitter(width = 0.25) +
+  geom_line(size = 0.25) +
+  geom_hline(yintercept = 100) +
+  scale_colour_manual(values = c('black','red')) +
+  scale_alpha_manual(values = c(0.25,1)) +
+  scale_size_manual(values = c(0.5,3)) +
+  facet_wrap(~measure, scales = 'free') +
+  guides(alpha = F, size = F)
+
+p
+
+ggplotly(p, tooltip = c('Region_name','percent of UK average'))
 
 
 

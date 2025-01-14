@@ -62,7 +62,6 @@ SICkeeps_minusImputedRent[SICkeeps_minusImputedRent == 'L (68)'] <- '68'
 
 #Filter out duplicate value rows and make long by year
 #Also convert year to numeric
-#NEED TO MANUALLY UPDATE LATEST YEAR
 gva.all <- gva %>% 
   filter(SIC07_code %in% SICkeeps) %>% 
   pivot_longer(`1998`:`2022`, names_to = 'year', values_to = 'value') %>% 
@@ -82,8 +81,62 @@ unique(gva.minusimputedrent$Region_name)
 unique(gva.minusimputedrent$SIC07_description)
 
 
+#Check that gva.all total does equal the total for each ITL2 in the current prices sheet...
+gva.totals <- gva %>% 
+  filter(SIC07_code == 'Total') %>% 
+  pivot_longer(`1998`:`2022`, names_to = 'year', values_to = 'value') %>% 
+  mutate(year = as.numeric(year))
+
+gva.totals.summedfromsections <- gva.all %>% 
+  group_by(Region_name,year) %>% 
+  summarise(value = sum(value)) %>% 
+  ungroup()
+
+#Yep, all looks within rounding errors on the individual sectors
+chk <- gva.totals %>% 
+  left_join(
+    gva.totals.summedfromsections %>% rename(valuefromsum = value),
+    by = c('Region_name','year')
+  ) %>% 
+  mutate(diff = value - valuefromsum)
+
+#Check total differences between those... 10,000th of a percent difference, fine
+chk %>% summarise(across(value:valuefromsum,sum))
+
+#Can use gva.totals for anything including imputed rent (which I think let's just not do at the moment)
 
 
+
+#Also get total GVA current price number for the UK as a whole
+#For working out crude average
+gva.uk <- readxl::read_excel(path = p1f,range = "Table 1c!A2:AC109")#cell range gets JUST UK 
+
+names(gva.uk) <- gsub(x = names(gva.uk), pattern = ' ', replacement = '_')
+
+#With and without imputed rent again
+gva.uk.all <- gva.uk %>% 
+  filter(SIC07_code %in% SICkeeps) %>% 
+  pivot_longer(`1998`:`2022`, names_to = 'year', values_to = 'value') %>% 
+  mutate(year = as.numeric(year))
+
+gva.uk.minusimputedrent <- gva.uk %>% 
+  filter(SIC07_code %in% SICkeeps_minusImputedRent) %>% 
+  pivot_longer(`1998`:`2022`, names_to = 'year', values_to = 'value') %>% 
+  mutate(year = as.numeric(year))
+
+
+
+#Last step: GVA totals for all ITL2 zones AND the UK as a whole MINUS imputed rent
+gva.itl2.totals.minusimputedrent <- gva.minusimputedrent %>% 
+  group_by(Region_name,year) %>% 
+  summarise(value = sum(value)) %>% 
+  ungroup()
+
+gva.uk.totals.minusimputedrent <- gva.uk.minusimputedrent %>% 
+  group_by(year) %>% 
+  summarise(value = sum(value)) %>% 
+  ungroup()
+  
 
 #GET LATEST HOURLY / PER FILLED JOB NUMBERS----
 
@@ -103,9 +156,12 @@ perhourworked <- readxl::read_excel(path = p1f,range = "Productivity Hours!A5:V2
 perfilledjob <- readxl::read_excel(path = p1f,range = "Productivity Jobs!A5:X239") 
 
 
+
+
 #GET LATEST REGIONAL POPULATION NUMBERS----
 
 #... Which can handily be found in the regional GDP data xls
+#Though these don't have CIs, like we can get from the APS data...
 #https://www.ons.gov.uk/economy/grossdomesticproductgdp/datasets/regionalgrossdomesticproductallnutslevelregions
 
 url1 <- 'https://www.ons.gov.uk/file?uri=/economy/grossdomesticproductgdp/datasets/regionalgrossdomesticproductallnutslevelregions/1998to2022/regionalgrossdomesticproductgdpbyallitlregions.xlsx'
@@ -212,6 +268,14 @@ uk16to64 <- uk16to64 %>%
 
 
 
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#CALCULATE NUMERATORS/DENOMINATORS----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Use only minus imputed rent for now...
+
+##1. GVA per region (no imputed rent) over total population
 
 
 

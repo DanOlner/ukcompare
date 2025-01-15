@@ -458,9 +458,12 @@ allz_long <- allz %>%
   )
 
 
+allz_long.minusNAs <- allz_long[!is.na(allz_long$`percent of UK average`),]
+
+
 p <- ggplot(
-  allz_long[!is.na(allz_long$`percent of UK average`),],
-  # allz_long[!is.na(allz_long$`percent of UK average`),] %>% filter(!Region_name %in% c('Inner London - West', 'Inner London - East')),#filter out London outliers
+  # allz_long.minusNAs,
+  allz_long.minusNAs %>% filter(!Region_name %in% c('Inner London - West', 'Inner London - East')),#filter out London outliers
   aes(x = year, y = `percent of UK average`, colour = SY, alpha = SY, size = SY, group = Region_name)) +
   geom_point() +
   # geom_jitter(width = 0.25) +
@@ -475,6 +478,167 @@ p <- ggplot(
 p
 
 ggplotly(p, tooltip = c('year','Region_name','percent of UK average'))
+
+
+
+#Smoothed version to see trends a little more clearly
+allz.smooth <- allz_long.minusNAs %>% 
+  group_by(Region_name,measure) %>% 
+  mutate(percentUKav_movingav = rollapply(`percent of UK average`,3,mean,align='center',fill=NA)) %>% 
+  ungroup()
+
+p <- ggplot(
+  allz.smooth[!is.na(allz.smooth$percentUKav_movingav),] %>% filter(!Region_name %in% c('Inner London - West', 'Inner London - East')),#filter out London outliers
+  aes(x = year, y = percentUKav_movingav, colour = SY, alpha = SY, size = SY, group = Region_name)) +
+  geom_point() +
+  # geom_jitter(width = 0.25) +
+  geom_line(size = 0.25) +
+  geom_hline(yintercept = 100) +
+  scale_colour_manual(values = c('black','red')) +
+  scale_alpha_manual(values = c(0.25,1)) +
+  scale_size_manual(values = c(0.5,3)) +
+  facet_wrap(~measure, scales = 'free') +
+  guides(alpha = F, size = F)
+
+p
+
+ggplotly(p, tooltip = c('year','Region_name','percent of UK average'))
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#"ADJUST FOR INDUSTRY MIX"----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#From B+F: "what would have been each area’s GVA per job if each industry in the area had the UK average GVA per job for that industry."
+
+#They avoid BRES due to lack of self-employed, but it has the advantage of better sector granularity.
+#And being more up to date.
+
+#For 2022, already have one prepped.
+#https://github.com/DanOlner/ukcompare/blob/095d7efc8a308c60743e2940f8c7959512f09ec7/explore_code/GVA_region_by_sector_explore.R#L6822
+#(Currently 6822 in GVA_region_by_sector_explore.R)
+itl2.gvaperjob22 <- readRDS('data/itl2_gva_to2022_plusBRES_jobs_to2022.rds') %>% 
+  mutate(gvaperjob = (gva/jobcount)*1000000)
+
+#What we're after, paraphrased: “If SY kept its industry mix, but output per worker matched the UK average for each sector, what would its GVA be? If the same applied everywhere, how would SY GVA compare nationally?”
+
+#So, stages to getting this:
+#1. Find UK total GVA per FT worker for each section
+#2. For each ITL2, multiply number of workers there by #1 to get "if this sector had output per worker of national average..."
+#3. Sum up GVA for each region from that, then compare to GVA totals of originals
+
+#UK GVA and jobcount sums for each section
+UKlevel <- itl2.gvaperjob22 %>% 
+  group_by(SIC07_description, year) %>% 
+  summarise(
+    gva = sum(gva, na.rm = T), jobcount = sum(jobcount, na.rm = T)
+  ) %>% 
+  ungroup() %>% 
+  mutate(gvaperjob_ukaverage = (gva/jobcount))#don't multiply up to pounds - just taking back down again below when summed
+  # mutate(gvaperjob_ukaverage = (gva/jobcount)*1000000)
+
+
+#Merge those av UK values back into the data...
+itl2.gvaperjob22 <- itl2.gvaperjob22 %>% 
+  left_join(
+    UKlevel %>% select(SIC07_description,year,gvaperjob_ukaverage),
+    by = c('SIC07_description','year')
+  )
+
+#Multiply up jobs by UK average for that sector
+#Then sum that "if then" GVA per region
+#Some NA results here where Scots regions have no agri values
+#Will have to leave those out - need all sectors for figures to be correct
+GVAifUKaverage <- itl2.gvaperjob22 %>% 
+  mutate(gva_if_sectorUKav = jobcount * gvaperjob_ukaverage) %>% 
+  group_by(year,Region_name) %>% 
+  summarise(gva_ifsectorUKavproductivity = sum(gva_if_sectorUKav))
+
+#Actual regional GVA sums
+GVA_regions_actual <- itl2.gvaperjob22 %>% 
+  group_by(year,Region_name) %>% 
+  summarise(gva_actual = sum(gva))
+
+
+
+
+#Get average UK GVA per job, to compare to
+#Which is just this...
+#Remarkably unchanged on average! Excepting COVID
+UK_avGVAperjob_actual <- itl2.gvaperjob22 %>% 
+  group_by(year) %>% 
+  summarise(gva = sum(gva), jobcount = sum(jobcount, na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(gvaperjob_uk = gva / jobcount)
+
+
+#Also need "what average would be if GVA in all places was average for that sector"
+#It's going to be in a different position
+#(Which is possibly less useful than working out regional % differences between if... then and actual)
+
+#Actually, let's do that last thing first
+#Removing NA zones to avoid messing up percent diffs
+actual_n_ifthen <- GVA_regions_actual %>% 
+  left_join(
+    GVAifUKaverage, by = c('year','Region_name')
+  ) %>% 
+  filter(!is.na(gva_ifsectorUKavproductivity)) %>% 
+  mutate(
+    # diff = gva_ifsectorUKavproductivity - gva_actual,#for eyeballing
+    percentdiff = ((gva_ifsectorUKavproductivity - gva_actual)/gva_actual) * 100,
+    SY = ifelse(Region_name == 'South Yorkshire', 'SY', 'other')
+  )
+
+
+#Plot that.
+p <- ggplot(
+  actual_n_ifthen,
+  aes(x = year, y = percentdiff, colour = SY, alpha = SY, size = SY, group = Region_name)) +
+  geom_point() +
+  # geom_jitter(width = 0.25) +
+  geom_line(size = 0.25) +
+  geom_hline(yintercept = 0) +
+  scale_colour_manual(values = c('black','red')) +
+  scale_alpha_manual(values = c(0.25,1)) +
+  scale_size_manual(values = c(0.5,3)) +
+  # facet_wrap(~measure, scales = 'free') +
+  guides(alpha = F, size = F) +
+  ggtitle("If each ITL2 zone kept its industry mix\nbut output per worker matched the UK average for each SIC section\nwhat would its GVA be?")
+
+p
+
+ggplotly(p, tooltip = c('year','Region_name','percentdiff'))
+
+
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#CHECK ON OTHER APS/LFS VARIABLES----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Looking for confidence intervals for e.g. hours worked per week etc
+#To see how it changes possible region productivity position
+
+#This is just 'annual population survey', no filters
+a <- nomis_get_metadata(id = "NM_17_1")
+
+#List of variables.... nearly 4000
+#402720769 = T01:22 (Aged 16-64 - All : All People )
+varz <- nomis_get_metadata(id = "NM_17_1", concept = "CELL")
+
+#Hours worked not in APS vars here
+
+x <- nomis_data_info()
+
+
+
+
+
+
+
+
+
+
 
 
 

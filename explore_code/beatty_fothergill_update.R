@@ -610,6 +610,36 @@ ggplotly(p, tooltip = c('year','Region_name','percentdiff'))
 
 
 
+#And then back to "what's average if we've adjusted all places for industry mix?"
+#Which will need weighting by job numbers to do properly
+#Need to merge job numbers back in...
+jobnumbers_summedperregion_n_year <- itl2.gvaperjob22 %>% 
+  group_by(year,Region_name) %>% 
+  summarise(jobcount = sum(jobcount, na.rm = T)) %>% 
+  ungroup()
+
+actual_n_ifthen <- actual_n_ifthen %>% 
+  left_join(
+    jobnumbers_summedperregion_n_year, by = c('year','Region_name')
+  )
+
+UK_avGVAperjob_adjustedforindustrymix_weighted <- actual_n_ifthen %>% 
+  group_by(year) %>%
+  summarise(
+    gva_adjustedforindustrymix_weightedmean = weighted.mean(gva_ifsectorUKavproductivity, jobcount, na.rm=T)
+  ) %>% ungroup()
+  
+
+
+#Find % difference to those averages for adj industry mix...
+adjusted_industrymix_percentdiff <- actual_n_ifthen %>% 
+  left_join(
+    UK_avGVAperjob_adjustedforindustrymix_weighted, by = 'year'
+  ) %>% 
+  mutate(
+    percentofukav = (gva_ifsectorUKavproductivity/gva_adjustedforindustrymix_weightedmean) * 100
+  )
+
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

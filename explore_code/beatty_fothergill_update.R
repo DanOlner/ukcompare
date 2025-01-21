@@ -613,32 +613,124 @@ ggplotly(p, tooltip = c('year','Region_name','percentdiff'))
 #And then back to "what's average if we've adjusted all places for industry mix?"
 #Which will need weighting by job numbers to do properly
 #Need to merge job numbers back in...
-jobnumbers_summedperregion_n_year <- itl2.gvaperjob22 %>% 
-  group_by(year,Region_name) %>% 
-  summarise(jobcount = sum(jobcount, na.rm = T)) %>% 
-  ungroup()
+# jobnumbers_summedperregion_n_year <- itl2.gvaperjob22 %>% 
+#   group_by(year,Region_name) %>% 
+#   summarise(jobcount_all = sum(jobcount, na.rm = T)) %>% 
+#   ungroup()
+# 
+# actual_n_ifthen <- actual_n_ifthen %>% 
+#   left_join(
+#     jobnumbers_summedperregion_n_year, by = c('year','Region_name')
+#   )
 
-actual_n_ifthen <- actual_n_ifthen %>% 
-  left_join(
-    jobnumbers_summedperregion_n_year, by = c('year','Region_name')
-  )
+# UK_avGVAperjob_adjustedforindustrymix_weighted <- actual_n_ifthen %>% 
+#   group_by(year) %>%
+#   summarise(
+#     gva_adjustedforindustrymix_weightedmean = weighted.mean(gva_ifsectorUKavproductivity, jobcount, na.rm=T)
+#   ) %>% ungroup()
+#   
+# 
+# 
+# #Find % difference to those averages for adj industry mix...
+# adjusted_industrymix_percentdiff <- actual_n_ifthen %>% 
+#   left_join(
+#     UK_avGVAperjob_adjustedforindustrymix_weighted, by = 'year'
+#   ) %>% 
+#   mutate(
+#     percentofukav = (gva_ifsectorUKavproductivity/gva_adjustedforindustrymix_weightedmean) * 100
+#   )
 
-UK_avGVAperjob_adjustedforindustrymix_weighted <- actual_n_ifthen %>% 
+
+
+
+
+#Sum total UK jobs, put that under total “pretend GVA”, repeat for each region, find diff….
+#Then sum yearly "if... then... industry mix" GVA and join to that
+totalUKjobcount <- itl2.gvaperjob22 %>%
   group_by(year) %>%
   summarise(
-    gva_adjustedforindustrymix_weightedmean = weighted.mean(gva_ifsectorUKavproductivity, jobcount, na.rm=T)
-  ) %>% ungroup()
-  
-
-
-#Find % difference to those averages for adj industry mix...
-adjusted_industrymix_percentdiff <- actual_n_ifthen %>% 
+    # jobcount_UK = sum(jobcount)
+    jobcount_UK = sum(jobcount, na.rm = T)
+  ) %>%
+  ungroup() %>%
   left_join(
-    UK_avGVAperjob_adjustedforindustrymix_weighted, by = 'year'
+    actual_n_ifthen %>%
+      select(year,gva_ifsectorUKavproductivity) %>%
+      group_by(year) %>%
+      summarise(gva_ifsectorUKavproductivity_TOTAL = sum(gva_ifsectorUKavproductivity)) %>%
+      ungroup(),
+    by = 'year'
+  ) %>%
+  mutate(av_UK_GVAPERFILLEDJOB_ifsectorUKproductivity = (gva_ifsectorUKavproductivity_TOTAL / jobcount_UK) * 1000000)
+
+
+#GVA per job is too high there, but same bias should apply regionally
+#So let's see how those numbers turn out...
+#Get jobcounts and gva_ifthen for each region / year
+
+#Do regions match here...? Tick (all from same source)
+# table(itl2.gvaperjob22$Region_name %in% actual_n_ifthen$Region_name)
+
+ifnthen_jobs <- actual_n_ifthen %>% 
+  left_join(
+    itl2.gvaperjob22 %>%
+      group_by(Region_name,year) %>%
+      summarise(
+        jobcount_regions = sum(jobcount, na.rm = T)
+      ) %>%
+      ungroup(),
+    by = c('Region_name','year')
   ) %>% 
   mutate(
-    percentofukav = (gva_ifsectorUKavproductivity/gva_adjustedforindustrymix_weightedmean) * 100
+    gva_ifthen_perjobcount = (gva_ifsectorUKavproductivity / jobcount_regions) * 1000000
+  ) %>% 
+  left_join(
+    totalUKjobcount %>% select(year,av_UK_GVAPERFILLEDJOB_ifsectorUKproductivity),
+    by = 'year'
+  ) %>% 
+  mutate(
+    gva_perjob_ifthen_percentOfUKav = (av_UK_GVAPERFILLEDJOB_ifsectorUKproductivity / gva_ifthen_perjobcount) * 100
+  ) %>% 
+  mutate(
+    SY = ifelse(Region_name == 'South Yorkshire', 'SY', 'other')
   )
+
+#Concentrating just on the most recent year, how do those numbers look?
+#How crazy do those numbers look?
+p <- ggplot(
+  ifnthen_jobs,
+  # allz_long.minusNAs %>% filter(!Region_name %in% c('Inner London - West', 'Inner London - East')),#filter out London outliers
+  aes(x = year, y = gva_perjob_ifthen_percentOfUKav, colour = SY, alpha = SY, size = SY, group = Region_name)) +
+  geom_point() +
+  # geom_jitter(width = 0.25) +
+  geom_line(size = 0.25) +
+  geom_hline(yintercept = 100) +
+  scale_colour_manual(values = c('black','red')) +
+  scale_alpha_manual(values = c(0.25,1)) +
+  scale_size_manual(values = c(0.5,3)) +
+  # facet_wrap(~measure, scales = 'free') +
+  guides(alpha = F, size = F)
+
+p
+
+ggplotly(p, tooltip = c('year','Region_name','gva_perjob_ifthen_percentOfUKav'))
+
+
+
+
+
+#Use per filled job numbers for this, not the BRES ones
+#Total UK filled jobs
+
+#Need to correct region names, ones from itl2.gvaperjob22 don't match, for usual reasons
+# actual_n_ifthen <- actual_n_ifthen %>% 
+# left_join(
+#   perfilledjob.itl2 %>% select(year,Region_name,jobsfilled), by = c('year','Region_name')
+# ) %>% 
+#   mutate(
+#     perfilledjob_adjustedforindustrymix_pounds_cp = (gva_ifsectorUKavproductivity / jobsfilled) * 1000000
+#   )
+
 
 
 

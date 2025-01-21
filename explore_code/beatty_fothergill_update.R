@@ -504,6 +504,10 @@ p
 
 ggplotly(p, tooltip = c('year','Region_name','percent of UK average'))
 
+
+
+
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #"ADJUST FOR INDUSTRY MIX"----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -518,6 +522,13 @@ ggplotly(p, tooltip = c('year','Region_name','percent of UK average'))
 #(Currently 6822 in GVA_region_by_sector_explore.R)
 itl2.gvaperjob22 <- readRDS('data/itl2_gva_to2022_plusBRES_jobs_to2022.rds') %>% 
   mutate(gvaperjob = (gva/jobcount)*1000000)
+
+#For what years do we have missing data?
+#All Scots areas, all agri where there isn't enough data in BRES...
+# itl2.gvaperjob22 %>% filter(is.na(gva)) %>% View - all present
+
+#Scotland, 2015/16/17, jobcount data missing
+itl2.gvaperjob22 %>% filter(is.na(jobcount)) %>% View
 
 #What we're after, paraphrased: “If SY kept its industry mix, but output per worker matched the UK average for each sector, what would its GVA be? If the same applied everywhere, how would SY GVA compare nationally?”
 
@@ -641,8 +652,8 @@ ggplotly(p, tooltip = c('year','Region_name','percentdiff'))
 #   )
 
 
-
-
+#FIND PERCENT DIFFEENCE OF PLACES FROM UK AVERAGE
+#Using industry-adjusted values above
 
 #Sum total UK jobs, put that under total “pretend GVA”, repeat for each region, find diff….
 #Then sum yearly "if... then... industry mix" GVA and join to that
@@ -676,7 +687,7 @@ ifnthen_jobs <- actual_n_ifthen %>%
     itl2.gvaperjob22 %>%
       group_by(Region_name,year) %>%
       summarise(
-        jobcount_regions = sum(jobcount, na.rm = T)
+        jobcount_regions = sum(jobcount)
       ) %>%
       ungroup(),
     by = c('Region_name','year')
@@ -689,7 +700,7 @@ ifnthen_jobs <- actual_n_ifthen %>%
     by = 'year'
   ) %>% 
   mutate(
-    gva_perjob_ifthen_percentOfUKav = (av_UK_GVAPERFILLEDJOB_ifsectorUKproductivity / gva_ifthen_perjobcount) * 100
+    gva_perjob_ifthen_percentOfUKav = (gva_ifthen_perjobcount / av_UK_GVAPERFILLEDJOB_ifsectorUKproductivity) * 100
   ) %>% 
   mutate(
     SY = ifelse(Region_name == 'South Yorkshire', 'SY', 'other')
@@ -718,20 +729,114 @@ ggplotly(p, tooltip = c('year','Region_name','gva_perjob_ifthen_percentOfUKav'))
 
 
 
+#REPEAT THAT EXERCISE ABOVE JUST FOR 2018-22
+#As scots agri job count data missing and warping early years
+#Check assumptions, keep neat and clear
 
-#Use per filled job numbers for this, not the BRES ones
-#Total UK filled jobs
+#This has the values for "region's GVA if SIC section output was UK average" values:
+# actual_n_ifthen
 
-#Need to correct region names, ones from itl2.gvaperjob22 don't match, for usual reasons
-# actual_n_ifthen <- actual_n_ifthen %>% 
-# left_join(
-#   perfilledjob.itl2 %>% select(year,Region_name,jobsfilled), by = c('year','Region_name')
-# ) %>% 
-#   mutate(
-#     perfilledjob_adjustedforindustrymix_pounds_cp = (gva_ifsectorUKavproductivity / jobsfilled) * 1000000
-#   )
+#We need two things:
+#Each of those regional "if/then"s divided by total job count numbers
+
+#And the national average for the same:
+#If industry mix in each place was industry average
+#And we sum the total output then divide by job numbers
+#What's the UK average?
 
 
+#Let's get the UK jobcount value again for each year 2018 on first:
+totalUKjobcount <- itl2.gvaperjob22 %>%
+  filter(year > 2017) %>% 
+  group_by(year) %>%
+  summarise(
+    jobcount_UK = sum(jobcount)
+  )
+
+#Total "if/then" industry-adjusted gva for each year
+totalUK_ifthenGVA <- actual_n_ifthen %>% 
+  filter(year > 2017) %>% 
+  group_by(year) %>%
+  summarise(
+    GVA_ifsectoravproductivity_UKlevel = sum(gva_ifsectorUKavproductivity)
+  )
+
+
+#Combine those, find GVA per job at UK level for the if/then
+#Checking against the above, these are the same numbers, nothing changed
+UKtotals_ifthen <- totalUKjobcount %>%
+  left_join(totalUK_ifthenGVA, by = 'year') %>% 
+  mutate(gvaperjob_UK = (GVA_ifsectoravproductivity_UKlevel / jobcount_UK) * 1000000)
+
+
+
+
+#Now divide if/then GVA through by job numbers at regional level
+#To then compare % gap to those UK averages
+#Get regional job counts per year
+regional_jobcounts <-itl2.gvaperjob22 %>%
+  filter(year > 2017) %>% 
+  group_by(year,Region_name) %>%
+  summarise(jobcount_regional = sum(jobcount))
+
+#Merge the if... then regional GVA into those job counts
+#Find gva per job...
+regional_jobcounts <- regional_jobcounts %>% 
+  left_join(
+    actual_n_ifthen %>% select(year,Region_name,gva_ifsectorUKavproductivity),by = c('year','Region_name')
+  ) %>% 
+  mutate(gvaperjob_regions = (gva_ifsectorUKavproductivity / jobcount_regional) * 1000000)
+  
+
+#Merge in av GVA per job in the UK overall to find ppt difference to that average
+#Find percent difference between regions and national figure while here...
+regional_jobcounts <- regional_jobcounts %>% 
+  left_join(
+    UKtotals_ifthen, by = 'year'
+  ) %>% 
+  mutate(
+    percentdiff_toUKav = (gvaperjob_regions / gvaperjob_UK) * 100
+  ) %>% 
+  mutate(
+    SY = ifelse(Region_name == 'South Yorkshire', 'SY', 'other')
+  )
+  
+
+#Plot...
+#Yep, same number as before
+p <- ggplot(
+  regional_jobcounts,
+  aes(x = year, y = percentdiff_toUKav, colour = SY, alpha = SY, size = SY, group = Region_name)) +
+  geom_point() +
+  # geom_jitter(width = 0.25) +
+  geom_line(size = 0.25) +
+  geom_hline(yintercept = 100) +
+  scale_colour_manual(values = c('black','red')) +
+  scale_alpha_manual(values = c(0.25,1)) +
+  scale_size_manual(values = c(0.5,3)) +
+  # facet_wrap(~measure, scales = 'free') +
+  guides(alpha = F, size = F)
+
+p
+
+ggplotly(p, tooltip = c('year','Region_name','percentdiff_toUKav'))
+
+
+
+#Let’s just do a sanity check on one of them that jumps out as odd: west wales showing as “more productive than average if one assumes its sectors were UK average output”. Really? What sectors?
+
+#Partial code from above to look at, has all the moving parts
+#Make gva per job UK av easier to read...
+GVAifUKaverage_partial <- itl2.gvaperjob22 %>% 
+  mutate(
+    gva_if_sectorUKav = jobcount * gvaperjob_ukaverage,
+    gvaperjob_ukaverage = gvaperjob_ukaverage * 1000000
+  ) 
+
+#Look at west wales for one year
+GVAifUKaverage_partial %>% filter(Region_name == 'West Wales', year == 2022) %>% 
+  relocate(gva, .before = gva_if_sectorUKav) %>% 
+  View
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

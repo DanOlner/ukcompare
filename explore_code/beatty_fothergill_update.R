@@ -207,7 +207,107 @@ residentpop.uk <- residentpop %>%
 
 
 
-##4. NOMISR FOR LATEST 16-64 POP NUMBERS----
+
+
+
+##4. NOMISR FOR LATEST "16+ IN EMPLOYMENT" POP NUMBERS----
+
+#https://cran.r-project.org/web/packages/nomisr/vignettes/introduction.html
+
+#Annual population survey...
+#Find correct dataset
+x <- nomis_data_info()
+
+#search...
+rez <- x %>% filter(grepl(pattern = 'annual pop', x = name.value, ignore.case = T))
+
+#This is just 'annual population survey', no filters
+a <- nomis_get_metadata(id = "NM_17_1")
+
+#List of variables.... nearly 4000
+#402720769 = T01:22 (Aged 16-64 - All : All People )
+varz <- nomis_get_metadata(id = "NM_17_1", concept = "CELL")
+
+#List of geographies
+nomis_get_metadata(id = "NM_17_1", concept = "GEOGRAPHY", type = "type") %>% print(n=60)
+
+
+#Get ITL2 (NUTS2 2016 as was then) and 16 - 64, geography is TYPE438
+#Results:
+pop16emp <- nomis_get_data(id = "NM_17_1", geography = "TYPE438", cell = "402719489")
+
+#No values in the data for this geography prior to 2012
+unique(pop16emp$DATE_NAME[!is.na(pop16emp$OBS_VALUE)])
+
+
+#Geography fun - the NUTS2 2016 zones have everything that's now an ITL2 zone...
+unique(perhourworked$Region_name[perhourworked$ITL_level=='ITL2']) %in% unique(pop16emp$GEOGRAPHY_NAME)
+
+#(Except for the usual comma differences for two of them....)
+unique(perhourworked$Region_name[perhourworked$ITL_level=='ITL2'])[!unique(perhourworked$Region_name[perhourworked$ITL_level=='ITL2']) %in% unique(pop16emp$GEOGRAPHY_NAME)]
+
+#But it DOESN'T HAVE Northern Ireland in there
+#Which the APS/LFS does have...
+
+#So let's get that separately
+#(And then also get UK total numbers, as will need those too)
+#TYPE499 is countries
+ni <- nomis_get_data(id = "NM_17_1", geography = "TYPE499", cell = "402719489") %>% 
+  filter(GEOGRAPHY_NAME == "Northern Ireland")
+
+#Check column match and join with NUTS2 2016 to make complete 41 zone ITL2 set
+table(names(ni) %in% names(pop16emp))#tick
+
+pop16emp <- pop16emp %>% bind_rows(ni)
+
+#Tick (except for a few non-matching names due to text diffs... but we can't use codes now because of NI, so fix manually when we need to match)
+unique(pop16emp$GEOGRAPHY_NAME)
+
+
+
+#Also get UK total population values for 16+ in employment
+uk16emp <- nomis_get_data(id = "NM_17_1", geography = "TYPE499", cell = "402719489") %>% 
+  filter(GEOGRAPHY_NAME == "United Kingdom")
+
+
+
+#Reduce both of those down to the bits we'll use
+pop16emp <- pop16emp %>% 
+  filter(
+    grepl('Jan', DATE_NAME)#keep only one of the quarterly vals (check if should be smoothing for better, but I think that's already done in APS)
+  ) %>% 
+  mutate(DATE = str_sub(DATE, start = 1, end = 4) %>% as.numeric) %>% 
+  filter(
+    DATE > 2011#No values before 2012
+  ) %>% 
+  select(
+    DATE,GEOGRAPHY_NAME,GEOGRAPHY_CODE,MEASURES_NAME,OBS_VALUE
+  ) %>% 
+  pivot_wider(
+    names_from = MEASURES_NAME, values_from = OBS_VALUE 
+  ) %>% 
+  rename(Region_name = GEOGRAPHY_NAME)
+
+
+uk16emp <- uk16emp %>% 
+  filter(
+    grepl('Jan', DATE_NAME)#keep only one of the quarterly vals (check if should be smoothing for better, but I think that's already done in APS)
+  ) %>% 
+  mutate(DATE = str_sub(DATE, start = 1, end = 4) %>% as.numeric) %>% 
+  filter(
+    DATE > 2011#No values before 2012
+  ) %>% 
+  select(
+    DATE,GEOGRAPHY_NAME,GEOGRAPHY_CODE,MEASURES_NAME,OBS_VALUE
+  ) %>% 
+  pivot_wider(
+    names_from = MEASURES_NAME, values_from = OBS_VALUE 
+  ) %>% 
+  rename(Region_name = GEOGRAPHY_NAME)
+
+
+
+##5. NOMISR FOR LATEST 16-64 POP NUMBERS----
 
 #https://cran.r-project.org/web/packages/nomisr/vignettes/introduction.html
 
@@ -314,7 +414,8 @@ allnames <- list(
   unique(perhourworked.itl2$Region_name),
   unique(perfilledjob.itl2$Region_name),
   unique(residentpop.itl2$Region_name),
-  unique(pop16to64$Region_name)
+  unique(pop16to64$Region_name),
+  unique(pop16emp$Region_name)
 )
 
 #Perfect matches all round, nice
@@ -350,7 +451,16 @@ gva.uk.totals.mir.ratios <- gva.uk.totals.mir.ratios %>%
     UK_gvaper16to64_pounds_cp = (value / count16to64) * 1000000
   )
 
-#3. GVA over hours worked
+#3. GVA over 16 to 64 pop
+gva.uk.totals.mir.ratios <- gva.uk.totals.mir.ratios %>% 
+  left_join(
+    uk16emp %>% select(year = DATE,count16plus_employed = Value), by = 'year'
+  ) %>% 
+  mutate(
+    UK_gvaper16plus_employed_pounds_cp = (value / count16plus_employed) * 1000000
+  )
+
+#4. GVA over hours worked
 #HOURS WORKED PER WEEK - needs multiplying up to match yearly GVA values
 gva.uk.totals.mir.ratios <- gva.uk.totals.mir.ratios %>% 
   left_join(
@@ -360,7 +470,7 @@ gva.uk.totals.mir.ratios <- gva.uk.totals.mir.ratios %>%
     UK_perhourworked_pounds_cp = (value / (hoursworked * 52)) * 1000000
   )
 
-#4. per filled job
+#5. per filled job
 gva.uk.totals.mir.ratios <- gva.uk.totals.mir.ratios %>% 
   left_join(
     perfilledjob.uk %>% select(year,jobsfilled), by = 'year'
@@ -394,7 +504,16 @@ gva.itl2.totals.mir.ratios <- gva.itl2.totals.mir.ratios %>%
     gvaper16to64_pounds_cp = (value / count16to64) * 1000000
   )
 
-#3. GVA over hours worked
+#3. GVA over 16 plus employed
+gva.itl2.totals.mir.ratios <- gva.itl2.totals.mir.ratios %>% 
+  left_join(
+    pop16emp %>% select(year = DATE,Region_name,count16plus_employed = Value), by = c('year','Region_name')
+  ) %>% 
+  mutate(
+    gvaper16plus_employed_pounds_cp = (value / count16plus_employed) * 1000000
+  )
+
+#4. GVA over hours worked
 #HOURS WORKED PER WEEK - needs multiplying up to match yearly GVA values
 gva.itl2.totals.mir.ratios <- gva.itl2.totals.mir.ratios %>% 
   left_join(
@@ -404,7 +523,7 @@ gva.itl2.totals.mir.ratios <- gva.itl2.totals.mir.ratios %>%
     perhourworked_pounds_cp = (value / (hoursworked * 52)) * 1000000
   )
 
-#4. per filled job
+#5. per filled job
 gva.itl2.totals.mir.ratios <- gva.itl2.totals.mir.ratios %>% 
   left_join(
     perfilledjob.itl2 %>% select(year,Region_name,jobsfilled), by = c('year','Region_name')
@@ -420,10 +539,10 @@ gva.itl2.totals.mir.ratios <- gva.itl2.totals.mir.ratios %>%
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 allz <- gva.itl2.totals.mir.ratios %>% 
-  select(Region_name,year,gvaperhead_pounds_cp,gvaper16to64_pounds_cp,perhourworked_pounds_cp,perfilledjob_pounds_cp) %>% 
+  select(Region_name,year,gvaperhead_pounds_cp,gvaper16to64_pounds_cp,gvaper16plus_employed_pounds_cp,perhourworked_pounds_cp,perfilledjob_pounds_cp) %>% 
   left_join(
     gva.uk.totals.mir.ratios %>% 
-      select(year,UK_gvaperhead_pounds_cp,UK_gvaper16to64_pounds_cp,UK_perhourworked_pounds_cp,UK_perfilledjob_pounds_cp),
+      select(year,UK_gvaperhead_pounds_cp,UK_gvaper16to64_pounds_cp,UK_gvaper16plus_employed_pounds_cp,UK_perhourworked_pounds_cp,UK_perfilledjob_pounds_cp),
     by = 'year'
   )
 
@@ -435,6 +554,7 @@ allz <- allz %>%
   mutate(
     gvaperhead_percentofUKav = (gvaperhead_pounds_cp/UK_gvaperhead_pounds_cp) * 100,
     gvaper16to64_percentofUKav = (gvaper16to64_pounds_cp/UK_gvaper16to64_pounds_cp) * 100,
+    gvaper16plus_employed_percentofUKav = (gvaper16plus_employed_pounds_cp/UK_gvaper16plus_employed_pounds_cp) * 100,
     gvaperhourworked_percentofUKav = (perhourworked_pounds_cp/UK_perhourworked_pounds_cp) * 100,
     gvaperjobfilled_percentofUKav = (perfilledjob_pounds_cp/UK_perfilledjob_pounds_cp) * 100
   )
@@ -446,6 +566,7 @@ allz_long <- allz %>%
     Region_name,year,
     `GVA per head (percent of UK av)` = gvaperhead_percentofUKav,
     `GVA per 16 to 64 yr old (percent of UK av)` = gvaper16to64_percentofUKav,
+    `GVA per 16+ in employment (percent of UK av)` = gvaper16plus_employed_percentofUKav,
     `GVA per filled job (percent of UK av)` = gvaperjobfilled_percentofUKav,
     `GVA per hour worked (percent of UK av)` = gvaperhourworked_percentofUKav
     ) %>% 
@@ -734,7 +855,7 @@ ggplotly(p, tooltip = c('year','Region_name','gva_perjob_ifthen_percentOfUKav'))
 #Check assumptions, keep neat and clear
 
 #This has the values for "region's GVA if SIC section output was UK average" values:
-# actual_n_ifthen
+actual_n_ifthen
 
 #We need two things:
 #Each of those regional "if/then"s divided by total job count numbers
@@ -754,11 +875,14 @@ totalUKjobcount <- itl2.gvaperjob22 %>%
   )
 
 #Total "if/then" industry-adjusted gva for each year
+#Ah OK - total GVA constrains to the same value for if/then and actual
+#Didn't think there was a reason it needed to...
 totalUK_ifthenGVA <- actual_n_ifthen %>% 
   filter(year > 2017) %>% 
   group_by(year) %>%
   summarise(
-    GVA_ifsectoravproductivity_UKlevel = sum(gva_ifsectorUKavproductivity)
+    GVA_ifsectoravproductivity_UKlevel = sum(gva_ifsectorUKavproductivity),
+    GVA_actual_UKlevel = sum(gva_actual)
   )
 
 
@@ -766,7 +890,10 @@ totalUK_ifthenGVA <- actual_n_ifthen %>%
 #Checking against the above, these are the same numbers, nothing changed
 UKtotals_ifthen <- totalUKjobcount %>%
   left_join(totalUK_ifthenGVA, by = 'year') %>% 
-  mutate(gvaperjob_UK = (GVA_ifsectoravproductivity_UKlevel / jobcount_UK) * 1000000)
+  mutate(
+    gvaperjob_UK_actual = (GVA_actual_UKlevel / jobcount_UK) * 1000000,
+    gvaperjob_UK_ifthen = (GVA_ifsectoravproductivity_UKlevel / jobcount_UK) * 1000000
+    )
 
 
 
@@ -783,9 +910,12 @@ regional_jobcounts <-itl2.gvaperjob22 %>%
 #Find gva per job...
 regional_jobcounts <- regional_jobcounts %>% 
   left_join(
-    actual_n_ifthen %>% select(year,Region_name,gva_ifsectorUKavproductivity),by = c('year','Region_name')
+    actual_n_ifthen %>% select(year,Region_name,gva_actual,gva_ifsectorUKavproductivity),by = c('year','Region_name')
   ) %>% 
-  mutate(gvaperjob_regions = (gva_ifsectorUKavproductivity / jobcount_regional) * 1000000)
+  mutate(
+    gvaperjob_regions_actual = (gva_actual / jobcount_regional) * 1000000,
+    gvaperjob_regions_ifthen = (gva_ifsectorUKavproductivity / jobcount_regional) * 1000000
+    )
   
 
 #Merge in av GVA per job in the UK overall to find ppt difference to that average
@@ -795,18 +925,42 @@ regional_jobcounts <- regional_jobcounts %>%
     UKtotals_ifthen, by = 'year'
   ) %>% 
   mutate(
-    percentdiff_toUKav = (gvaperjob_regions / gvaperjob_UK) * 100
+    percentdiff_toUKav_actual = (gvaperjob_regions_actual / gvaperjob_UK_actual) * 100,
+    percentdiff_toUKav_ifthen = (gvaperjob_regions_ifthen / gvaperjob_UK_ifthen) * 100
   ) %>% 
   mutate(
     SY = ifelse(Region_name == 'South Yorkshire', 'SY', 'other')
   )
   
 
-#Plot...
+#What's spread of actual vs if then?
+compare <- regional_jobcounts %>% 
+  pivot_longer(percentdiff_toUKav_actual:percentdiff_toUKav_ifthen, names_to = 'type', values_to = 'percentdiff') %>% 
+  mutate(SY = ifelse(Region_name == 'South Yorkshire', 'SY','other')) %>% 
+  filter(year == 2022)
+
+p <- ggplot(
+  compare, 
+  aes(x = type, y = percentdiff, colour = SY, alpha = SY, size = SY, group = Region_name)) +
+  geom_jitter(width = 0.02) +
+  # geom_curve(curvature = 0.3) +
+  geom_line(alpha = 0.1, size = 1) +
+  scale_colour_manual(values = c('black','red')) +
+  scale_alpha_manual(values = c(0.5,1)) +
+  scale_size_manual(values = c(2,5)) +
+  geom_hline(yintercept = 100) 
+
+p
+
+ggplotly(p, tooltip = c('year','Region_name','percentdiff'))
+
+
+
+#Plot single values over time
 #Yep, same number as before
 p <- ggplot(
   regional_jobcounts,
-  aes(x = year, y = percentdiff_toUKav, colour = SY, alpha = SY, size = SY, group = Region_name)) +
+  aes(x = year, y = percentdiff_toUKav_ifthen, colour = SY, alpha = SY, size = SY, group = Region_name)) +
   geom_point() +
   # geom_jitter(width = 0.25) +
   geom_line(size = 0.25) +

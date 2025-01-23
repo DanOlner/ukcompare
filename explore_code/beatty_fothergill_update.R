@@ -1115,6 +1115,11 @@ UKtotals_ifthen <- totalUKjobcount %>%
 #Check sanity
 sanitycheck <- itl2.gvaperjob22 %>% filter(year == 2022, Region_name == "South Yorkshire") %>% 
   select(SIC07_description,jobcount,jobcount_if_sectorUKaverage_percent,gva,gvapersector_ifsectorUKaverage_percent) %>% 
+  mutate(
+    jobcount_percentchange = ((jobcount_if_sectorUKaverage_percent - jobcount)/jobcount) * 100,
+    gva_percentchange = ((gvapersector_ifsectorUKaverage_percent - gva)/gva) * 100
+  ) %>% 
+  relocate(jobcount_percentchange, .after = jobcount_if_sectorUKaverage_percent) %>% 
   arrange(-jobcount)
 
 #save...

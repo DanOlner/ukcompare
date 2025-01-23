@@ -451,7 +451,7 @@ gva.uk.totals.mir.ratios <- gva.uk.totals.mir.ratios %>%
     UK_gvaper16to64_pounds_cp = (value / count16to64) * 1000000
   )
 
-#3. GVA over 16 to 64 pop
+#3. GVA over 16+ in employment
 gva.uk.totals.mir.ratios <- gva.uk.totals.mir.ratios %>% 
   left_join(
     uk16emp %>% select(year = DATE,count16plus_employed = Value), by = 'year'
@@ -991,6 +991,201 @@ GVAifUKaverage_partial <- itl2.gvaperjob22 %>%
 GVAifUKaverage_partial %>% filter(Region_name == 'West Wales', year == 2022) %>% 
   relocate(gva, .before = gva_if_sectorUKav) %>% 
   View
+
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# **REVERSED** "ADJUST FOR INDUSTRY MIX"----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Reversing what was done previously -
+#Keep output per worker the same; adjust the industry mix to be the same as the national average.
+
+
+
+#Reload and do from scratch
+#Output per worker in each SIC section will STAY THE SAME
+#We'll need regional job totals, so do that here
+#Keep only years we have full data for
+itl2.gvaperjob22 <- readRDS('data/itl2_gva_to2022_plusBRES_jobs_to2022.rds') %>% 
+  filter(year > 2017) %>% 
+  mutate(gvaperjob = (gva/jobcount)) %>% 
+  group_by(year,Region_name) %>% 
+  mutate(regional_jobcount_TOTAL = sum(jobcount))
+  
+
+#So then -
+#Adjust the number of jobs for each of those sectors in each place
+#So they match the proportion in those sectors nationally
+
+#For which we need national sums of jobs and then proportions
+#To then apply those to ITL2 job totals (maybe side thing of showing what would be different)
+#This is sort-of reverse-applying location quotients
+
+#Find proportions per year while here
+UKjobsums_persector <- itl2.gvaperjob22 %>% 
+  group_by(year,SIC07_description) %>% 
+  summarise(jobtotal_perUKsector = sum(jobcount)) %>% 
+  group_by(year) %>% 
+  mutate(job_proportion_of_total_perUKsector = jobtotal_perUKsector/sum(jobtotal_perUKsector)) 
+  
+#Check we have 100% per year... tick
+# UKjobsums_persector %>% 
+#   group_by(year) %>% 
+#   summarise(sum(job_percent_of_total_perUKsector))
+
+
+#Merge in UK percentages for each sector to multiply regional job totals by
+#Each SIC section in each place will get same percentage...
+#Then multiply regional job count TOTAL by the national percent of that sector
+#Which gives us "adjust the industry EMPLOYMENT mix to be the same as the national average"
+itl2.gvaperjob22 <- itl2.gvaperjob22 %>% 
+  left_join(
+    UKjobsums_persector, by = c('year','SIC07_description')
+  ) %>% 
+  mutate(
+    jobcount_if_sectorUKaverage_percent = regional_jobcount_TOTAL * job_proportion_of_total_perUKsector
+  )
+
+#Old and new jobcounts per place per year should be the same... tick
+# itl2.gvaperjob22 %>% 
+#   group_by(year,Region_name) %>% 
+#   summarise(oldsum = sum(jobcount), newsum = sum(jobcount_if_sectorUKaverage_percent)) %>% View
+
+
+#Then we just multiply GVA per job from that sector through...
+# itl2.gvaperjob22 <- itl2.gvaperjob22 %>% 
+#   mutate(
+#     gvapersector_ifsectorUKaverage_percent = jobcount_if_sectorUKaverage_percent * gvaperjob
+#   )
+
+#Any inf values there are because there were no jobs
+#So gva per job ends up being infinite (mismatch with job data, some of those have tiny amounts of GVA)
+#But set those gvaperjobs that are inf to zero
+itl2.gvaperjob22$gvaperjob[is.infinite(itl2.gvaperjob22$gvaperjob)] <- 0
+
+itl2.gvaperjob22 <- itl2.gvaperjob22 %>%
+  mutate(
+    gvapersector_ifsectorUKaverage_percent = jobcount_if_sectorUKaverage_percent * gvaperjob
+  )
+
+#These should be approx the same...
+# sum(itl2.gvaperjob22$gva)
+# sum(itl2.gvaperjob22$gvapersector_ifsectorUKaverage_percent)
+
+
+
+
+
+
+
+#Stage 1 done
+#Now to find UK average gva per job for those values
+#And regional GVA per job
+#And percent differences...
+
+#Taking code from above...
+totalUKjobcount <- itl2.gvaperjob22 %>%
+  group_by(year) %>%
+  summarise(
+    jobcount_UK = sum(jobcount)
+    # jobcount_UK_moved = sum(jobcount_if_sectorUKaverage_percent)#double checking the same, don't need... tick
+  )
+
+#Total "if/then" industry-adjusted gva for each year
+totalUK_ifthenGVA <- itl2.gvaperjob22 %>% 
+  group_by(year) %>%
+  summarise(
+    GVA_ifsectors_wereUKmix_but_regional_productivitysame = sum(gvapersector_ifsectorUKaverage_percent),
+    GVA_actual_UKlevel = sum(gva)
+  )
+
+
+#Combine those, find GVA per job at UK level for the if/then
+#Checking against the above, these are the same numbers, nothing changed
+UKtotals_ifthen <- totalUKjobcount %>%
+  left_join(totalUK_ifthenGVA, by = 'year') %>% 
+  mutate(
+    gvaperjob_UK_actual = (GVA_actual_UKlevel / jobcount_UK) * 1000000,
+    gvaperjob_UK_ifthen = (GVA_ifsectors_wereUKmix_but_regional_productivitysame / jobcount_UK) * 1000000
+  )
+
+
+#Check sanity
+sanitycheck <- itl2.gvaperjob22 %>% filter(year == 2022, Region_name == "South Yorkshire") %>% 
+  select(SIC07_description,jobcount,jobcount_if_sectorUKaverage_percent,gva,gvapersector_ifsectorUKaverage_percent) %>% 
+  arrange(-jobcount)
+
+#save...
+write_csv(sanitycheck,'data/SY_jobcount_gva_ifsectormix_sameasUKaverage.csv')
+
+
+
+#Now divide if/then GVA through by job numbers at regional level
+#To then compare % gap to those UK averages
+#1.Get regional job counts per year
+#2. get sum of GVA if then for each region too
+#3. divide through to get "GVA per job in this region if industry mix was UK average but productivity in region is same"
+regional_counts <-itl2.gvaperjob22 %>%
+  group_by(year,Region_name) %>%
+  summarise(
+    jobcount_regional = sum(jobcount),
+    gva_actual = sum(gva),
+    gva_regional_ifindustrymixUKaverage = sum(gvapersector_ifsectorUKaverage_percent)
+    ) %>% 
+  mutate(
+    gvaperjob_regional_actual = (gva_actual / jobcount_regional) * 1000000,
+    gvaperjob_regional_ifindustrymixUKaverage = (gva_regional_ifindustrymixUKaverage / jobcount_regional) * 1000000
+  )
+
+
+#Merge in av GVA per job in the UK overall to find ppt difference to that average
+#Find percent difference between regions and national figure while here...
+regional_counts <- regional_counts %>% 
+  left_join(
+    UKtotals_ifthen, by = 'year'
+  ) %>% 
+  mutate(
+    percentdiff_toUKav_actual = (gvaperjob_regional_actual / gvaperjob_UK_actual) * 100,
+    percentdiff_toUKav_ifthen = (gvaperjob_regional_ifindustrymixUKaverage / gvaperjob_UK_ifthen) * 100
+  ) %>% 
+  mutate(
+    SY = ifelse(Region_name == 'South Yorkshire', 'SY', 'other')
+  )
+
+
+#Check sanity again
+regional_counts %>% filter(year == 2022, Region_name == "South Yorkshire") %>% View
+
+
+
+#What's spread of actual vs if then?
+compare <- regional_counts %>% 
+  pivot_longer(percentdiff_toUKav_actual:percentdiff_toUKav_ifthen, names_to = 'type', values_to = 'percentdiff') %>% 
+  mutate(SY = ifelse(Region_name == 'South Yorkshire', 'SY','other')) %>% 
+  filter(year == 2022)
+
+p <- ggplot(
+  compare, 
+  aes(x = type, y = percentdiff, colour = SY, alpha = SY, size = SY, group = Region_name)) +
+  geom_jitter(width = 0.02) +
+  # geom_curve(curvature = 0.3) +
+  geom_line(alpha = 0.1, size = 1) +
+  scale_colour_manual(values = c('black','red')) +
+  scale_alpha_manual(values = c(0.5,1)) +
+  scale_size_manual(values = c(2,5)) +
+  geom_hline(yintercept = 100) 
+
+p
+
+ggplotly(p, tooltip = c('year','Region_name','percentdiff'))
+
+
+
+
+
+
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -1,0 +1,20 @@
+year,Region_name,SIC07_description,jobcount,jobcount_if_sectorUKaverage_percent,gva,gvapersector_ifsectorUKaverage_percent
+2022,South Yorkshire,Human health and social work activities,54664.1,45625.970339000996,3347,2793.609018069196
+2022,South Yorkshire,Manufacturing,54278,38605.50694519084,3296,2344.2969691467815
+2022,South Yorkshire,Wholesale and retail trade; repair of motor vehicles,50227.3,45883.94185991895,3308,3021.94383677028
+2022,South Yorkshire,Education,36329.4,27200.093002893656,2877,2154.0313786994843
+2022,South Yorkshire,Transportation and storage,32738.5,23474.848567129964,1169,838.2209928669587
+2022,South Yorkshire,Administrative and support service activities,27807.1,34338.12204158828,1268,1565.8137219894897
+2022,South Yorkshire,Construction,26391.8,23056.603360328714,2210,1930.7168676000294
+2022,South Yorkshire,"Professional, scientific and technical activities",24296,41604.28614470746,1448,2479.5442187000494
+2022,South Yorkshire,Public administration and defence,24151.3,20500.61099083119,1633,1386.1571736522396
+2022,South Yorkshire,Information and communication,13948.5,22416.453226754464,1800,2892.756626745387
+2022,South Yorkshire,Accommodation and food service activities,13608.5,19100.711796743835,687,964.2641734476991
+2022,South Yorkshire,Financial and insurance activities,11412.8,16192.518503999905,1549,2197.726339083823
+2022,South Yorkshire,"Arts, entertainment and recreation",4451,6315.532711626075,258,366.0767107615204
+2022,South Yorkshire,Real estate activities,4266.1,7523.617729773967,829,1462.0095867379148
+2022,South Yorkshire,Water supply; sewerage and waste management,4251.1,3783.325183236476,376,334.6263952616769
+2022,South Yorkshire,Other service activities,3940.9,7080.30388763494,400,718.6484191565318
+2022,South Yorkshire,"Agriculture, forestry and fishing",800.1,3023.2278205956713,61,230.49230978169723
+2022,South Yorkshire,"Electricity, gas, steam and air conditioning supply",750.3,1894.6031004188615,133,335.8419463623998
+2022,South Yorkshire,Mining and quarrying,150,842.5227876257245,21,117.95319026760144

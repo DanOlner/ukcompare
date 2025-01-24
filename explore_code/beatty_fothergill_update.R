@@ -1199,17 +1199,16 @@ ggplotly(p, tooltip = c('year','Region_name','percentdiff'))
 # names(industrymix_matchUKavproductivity)[!names(industrymix_matchUKavproductivity) %in% names(compare)]
 
 #Actually, not many given we only need one or two for plotting...
-
 both <- compare %>% 
   ungroup() %>% 
   select(Region_name,type,percentdiff,SY) %>% 
-  mutate(plottype = "IF GVA PER WORKER IN EACH SECTOR WAS UK AVERAGE OUTPUT...\n(Percent difference to UK average)") %>% 
+  mutate(plottype = "IF INDUSTRY MIX OF JOBS WAS SAME AS UK AVERAGE MIX (with GVA oer worker unchanged)...\n(Percent difference to UK average)") %>% 
   rbind(
     industrymix_matchUKavproductivity %>%
       ungroup() %>% 
       select(Region_name,type,percentdiff,SY) %>% 
-      mutate(plottype = "IF INDUSTRY MIX OF JOBS WAS SAME AS UK AVERAGE MIX (with GVA oer worker unchanged)...\n(Percent difference to UK average)")
-    )
+      mutate(plottype = "IF GVA PER WORKER IN EACH SECTOR WAS UK AVERAGE OUTPUT...\n(Percent difference to UK average)")
+  )
 
 
 

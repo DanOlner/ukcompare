@@ -855,7 +855,7 @@ ggplotly(p, tooltip = c('year','Region_name','gva_perjob_ifthen_percentOfUKav'))
 #Check assumptions, keep neat and clear
 
 #This has the values for "region's GVA if SIC section output was UK average" values:
-actual_n_ifthen
+# actual_n_ifthen
 
 #We need two things:
 #Each of those regional "if/then"s divided by total job count numbers
@@ -938,6 +938,9 @@ compare <- regional_jobcounts %>%
   pivot_longer(percentdiff_toUKav_actual:percentdiff_toUKav_ifthen, names_to = 'type', values_to = 'percentdiff') %>% 
   mutate(SY = ifelse(Region_name == 'South Yorkshire', 'SY','other')) %>% 
   filter(year == 2022)
+
+#Store in diff var name for combining with flipped adjust for industry mix below
+industrymix_matchUKavproductivity <- compare
 
 p <- ggplot(
   compare, 
@@ -1162,7 +1165,7 @@ regional_counts <- regional_counts %>%
 
 
 #Check sanity again
-regional_counts %>% filter(year == 2022, Region_name == "South Yorkshire") %>% View
+# regional_counts %>% filter(year == 2022, Region_name == "South Yorkshire") %>% View
 
 
 
@@ -1189,7 +1192,48 @@ ggplotly(p, tooltip = c('year','Region_name','percentdiff'))
 
 
 
+#Combine with other flipped version of "adjust for industry mix"
 
+#Some names need changing...
+# names(compare)[!names(compare) %in% names(industrymix_matchUKavproductivity)]
+# names(industrymix_matchUKavproductivity)[!names(industrymix_matchUKavproductivity) %in% names(compare)]
+
+#Actually, not many given we only need one or two for plotting...
+
+both <- compare %>% 
+  ungroup() %>% 
+  select(Region_name,type,percentdiff,SY) %>% 
+  mutate(plottype = "IF GVA PER WORKER IN EACH SECTOR WAS UK AVERAGE OUTPUT...\n(Percent difference to UK average)") %>% 
+  rbind(
+    industrymix_matchUKavproductivity %>%
+      ungroup() %>% 
+      select(Region_name,type,percentdiff,SY) %>% 
+      mutate(plottype = "IF INDUSTRY MIX OF JOBS WAS SAME AS UK AVERAGE MIX (with GVA oer worker unchanged)...\n(Percent difference to UK average)")
+    )
+
+
+
+#Now just need to facet previous plot...
+p <- ggplot(
+  both, 
+  aes(x = type, y = percentdiff, colour = SY, alpha = SY, size = SY, group = Region_name)) +
+  geom_jitter(width = 0.02) +
+  # geom_curve(curvature = 0.3) +
+  geom_line(alpha = 0.1, size = 1) +
+  scale_colour_manual(values = c('black','red')) +
+  scale_alpha_manual(values = c(0.5,1)) +
+  scale_size_manual(values = c(2,5)) +
+  geom_hline(yintercept = 100) +
+  # guides(#Not working - aim to remove lines, keep points in legend
+  #   alpha = guide_legend(override.aes = list(linetype = 0)),
+  #   size = guide_legend(override.aes = list(linetype = 0)),
+  #   colour = guide_legend(override.aes = list(linetype = 0))
+  #   ) +
+  facet_wrap(~plottype)
+
+p
+
+ggplotly(p, tooltip = c('year','Region_name','percentdiff'))
 
 
 
@@ -1215,9 +1259,18 @@ x <- nomis_data_info()
 
 
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#QUICK LOOK AT CIS IN APS DATA----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+#Reminder (from NOMIS downloaded version of data):
+#"95% confidence interval (+/-)"
 
-
+pop16emp <- pop16emp %>% 
+  mutate(
+    lowCI95 = Value - Confidence,
+    highCI95 = Value + Confidence
+    )
 
 
 

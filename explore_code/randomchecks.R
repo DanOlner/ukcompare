@@ -270,8 +270,13 @@ yeartoplot <- yeartoplot %>%
 
 
 
+#TEST FUNCTION THAT WRAPS GREPL TO DO THE THING I DO ALL THE TIME (e.g. "South Y" to filter all "South Yorkshire"s)----
 
+#Random thing to test on
+itl2.gvaperjob22 <- readRDS('data/itl2_gva_to2022_plusBRES_jobs_to2022.rds')
 
+#ignore.case = T set in function
+itl2.gvaperjob22 %>% filter(gq('south y',Region_name), gq('agri',SIC07_description))
 
 
 

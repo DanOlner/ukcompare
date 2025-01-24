@@ -6,6 +6,13 @@ library(ggrepel)
 #Shorthand for glimpse cose use it so much
 g <- function(x) glimpse(x)
 
+#Wrap grepl to do tidier version of this when e.g. filtering for terms
+#gq = "grepl quick!"
+gq <- function(...) grepl(..., ignore.case = T)
+
+
+
+
 #Compute series of slopes within groups safely, returning 0 if can't calculate
 compute_slope_or_zero <- function(data, ..., y, x) {
   

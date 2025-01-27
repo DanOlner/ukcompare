@@ -8,7 +8,7 @@ g <- function(x) glimpse(x)
 
 #Wrap grepl to do tidier version of this when e.g. filtering for terms
 #gq = "grepl quick!"
-gq <- function(...) grepl(..., ignore.case = T)
+qg <- function(...) grepl(..., ignore.case = T)
 
 
 

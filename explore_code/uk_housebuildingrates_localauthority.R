@@ -87,7 +87,8 @@ residentpop2 <- residentpop2 %>%
 #completions - years are 2009 to 2023
 unique(residentpop2$DATE)#2004 to 2023
 
-
+#Save that for use elsewhere
+saveRDS(residentpop2,'local/data/APS_residentpop_upto2023.rds')
 
 #Merge (losing some LAs from NI in the completion data in the process)
 #Check merge first
@@ -276,7 +277,7 @@ p <- ggplot() +
   coord_cartesian(xlim = c(2010,2022)) +
   facet_wrap(~measure, scales = 'free_y', ncol = 1) 
 
-ggplotly(p, tooltip = 'value')
+ggplotly(p, tooltip = 'value_movingav')
 
 
 

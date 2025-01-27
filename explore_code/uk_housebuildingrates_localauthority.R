@@ -146,6 +146,15 @@ completions <- completions %>%
     rank = rank(-completions_per1000residents)
     )
 
+#Add in core city flag
+completions <- completions %>% 
+  mutate(
+    corecity = qg('sheffield|Belfast|Birmingham|Bristol|Cardiff|Glasgow|Leeds|Liverpool|Manchester|upon Tyne|Nottingham',`Local Authority Name`)
+  )
+
+#Check that...
+unique(completions$`Local Authority Name`[completions$corecity])
+
 
 #Save for viewing, put SY places at top
 #Last few years to make viewable in github
@@ -154,6 +163,10 @@ write_csv(completions %>%
             filter(financial_year > 2018),
           'data/dwelling_completions_localauthorities.csv'
           )
+
+
+
+
 
 
 # EXAMINE SY LOCAL AUTHORITIES' BUILDING RATES----
@@ -234,6 +247,36 @@ p <- ggplot(allz %>% filter(SY_localauthority == 'SY LA'),
 
 ggplotly(p, tooltip = 'value')
 
+
+
+#repeat for just core cities, pick out SY LAs in stronger vals
+p <- ggplot() +
+  geom_line(data = allz %>% filter(corecity), 
+            aes(x = financial_year, y = value, colour = `Local Authority Name`, size = SY_localauthority, group = `Local Authority Name`)) +
+  scale_color_brewer(palette = 'Paired', direction = -1) +
+  scale_size_manual(values = c(0.5,3)) +
+  facet_wrap(~measure, scales = 'free_y', ncol = 1) 
+
+ggplotly(p, tooltip = 'value')
+
+
+#Let's get a smoothed version of that plz...
+allz.smooth <- allz %>% 
+  group_by(`Local Authority Name`,measure) %>% 
+  mutate(
+    value_movingav = rollapply(value,3,mean,align='center',fill=NA)
+  ) %>% 
+  ungroup()
+
+p <- ggplot() +
+  geom_line(data = allz.smooth %>% filter(corecity), 
+            aes(x = financial_year, y = value_movingav, colour = `Local Authority Name`, size = SY_localauthority, group = `Local Authority Name`)) +
+  scale_color_brewer(palette = 'Paired', direction = -1) +
+  scale_size_manual(values = c(0.5,3)) +
+  coord_cartesian(xlim = c(2010,2022)) +
+  facet_wrap(~measure, scales = 'free_y', ncol = 1) 
+
+ggplotly(p, tooltip = 'value')
 
 
 

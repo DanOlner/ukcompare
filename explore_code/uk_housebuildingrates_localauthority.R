@@ -148,8 +148,10 @@ completions <- completions %>%
 
 
 #Save for viewing, put SY places at top
+#Last few years to make viewable in github
 write_csv(completions %>% 
-            arrange(SY_localauthority),
+            arrange(SY_localauthority) %>% 
+            filter(financial_year > 2018),
           'data/dwelling_completions_localauthorities.csv'
           )
 
@@ -224,12 +226,13 @@ allz <- completions %>%
 #     aes(x = financial_year, y = value, colour = `Local Authority Name`, group = `Local Authority Name`)) +
 #   facet_wrap(~measure, scales = 'free_y', ncol = 1)
 
-ggplot(allz %>% filter(SY_localauthority == 'SY LA'), 
+p <- ggplot(allz %>% filter(SY_localauthority == 'SY LA'), 
        aes(x = financial_year, y = value, colour = `Local Authority Name`, group = `Local Authority Name`)) +
   # geom_point() +
   geom_line() +
   facet_wrap(~measure, scales = 'free_y', ncol = 1)
 
+ggplotly(p, tooltip = 'value')
 
 
 

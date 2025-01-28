@@ -116,9 +116,37 @@ p <- ggplot() +
 ggplotly(p, tooltip = c('Area','totalspend_perperson_pounds'))
 
 
+#Boxplot version
+#Add "other core city" to displayed colours 
+ac.cp <- ac.wpop %>% 
+  mutate(
+    Area_corecitieslabelled = case_when(
+      Area == 'Sheffield' ~ 'Sheffield',
+      corecity ~ "Other core city",
+      .default = Area
+      )
+    )
+
+p <- ggplot() +
+  geom_boxplot(
+    data = ac.wpop, 
+    aes(x = factor(DATE), y = totalspend_perperson_pounds)
+    # alpha = 0.25, size = 0.25
+  ) +
+  geom_point(
+    data = ac.cp %>% filter(SY_localauthority == 'SY LA' | corecity), 
+    aes(x = factor(DATE), y = totalspend_perperson_pounds, colour = Area_corecitieslabelled),
+    size = 3
+  ) +  
+  scale_color_brewer(palette = 'Paired', direction = 1) +
+  coord_cartesian(ylim = c(0,150))
+
+ggplotly(p, tooltip = 'totalspend_perperson_pounds', height = 700, width=1100)
 
 
-#Percent of Eng av
+
+
+  #Percent of Eng av
 p <- ggplot() +
   geom_line(
     data = ac.wpop %>% filter(SY_localauthority == 'SY LA'), 

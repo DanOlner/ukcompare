@@ -141,7 +141,7 @@ p <- ggplot() +
   scale_color_brewer(palette = 'Paired', direction = 1) +
   coord_cartesian(ylim = c(0,150))
 
-ggplotly(p, tooltip = 'totalspend_perperson_pounds', height = 700, width=1100)
+ggplotly(p, tooltip = c('Area_corecitieslabelled','totalspend_perperson_pounds'), height = 700, width=1100)
 
 
 

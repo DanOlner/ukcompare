@@ -170,6 +170,139 @@ write_csv(completions %>%
 
 
 
+# GET HOUSEHOLD COUNTS AS ALTERNATIVE DENOMINATOR (Housebuilding rates over actual household count prob better than resident pop)----
+
+#There's a separate APS households source, not the one used above...
+x <- nomis_data_info()
+
+#search...
+#Both 'households' APS/LFS sources should have headline regional counts
+#One focuses on household type, the other on econ activity
+rez <- x %>% filter(qg('household', name.value))
+
+# a <- nomis_get_metadata(id = "NM_136_1")
+
+#List of variables.... nearly 4000
+#402720769 = T01:22 (Aged 16-64 - All : All People )
+varz <- nomis_get_metadata(id = "NM_136_1")
+varz <- nomis_get_metadata(id = "NM_136_1", concept = 'HOUSEHOLDS_CHILDREN')#Yep, has got headline household count
+
+#List of geographies
+#Aas above, 424 is correct for local authorities 2023
+nomis_get_metadata(id = "NM_136_1", concept = "GEOGRAPHY", type = "type") %>% print(n=60)
+
+
+
+
+jsa <- nomis_get_data(id = "NM_1_1", time = "2018-01-2021-10",
+                      geography = "TYPE480", measures=20201,
+                      sex=c(5,6), item = 1, tidy = TRUE)
+
+
+
+
+
+households <- nomis_get_data(id = "NM_136_1", geography = "TYPE424", time = 'latest')
+
+#Check local authority matches
+# table(unique(completions$`Local Authority Code`) %in% residentpop1$GEOGRAPHY_CODE)
+
+#Second LA list in residentpop2 is actually near total match
+table(unique(completions$`Local Authority Code`) %in% residentpop2$GEOGRAPHY_CODE)
+table(unique(completions$`Local Authority Code`) %in% c(residentpop1$GEOGRAPHY_CODE,residentpop2$GEOGRAPHY_CODE))
+
+#Check on non-matches... all NI
+unique(completions$`Local Authority Name`)[!unique(completions$`Local Authority Code`) %in% residentpop2$GEOGRAPHY_CODE]
+# unique(residentpop2$GEOGRAPHY_NAME)[!unique(residentpop2$GEOGRAPHY_CODE) %in% unique(completions$`Local Authority Code`)]
+
+#Ah yes, have to get NI geography separately and append
+#Let's just do GB comparison here, that should be fine
+
+#Format... (nabbed from Beattyfothergill_update)
+residentpop2 <- residentpop2 %>% 
+  filter(
+    grepl('Jan', DATE_NAME)#keep only one of the quarterly vals (check if should be smoothing for better, but I think that's already done in APS)
+  ) %>% 
+  mutate(DATE = str_sub(DATE, start = 1, end = 4) %>% as.numeric) %>% 
+  select(
+    DATE,GEOGRAPHY_NAME,GEOGRAPHY_CODE,MEASURES_NAME,OBS_VALUE
+  ) %>% 
+  pivot_wider(
+    names_from = MEASURES_NAME, values_from = OBS_VALUE 
+  ) 
+
+residentpop2 <- residentpop2 %>% 
+  rename(residentpop_count = Value, residentpop_CI = Confidence)
+
+#completions - years are 2009 to 2023
+unique(residentpop2$DATE)#2004 to 2023
+
+#Save that for use elsewhere
+saveRDS(residentpop2,'local/data/APS_residentpop_upto2023.rds')
+
+#Merge (losing some LAs from NI in the completion data in the process)
+#Check merge first
+# chk <- completions %>% 
+#   right_join(
+#     residentpop2 %>% select(-GEOGRAPHY_NAME) %>% filter(DATE >= 2009),
+#     by = c('financial_year' = 'DATE', 'Local Authority Code' = 'GEOGRAPHY_CODE')
+#   )
+
+#Check that the missing places are NI... tick
+# unique(completions$`Local Authority Name`)[!unique(completions$`Local Authority Code`) %in% unique(chk$`Local Authority Code`)]
+
+#Overwrite/keep
+completions <- completions %>% 
+  right_join(
+    residentpop2 %>% select(-GEOGRAPHY_NAME) %>% filter(DATE >= 2009),
+    by = c('financial_year' = 'DATE', 'Local Authority Code' = 'GEOGRAPHY_CODE')
+  )
+
+#Get completion rates per 1000 people
+completions <- completions %>% 
+  mutate(
+    completions_per1000residents = (dwelling_count / residentpop_count) * 1000,
+    SY_localauthority = if_else(qg('sheffield|rotherh|barns|doncaster',`Local Authority Name`),'SY LA','other')
+  )
+
+
+#Compare to GB total completed dwellings per 1000 pop
+totals <- completions %>% 
+  group_by(financial_year) %>% 
+  summarise(
+    GB_residents = sum(residentpop_count, na.rm = T),
+    GB_dwellingcount = sum(dwelling_count, na.rm = T)
+  ) %>% 
+  mutate(
+    GB_completions_per1000residents = (GB_dwellingcount / GB_residents) * 1000,
+  )
+
+
+#Merge into main
+completions <- completions %>% 
+  left_join(
+    totals %>% select(financial_year,GB_completions_per1000residents), by = 'financial_year'
+  ) %>% 
+  mutate(
+    # percentdiff = ((GB_completions_per1000residents - completions_per1000residents)/GB_completions_per1000residents)*100
+    percentofGBav = (completions_per1000residents/GB_completions_per1000residents)*100
+  )
+
+
+
+#Rank position change could also be useful
+completions <- completions %>% 
+  group_by(financial_year) %>%
+  mutate(
+    rank = rank(-completions_per1000residents)
+  )
+
+
+
+
+
+
+
 # EXAMINE SY LOCAL AUTHORITIES' BUILDING RATES----
 
 #Quick plots...

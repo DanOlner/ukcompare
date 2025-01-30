@@ -1,4 +1,4 @@
-Region_name,year,gvaperhead_pounds_cp,gvaper16to64_pounds_cp,UK_gvaper16plus_employed_pounds_cp.x,perhourworked_pounds_cp,perfilledjob_pounds_cp,UK_gvaperhead_pounds_cp,UK_gvaper16to64_pounds_cp,UK_gvaper16plus_employed_pounds_cp.y,UK_perhourworked_pounds_cp,UK_perfilledjob_pounds_cp
+Region_name,year,gvaperhead_pounds_cp,gvaper16to64_pounds_cp,gvaper16plus_employed_pounds_cp,perhourworked_pounds_cp,perfilledjob_pounds_cp,UK_gvaperhead_pounds_cp,UK_gvaper16to64_pounds_cp,UK_gvaper16plus_employed_pounds_cp,UK_perhourworked_pounds_cp,UK_perfilledjob_pounds_cp
 Bedfordshire and Hertfordshire,1998,14618.448615946056,NA,NA,NA,NA,13607.332631346044,NA,NA,NA,NA
 Bedfordshire and Hertfordshire,1999,15325.910052879979,NA,NA,NA,NA,14075.574087142402,NA,NA,NA,NA
 Bedfordshire and Hertfordshire,2000,16110.245767381379,NA,NA,NA,NA,14827.107228170195,NA,NA,NA,NA

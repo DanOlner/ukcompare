@@ -8,7 +8,7 @@ library(tmap)
 library(plotly)
 library(nomisr)
 library(pryr)
-
+options(scipen = 99)
 
 
 #~~~~~~~~~~~~~~~~
@@ -549,6 +549,9 @@ allz <- gva.itl2.totals.mir.ratios %>%
 #Save...
 write_csv(allz,'data/GVA_measures_ITL2_aspercentofUKaverage1998_2022.csv')
 
+#Reload!
+# allz <- read_csv('data/GVA_measures_ITL2_aspercentofUKaverage1998_2022.csv')
+
 #Then find ITL2 zone GVA values as percentage of UK average
 allz <- allz %>% 
   mutate(
@@ -626,6 +629,31 @@ p
 ggplotly(p, tooltip = c('year','Region_name','percent of UK average'))
 
 
+
+#Version that shows actual values, including UK average overlaid
+#So we can see what "percent of UK av" actually means...
+
+#Just for 2022
+actualz <- allz %>% filter(year == 2022) %>% 
+  pivot_longer(
+    gvaperhead_pounds_cp:gvaperjobfilled_percentofUKav, names_to = 'variable', values_to = 'value_pounds'
+  ) %>% 
+  filter(!qg('percent',variable)) %>% #remove percent cols, don't need here
+  mutate(
+    UKaveragevalues = ifelse(qg('UK_',variable),'UK average, pounds','region, pounds'),#flag if UK average value
+    variable = gsub('UK_','', variable), #now flagged, make same cat, so will overlay same x category
+    SY = ifelse(Region_name == 'South Yorkshire', 'SY', 'Other region'),
+  ) %>% 
+  filter(value_pounds < 100000)
+
+
+p <- ggplot(actualz, aes(x = 1, y = value_pounds, colour = UKaveragevalues, size = SY)) +
+  # geom_point() +
+  geom_jitter(width = 0.0001) +
+  facet_wrap(~variable, ncol = 1, scales = 'free_x') +
+  coord_flip()
+
+ggplotly(p, tooltip = 'value_pounds', width = 1000, height = 600)
 
 
 

@@ -288,6 +288,9 @@ pop16emp <- pop16emp %>%
   ) %>% 
   rename(Region_name = GEOGRAPHY_NAME)
 
+#quick look...
+pop16emp %>% filter(DATE == 2022, Region_name == 'South Yorkshire') %>% View
+
 
 uk16emp <- uk16emp %>% 
   filter(

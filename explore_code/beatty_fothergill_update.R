@@ -198,6 +198,9 @@ residentpop.itl2 <- residentpop %>%
   pivot_longer(cols = 3:length(names(.)), names_to = 'year', values_to = 'resident_pop') %>% 
   mutate(year = as.numeric(year))
 
+#quick look...
+residentpop.itl2 %>% filter(year == 2022, Region_name == 'South Yorkshire') %>% View
+
 residentpop.uk <- residentpop %>% 
   filter(`ITL code` == 'UKX') %>% 
   select(-ITL) %>% 
